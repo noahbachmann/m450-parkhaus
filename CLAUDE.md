@@ -1,4 +1,4 @@
-# m322-countdown — agent context
+# m450-countdown — agent context
 
 Countdown timer, Raspberry Pi Pico, serial-driven. School project, module M323
 (functional programming). Requirements live as `// USn` comments in
@@ -6,7 +6,7 @@ Countdown timer, Raspberry Pi Pico, serial-driven. School project, module M323
 
 ## Commands
 
-PlatformIO only. Parent `M323/CLAUDE.md` says cmake/make/ctest — wrong here.
+PlatformIO only. Parent `M450/CLAUDE.md` says cmake/make/ctest — wrong here.
 
     pio run -e pico                build
     pio run -e pico -t upload      flash
@@ -64,14 +64,14 @@ and `IDLE` must stay the first enum value.
 
 Serial 115200. Invalid input leaves state unchanged.
 
-| cmd         | effect                                            |
-|-------------|---------------------------------------------------|
-| `set <sec>` | duration 1–3600 s; outside that range: ignored     |
-| `start`     | -> RUNNING, remaining = duration                   |
-| `reset`     | -> IDLE, remaining = duration, duration kept       |
+| cmd         | effect                                         |
+| ----------- | ---------------------------------------------- |
+| `set <sec>` | duration 1–3600 s; outside that range: ignored |
+| `start`     | -> RUNNING, remaining = duration               |
+| `reset`     | -> IDLE, remaining = duration, duration kept   |
 
 | phase      | LED                                         |
-|------------|---------------------------------------------|
+| ---------- | ------------------------------------------- |
 | `IDLE`     | off                                         |
 | `RUNNING`  | solid on                                    |
 | `FINISHED` | 500 ms on / 500 ms off, forever until reset |
