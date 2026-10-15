@@ -181,7 +181,7 @@ Tariff reference values R-01..R-12: see [tariff.md](tariff.md).
 
 ## Open points
 
-- **OP-01:** payment-status endpoint and response format must be documented (→ architecture.md).
+- **OP-01:** resolved, see the interface section in architecture.md.
 - **OP-02:** submission date not yet known.
 
 Test plan dates: dev tests 15.10–05.11.2026; system/integration 05.11 / 12.11.2026; TF-32 + TF-34

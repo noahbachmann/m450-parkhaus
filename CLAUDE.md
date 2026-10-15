@@ -13,7 +13,8 @@ don't re-read them unless the context is missing something.
   fee, payment at Kasse/Automat, exit with status query). Testkonzept scope comes later.
 - **Tariff:** `docs/context/tariff.md` is the source of truth. The user may edit it;
   then update the tariff code in `lib/` and its tests to match.
-- Fix `docs/context/architecture.md` when an open design question gets decided.
+- Design decisions (API, time, storage, pins, secrets) are in `docs/context/architecture.md`.
+  Pins live only in `include/pins.h`; the user may rewire, so keep that table and file in sync.
 
 ## Language
 
