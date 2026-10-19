@@ -9,7 +9,7 @@ confirmation moves a step to "done". Failures they report are fixed in the same 
 
 | # | Step | Status |
 |---|---|---|
-| 1 | Foundation: envs, plate + tariff libs, native tests | awaiting user verification |
+| 1 | Foundation: envs, plate + tariff libs, native tests | done (verified by user 2026-10-19) |
 | 2 | Domain logic in `lib/` | open |
 | 3 | Shared board glue | open |
 | 4 | Pico 1 "Kasse" firmware | open |
