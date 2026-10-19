@@ -90,6 +90,7 @@ closed, «Kasse nicht erreichbar – bitte Ruftaste drücken». **Fail-safe: any
 JSON over HTTP on Pico 1, port 80. Requests with a body use `Content-Type: application/json`.
 All times are Unix epoch seconds, amounts are integer **Rappen**. Plates may be sent unnormalized:
 Pico 1 normalizes and validates them. Every error is `{"error":"<code>"}` with the given HTTP status.
+A body that is not a JSON object with a string `kz` (or a non-integer `entry`) → 400 `bad_request`.
 Pico 2 client timeout: **1000 ms** (keeps the entry ≤ 2 s). Timeout or connection error = Pico 1 unreachable.
 
 **`GET /api/status?kz=<plate>`** — payment status (TF-29, < 1 s)
@@ -100,19 +101,44 @@ Pico 2 client timeout: **1000 ms** (keeps the entry ≤ 2 s). Timeout or connect
 **`POST /api/entry`** — open a session
 - body `{"kz":"LU123456"}` or `{"kz":"LU123456","entry":1760521000}` (backdated entry time)
 - 201 `{"kz":"LU123456","entry":1760530000}`
-- 409 `already_open` · 400 `invalid_plate` · 400 `entry_in_future` · 503 `time_not_synced`
+- 409 `already_open` · 400 `invalid_plate` · 400 `entry_in_future` · 503 `time_not_synced` ·
+  503 `store_full` (50 sessions, none closed to drop)
 
 **`POST /api/exit`** — try to close the session; Pico 2 opens the barrier only on 200
 - body `{"kz":"LU123456"}`
 - 200 `{"kz":"LU123456","status":"closed"|"closed_free","exit":1760533600,"fee":400}`
 - 402 `{"error":"unpaid","fee":400}` → «Gebühr CHF 4.00 nicht bezahlt – bitte am Automaten bezahlen»
-- 404 `no_session` · 400 `invalid_plate` · 503 `time_not_synced`
+- 404 `no_session` · 400 `invalid_plate` · 503 `time_not_synced` (also when the clock is before the
+  session's entry time)
 
 Exit attempt without success (or abort) changes nothing: the session stays open and the clock keeps
 running. The registration check happens on Pico 2 before `/api/entry`. Pico 1 doesn't know registrations.
 
 The Kasse/Automat pages are served by Pico 1 itself and call its internal logic directly (no API
 needed). Later phases may add JSON endpoints for them if the pages use fetch().
+
+## Domain rules (decided 2026-10-19, step 2)
+
+- **Fee 0 (free time):** payment is refused («nothing to pay»), the session stays `open`; exit closes
+  it as `closed_free`. `/api/status` reports such a session as `unbezahlt` with `fee: 0`.
+- **Paid = may leave:** a paid session closes at any later exit. No grace period, no extra fee.
+- **Session history:** at most 50 sessions in RAM/flash. When full, the oldest closed one is dropped;
+  open/paid sessions are never dropped.
+- **Payment:** Karte abgelehnt changes nothing. Cash accumulates until the fee is covered, then
+  change = inserted − fee. Card/TWINT after partial cash charges the rest. The amount booked is the
+  fee at payment time. Transaction ref `TX-000001`, … from a counter stored with the sessions.
+- **Registrations:** at most 50; name trimmed, 1–40 bytes; plate unique after normalization.
+- **Formats:** duration always `<h> h <m> min` (hours unbounded, minutes rounded down): `0 h 5 min`,
+  `26 h 3 min`. Europe/Zurich offset is computed by a pure function (EU rule), not via `TZ`.
+
+Libraries: `lib/registration`, `lib/session` (store, state machine, payment), `lib/format`,
+`lib/codec` (JSON files), `lib/kasse_api` (API handlers → status + body).
+
+File formats (LittleFS):
+- `/registrations.json`: `{"registrations":[{"name":"Test Kunde A","kz":"LU123456"}]}`
+- `/sessions.json`: `{"nextTx":2,"sessions":[{"kz":"LU123456","entry":1760525200,"exit":0,"amount":400,
+  "cash":0,"method":"card","tx":"TX-000001","status":"paid"}]}` (method `none|card|twint|cash`,
+  status `open|paid|closed|closed_free`). An invalid file is rejected as a whole.
 
 ## Code layout (decided)
 

@@ -67,7 +67,7 @@ safety stops, faults).
 ## UI formats (apply everywhere)
 
 - Plate normal form: uppercase, no spaces (`lu 123 456` → `LU123456`). Valid: **2 letters + 1–6 digits**.
-- Date/time: `TT.MM.JJJJ HH:MM:SS` (dd.mm.yyyy). Duration e.g. `1 h 20 min`. Amounts: `CHF 0.00`.
+- Date/time: `TT.MM.JJJJ HH:MM:SS` (dd.mm.yyyy). Duration e.g. `1 h 20 min` (also `0 h 5 min`, `26 h 3 min`). Amounts: `CHF 0.00`.
 - Session statuses: «offen», «bezahlt», «abgeschlossen», «abgeschlossen (Freizeit)»,
   «ohne Zahlung ausgefahren». Payment status: «bezahlt» / «unbezahlt» / «unbekannt».
 

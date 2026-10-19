@@ -10,7 +10,7 @@ confirmation moves a step to "done". Failures they report are fixed in the same 
 | # | Step | Status |
 |---|---|---|
 | 1 | Foundation: envs, plate + tariff libs, native tests | done (verified by user 2026-10-19) |
-| 2 | Domain logic in `lib/` | open |
+| 2 | Domain logic in `lib/` | awaiting user verification |
 | 3 | Shared board glue | open |
 | 4 | Pico 1 "Kasse" firmware | open |
 | 5 | Pico 2 "Schranken" firmware | open |
@@ -44,6 +44,9 @@ confirmation moves a step to "done". Failures they report are fixed in the same 
 - Pico 1 API handlers as pure functions: request → HTTP status + JSON body, per the interface in
   [architecture.md](architecture.md).
 - **Done when:** all of the above covered by native Unity suites.
+- **User verifies:** `pio test -e native` → 8 suites (plate, tariff, format, registration, session,
+  payment, codec, kasse_api), 61 cases passed; `pio run -e kasse` and `pio run -e schranken` still
+  `SUCCESS`; the "Domain rules" section in [architecture.md](architecture.md) matches what you want.
 
 ## 3 — Shared board glue (`src/common/` or a board-only lib)
 
