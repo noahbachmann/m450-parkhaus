@@ -39,6 +39,7 @@ Phase-1 test cases are flagged in [test-concept.md](test-concept.md); user story
 | [test-concept.md](test-concept.md) | Test goals, strategy, TF-01..34, test data, exact UI strings | Writing tests, UI text, behaviour details |
 | [tariff.md](tariff.md) | **Source of truth** for fee rules + reference values | Anything touching the fee |
 | [architecture.md](architecture.md) | Pico split, flows, data model, interface, layout, open questions | Before writing code |
+| [roadmap.md](roadmap.md) | Implementation steps 1–7 with done criteria and status | Picking the next task |
 
 ## Language rules
 

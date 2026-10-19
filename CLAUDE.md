@@ -26,18 +26,20 @@ don't re-read them unless the context is missing something.
 
 PlatformIO only. Parent `M450/CLAUDE.md` says cmake/make/ctest — wrong here.
 
-    pio run -e pico                build
-    pio run -e pico -t upload      flash
-    pio device monitor -b 115200   serial console
-    pio test -e native             host-side unit tests, no board
-    pio test -e pico               on-board tests, board required
+    pio run                              build both boards (kasse, schranken)
+    pio run -e kasse -t upload           flash Pico 1 (same with -e schranken)
+    pio device monitor -b 115200         serial console
+    pio test -e native                   host-side unit tests, no board
+    pio test -e kasse                    on-board tests, board required (later)
 
 ## Layout
 
     lib/<name>/      logic, one folder per library
-    src/main.cpp     hardware glue: pins, Serial, timing
+    src/kasse/       Pico 1 hardware glue (env kasse)
+    src/schranken/   Pico 2 hardware glue (env schranken)
     include/         shared headers
-    test/<suite>/    one folder per test suite (Unity)
+    test/native/test_<name>/<name>.test.cpp   host-only suite (Unity), one folder = one program with its own main()
+    test/board/test_<name>/<name>.test.cpp    on-board suite (later)
 
 ## Guidelines
 
@@ -45,9 +47,8 @@ PlatformIO only. Parent `M450/CLAUDE.md` says cmake/make/ctest — wrong here.
   `Serial`, `digitalWrite()` — otherwise it won't build under `native`.
 - Time is passed in as a parameter, not read inside the logic.
 - Side effects only in `src/`.
-- Once both kinds of test suites exist, separate them per env in
-  `platformio.ini` with `test_filter` / `test_ignore` (host-only suites for
-  `native`, hardware suites for `pico`).
+- Suite folders must start with `test_`. Once board suites exist, set `test_filter = native/*`
+  on `native` and `test_filter = board/*` on `kasse` / `schranken` in `platformio.ini`.
 
 ## Style
 
@@ -57,6 +58,5 @@ PlatformIO only. Parent `M450/CLAUDE.md` says cmake/make/ctest — wrong here.
 ## Board
 
 Hardware is two **Pico W** → target `board = rpipicow` (LED on the CYW43 chip).
-Planned envs: `kasse` (Pico 1) and `schranken` (Pico 2) with `build_src_filter`, plus
-`native`. `platformio.ini` still has the template `env:pico` with `board = pico` —
-ask before changing it.
+Envs: `kasse` (Pico 1) and `schranken` (Pico 2), each with `build_src_filter` on its
+`src/` subfolder, plus `native`. Implementation steps and status: `docs/context/roadmap.md`.

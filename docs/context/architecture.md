@@ -5,8 +5,7 @@ record the decision here when it's made.
 
 ## Hardware
 
-- 2 × **Raspberry Pi Pico W** (WiFi needed) → PlatformIO `board = rpipicow`
-  (current `platformio.ini` still says `pico`; change only after asking).
+- 2 × **Raspberry Pi Pico W** (WiFi needed) → PlatformIO `board = rpipicow`.
 - Pico 2 drives 2 × SG90 servos (entry, exit) and reads 2 safety loops (push button or IR sensor).
 - Onboard LED on **both** Picos shows status: solid = ready, blinking = WLAN or NTP not ready.
   (On the Pico W the LED is on the CYW43 chip: `LED_BUILTIN` works through the core.)

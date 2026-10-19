@@ -36,7 +36,8 @@ Bei der Ausfahrt fragt Pico 2 bei Pico 1 nach, ob die Gebühr bezahlt wurde. Nur
 ## Build und Tests
 
 ```
-pio run                 # Firmware bauen
+pio run -e kasse        # Firmware Pico 1 (Kasse) bauen
+pio run -e schranken    # Firmware Pico 2 (Schranken) bauen
 pio test -e native      # Unit-Tests auf dem PC (ohne Board)
 pio device monitor -b 115200
 ```
