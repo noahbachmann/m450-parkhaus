@@ -26,7 +26,7 @@ namespace
         return store;
     }
 
-    void assertSameSession(const Session& a, const Session& b)
+    void assertSameSession(const ParkingSession& a, const ParkingSession& b)
     {
         TEST_ASSERT_EQUAL_STRING(a.plate.c_str(), b.plate.c_str());
         TEST_ASSERT_EQUAL_INT64(a.entry, b.entry);

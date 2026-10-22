@@ -24,7 +24,8 @@ enum class PaymentMethod
     Cash,
 };
 
-struct Session
+// Not named "Session": the core's WiFi.h pulls BearSSL::Session into the global namespace.
+struct ParkingSession
 {
     std::string plate;
     int64_t entry = 0;
@@ -80,24 +81,24 @@ public:
     ExitResult tryExit(const std::string& rawPlate, int64_t now);
 
     // Open or paid session for the plate, nullptr if none.
-    Session* findActive(const std::string& rawPlate);
-    const Session* findActive(const std::string& rawPlate) const;
+    ParkingSession* findActive(const std::string& rawPlate);
+    const ParkingSession* findActive(const std::string& rawPlate) const;
     // Most recent session for the plate in any status, nullptr if none.
-    const Session* findLatest(const std::string& rawPlate) const;
+    const ParkingSession* findLatest(const std::string& rawPlate) const;
 
-    const std::vector<Session>& all() const;
+    const std::vector<ParkingSession>& all() const;
 
     // Next transaction reference ("TX-000001", ...), advances the counter.
     std::string takeTxRef();
     uint32_t nextTxNumber() const;
 
     // Replaces the whole state, e.g. after loading from flash or a test-data reset.
-    void restore(std::vector<Session> loaded, uint32_t nextTx);
+    void restore(std::vector<ParkingSession> loaded, uint32_t nextTx);
 
 private:
-    std::vector<Session> sessions;
+    std::vector<ParkingSession> sessions;
     uint32_t nextTx = 1;
 };
 
 // Fee for an open session if it ended at now. False if now is before the entry time.
-bool currentFee(const Session& session, int64_t now, uint32_t& feeRappen);
+bool currentFee(const ParkingSession& session, int64_t now, uint32_t& feeRappen);

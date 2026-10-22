@@ -30,7 +30,7 @@ void test_card_ok_pays_and_second_attempt_is_already_paid()
     TEST_ASSERT_TRUE(PaymentMethod::Card == r.method);
     TEST_ASSERT_EQUAL_STRING("TX-000001", r.txRef.c_str());
 
-    const Session* s = store.findActive("LU123456");
+    const ParkingSession* s = store.findActive("LU123456");
     TEST_ASSERT_TRUE(SessionStatus::Paid == s->status);
     TEST_ASSERT_EQUAL_UINT32(400, s->amountRappen);
     TEST_ASSERT_TRUE(PaymentMethod::Card == s->method);
@@ -49,7 +49,7 @@ void test_card_declined_changes_nothing()
     PaymentResult r = pay(store, "LU123456", PayMethod::CardDeclined, NOW);
     TEST_ASSERT_TRUE(Kind::Declined == r.kind);
     TEST_ASSERT_EQUAL_UINT32(400, r.amountRappen);
-    const Session* s = store.findActive("LU123456");
+    const ParkingSession* s = store.findActive("LU123456");
     TEST_ASSERT_TRUE(SessionStatus::Open == s->status);
     TEST_ASSERT_TRUE(s->txRef.empty());
     TEST_ASSERT_EQUAL_UINT32(1, store.nextTxNumber());

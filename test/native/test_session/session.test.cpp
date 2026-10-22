@@ -24,7 +24,7 @@ void test_entry_opens_session_stamped_now()
 {
     SessionStore store;
     TEST_ASSERT_TRUE(EntryResult::Ok == store.openEntry("ZH 98765", NOW));
-    const Session* s = store.findActive("ZH98765");
+    const ParkingSession* s = store.findActive("ZH98765");
     TEST_ASSERT_NOT_NULL(s);
     TEST_ASSERT_EQUAL_STRING("ZH98765", s->plate.c_str());
     TEST_ASSERT_EQUAL_INT64(NOW, s->entry);
@@ -94,7 +94,7 @@ void test_paid_exit_closes_with_exit_time()
     TEST_ASSERT_EQUAL_UINT32(400, r.feeRappen);
     TEST_ASSERT_EQUAL_INT64(NOW + 3 * HOUR, r.exit);
     TEST_ASSERT_NULL(store.findActive("LU123456"));
-    const Session* s = store.findLatest("LU123456");
+    const ParkingSession* s = store.findLatest("LU123456");
     TEST_ASSERT_TRUE(SessionStatus::Closed == s->status);
     TEST_ASSERT_EQUAL_INT64(NOW + 3 * HOUR, s->exit);
 }
@@ -106,7 +106,7 @@ void test_exit_within_free_time_closes_free()
     ExitResult r = store.tryExit("AG1", NOW);
     TEST_ASSERT_TRUE(ExitResult::Kind::ClosedFree == r.kind);
     TEST_ASSERT_EQUAL_UINT32(0, r.feeRappen);
-    const Session* s = store.findLatest("AG1");
+    const ParkingSession* s = store.findLatest("AG1");
     TEST_ASSERT_TRUE(SessionStatus::ClosedFree == s->status);
     TEST_ASSERT_EQUAL_INT64(NOW, s->exit);
     TEST_ASSERT_EQUAL_UINT32(0, s->amountRappen);
@@ -119,7 +119,7 @@ void test_unpaid_exit_changes_nothing_and_fee_keeps_growing()
     ExitResult r = store.tryExit("ZH98765", NOW);
     TEST_ASSERT_TRUE(ExitResult::Kind::Unpaid == r.kind);
     TEST_ASSERT_EQUAL_UINT32(200, r.feeRappen);
-    const Session* s = store.findActive("ZH98765");
+    const ParkingSession* s = store.findActive("ZH98765");
     TEST_ASSERT_TRUE(SessionStatus::Open == s->status);
     TEST_ASSERT_EQUAL_INT64(0, s->exit);
     TEST_ASSERT_EQUAL_UINT32(400, store.tryExit("ZH98765", NOW + 3 * MIN).feeRappen);

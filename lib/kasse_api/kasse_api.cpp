@@ -43,7 +43,7 @@ ApiResponse handleStatus(const SessionStore& store, const std::string& kzParam, 
     }
     JsonDocument doc;
     doc["kz"] = plate;
-    const Session* s = store.findActive(plate);
+    const ParkingSession* s = store.findActive(plate);
     if (s == nullptr)
     {
         doc["status"] = "unbekannt";

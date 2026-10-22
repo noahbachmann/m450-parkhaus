@@ -11,7 +11,7 @@ PaymentResult pay(SessionStore& store, const std::string& rawPlate, PayMethod me
     {
         return {Kind::InvalidPlate};
     }
-    Session* s = store.findActive(plate);
+    ParkingSession* s = store.findActive(plate);
     if (s == nullptr)
     {
         return {Kind::NoSession};

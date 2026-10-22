@@ -43,7 +43,7 @@ const char* paymentMethodLabel(PaymentMethod method)
     return "";
 }
 
-bool currentFee(const Session& session, int64_t now, uint32_t& feeRappen)
+bool currentFee(const ParkingSession& session, int64_t now, uint32_t& feeRappen)
 {
     return calculateFee(session.entry, now, feeRappen);
 }
@@ -67,14 +67,14 @@ EntryResult SessionStore::openEntry(const std::string& rawPlate, int64_t now, st
     if (sessions.size() >= MAX_SESSIONS)
     {
         auto oldestClosed =
-            std::find_if(sessions.begin(), sessions.end(), [](const Session& s) { return !isActive(s.status); });
+            std::find_if(sessions.begin(), sessions.end(), [](const ParkingSession& s) { return !isActive(s.status); });
         if (oldestClosed == sessions.end())
         {
             return EntryResult::Full;
         }
         sessions.erase(oldestClosed);
     }
-    Session s;
+    ParkingSession s;
     s.plate = plate;
     s.entry = entry;
     sessions.push_back(s);
@@ -88,7 +88,7 @@ ExitResult SessionStore::tryExit(const std::string& rawPlate, int64_t now)
     {
         return {ExitResult::Kind::InvalidPlate};
     }
-    Session* s = findActive(plate);
+    ParkingSession* s = findActive(plate);
     if (s == nullptr)
     {
         return {ExitResult::Kind::NoSession};
@@ -114,27 +114,27 @@ ExitResult SessionStore::tryExit(const std::string& rawPlate, int64_t now)
     return {ExitResult::Kind::ClosedFree, 0, now};
 }
 
-Session* SessionStore::findActive(const std::string& rawPlate)
+ParkingSession* SessionStore::findActive(const std::string& rawPlate)
 {
-    return const_cast<Session*>(static_cast<const SessionStore*>(this)->findActive(rawPlate));
+    return const_cast<ParkingSession*>(static_cast<const SessionStore*>(this)->findActive(rawPlate));
 }
 
-const Session* SessionStore::findActive(const std::string& rawPlate) const
+const ParkingSession* SessionStore::findActive(const std::string& rawPlate) const
 {
     std::string plate = normalizePlate(rawPlate);
     auto it = std::find_if(sessions.begin(), sessions.end(),
-                           [&](const Session& s) { return s.plate == plate && isActive(s.status); });
+                           [&](const ParkingSession& s) { return s.plate == plate && isActive(s.status); });
     return it == sessions.end() ? nullptr : &*it;
 }
 
-const Session* SessionStore::findLatest(const std::string& rawPlate) const
+const ParkingSession* SessionStore::findLatest(const std::string& rawPlate) const
 {
     std::string plate = normalizePlate(rawPlate);
-    auto it = std::find_if(sessions.rbegin(), sessions.rend(), [&](const Session& s) { return s.plate == plate; });
+    auto it = std::find_if(sessions.rbegin(), sessions.rend(), [&](const ParkingSession& s) { return s.plate == plate; });
     return it == sessions.rend() ? nullptr : &*it;
 }
 
-const std::vector<Session>& SessionStore::all() const
+const std::vector<ParkingSession>& SessionStore::all() const
 {
     return sessions;
 }
@@ -152,7 +152,7 @@ uint32_t SessionStore::nextTxNumber() const
     return nextTx;
 }
 
-void SessionStore::restore(std::vector<Session> loaded, uint32_t nextTxNumber)
+void SessionStore::restore(std::vector<ParkingSession> loaded, uint32_t nextTxNumber)
 {
     sessions = std::move(loaded);
     nextTx = nextTxNumber;

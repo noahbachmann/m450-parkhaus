@@ -58,7 +58,7 @@ namespace
         return false;
     }
 
-    bool parseSession(JsonObjectConst o, Session& s)
+    bool parseSession(JsonObjectConst o, ParkingSession& s)
     {
         if (!o["kz"].is<const char*>() || !o["entry"].is<int64_t>() || !o["exit"].is<int64_t>() ||
             !o["amount"].is<uint32_t>() || !o["cash"].is<uint32_t>() || !o["tx"].is<const char*>())
@@ -131,7 +131,7 @@ std::string sessionsToJson(const SessionStore& store)
     JsonDocument doc;
     doc["nextTx"] = store.nextTxNumber();
     JsonArray arr = doc["sessions"].to<JsonArray>();
-    for (const Session& s : store.all())
+    for (const ParkingSession& s : store.all())
     {
         JsonObject o = arr.add<JsonObject>();
         o["kz"] = s.plate;
@@ -161,15 +161,15 @@ bool sessionsFromJson(const std::string& json, SessionStore& store)
     {
         return false;
     }
-    std::vector<Session> loaded;
+    std::vector<ParkingSession> loaded;
     for (JsonVariantConst v : arr)
     {
-        Session s;
+        ParkingSession s;
         if (!v.is<JsonObjectConst>() || !parseSession(v.as<JsonObjectConst>(), s))
         {
             return false;
         }
-        for (const Session& other : loaded)
+        for (const ParkingSession& other : loaded)
         {
             if (other.plate == s.plate && isActive(other.status) && isActive(s.status))
             {
