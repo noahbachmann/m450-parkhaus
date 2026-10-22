@@ -7,6 +7,8 @@ record the decision here when it's made.
 
 - 2 × **Raspberry Pi Pico W** (WiFi needed) → PlatformIO `board = rpipicow`.
 - Pico 2 drives 2 × SG90 servos (entry, exit) and reads 2 safety loops (push button or IR sensor).
+  The loops are **optional hardware**: with nothing connected, `INPUT_PULLUP` reads HIGH = free, so the
+  firmware runs unchanged without them (decided 2026-10-22).
 - Onboard LED on **both** Picos shows status: solid = ready, blinking = WLAN or NTP not ready.
   (On the Pico W the LED is on the CYW43 chip: `LED_BUILTIN` works through the core.)
 
@@ -51,7 +53,8 @@ The registration list lives on Pico 2 (Testkonzept test object 01). Sessions liv
 **Entry** (Pico 2): normalize plate → validate → registered? (no → stay closed, «… nicht registriert,
 bitte Ruftaste drücken») → ask Pico 1 to open a session with timestamp (optional backdated entry time)
 → Pico 1 rejects if a session is already open («Parkvorgang bereits offen – bitte Ruftaste drücken»)
-→ success → servo opens (≤ 2 s total) → closes after the loop is released.
+→ success → servo opens (≤ 2 s total) → closes once the minimum open time (`BARRIER_MIN_OPEN_MS` = 5 s)
+has passed **and** the loop is free (without loop hardware: closes after 5 s). Same for the exit barrier.
 Pico 1 unreachable → stay closed, show fault, **no buffered session**.
 
 **Payment** (Pico 1): look up open session by plate → compute fee → simulated method → mark paid with

@@ -33,6 +33,8 @@ Bei der Ausfahrt fragt Pico 2 bei Pico 1 nach, ob die Gebühr bezahlt wurde. Nur
 | Auftrag | Berechnung der Parkgebühr | offen |
 | Auftrag | Bezahlung an Kasse oder Automat | offen |
 
+Hardware-Aufbau, Pinbelegung und WLAN-Einrichtung: [docs/aufbau-anleitung.md](docs/aufbau-anleitung.md)
+
 ## Build und Tests
 
 ```

@@ -67,7 +67,8 @@ confirmation moves a step to "done". Failures they report are fixed in the same 
 - Registration page (persisted in `/registrations.json`).
 - Camera simulation page: entry/exit plate, optional backdated entry time.
 - HTTP client to Pico 1 (1000 ms timeout; any error → barrier stays closed).
-- Servos: open on success (≤ 2 s total), close after the safety loop is released.
+- Servos: open on success (≤ 2 s total), close after `BARRIER_MIN_OPEN_MS` (5 s) once the safety loop
+  is free. Loops are optional hardware: must work with nothing connected to GP14/GP15.
 - **Done when:** TF-01..04, 06, 07, 10, 11, 23..25, 30 pass against a running Pico 1.
 
 ## 6 — Integration + phase-1 system test
