@@ -19,12 +19,13 @@ table change.
 
 | Function | GPIO | Phys. pin | Mode |
 |---|---|---|---|
-| Entry servo signal | GP8 | 11 | PWM (Servo lib) |
-| Exit servo signal | GP9 | 12 | PWM (Servo lib) |
+| Entry servo signal | GP27 | 32 | PWM (Servo lib) |
+| Exit servo signal | GP17 | 22 | PWM (Servo lib) |
 | Entry safety loop | GP14 | 19 | `INPUT_PULLUP`, LOW = occupied |
 | Exit safety loop | GP15 | 20 | `INPUT_PULLUP`, LOW = occupied |
 | Servo power | VBUS 5 V | 40 | — |
-| GND | GND | 8 / 13 | — |
+| GND | GND | 33 / 23 | brown wire of entry / exit servo (next to its signal pin) |
+| GND (buttons, optional) | GND | 18 | other leg of both buttons |
 
 Pico 1 has no external hardware.
 

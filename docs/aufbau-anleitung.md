@@ -55,7 +55,7 @@ Die beiden Picos haben getrennte Aufgaben und sprechen über das WLAN per HTTP m
 | 2 | Raspberry Pi Pico **W** | mit eingelöteten Stiftleisten; ohne «W» gibt es kein WLAN |
 | 2 | Servo SG90 | Einfahrt und Ausfahrt |
 | 1 | Breadboard | gross genug für Pico + Servos |
-| ca. 10 | Jumper-Kabel | Male-Male; die Servostecker passen direkt ins Breadboard |
+| ca. 10 | Jumper-Kabel | Male-Male; je ein Kabel in jedes Loch des Servosteckers |
 | 2 | Micro-USB-Kabel | **Datenkabel**, kein reines Ladekabel |
 | 1 | Handy mit Hotspot | oder ein anderer 2.4-GHz-Router |
 | optional: 2 | Taster | simulieren die Sicherheitsschleifen – das Programm läuft auch ohne (siehe Schritt 5) |
@@ -69,12 +69,17 @@ Die beiden Picos haben getrennte Aufgaben und sprechen über das WLAN per HTTP m
 
 | Funktion | GPIO | Physischer Pin | Kabel / Bauteil |
 |---|---|---|---|
-| Servo Einfahrt – Signal | **GP8** | **11** | Servo 1, orange |
-| Servo Ausfahrt – Signal | **GP9** | **12** | Servo 2, orange |
-| Sicherheitsschleife Einfahrt | **GP14** | **19** | Taster 1 → GND *(optional)* |
-| Sicherheitsschleife Ausfahrt | **GP15** | **20** | Taster 2 → GND *(optional)* |
-| Servo-Versorgung 5 V | VBUS | **40** | beide Servos, rot |
-| Masse | GND | **38** (oder 8, 13, 18) | beide Servos braun, Taster (falls vorhanden) |
+| Servo Einfahrt – Signal | **GP27** | **32** | Servo 1, orange |
+| Servo Einfahrt – Masse | GND | **33** | Servo 1, braun |
+| Servo Ausfahrt – Signal | **GP17** | **22** | Servo 2, orange |
+| Servo Ausfahrt – Masse | GND | **23** | Servo 2, braun |
+| Sicherheitsschleife Einfahrt | **GP14** | **19** | Taster 1 *(optional)* |
+| Sicherheitsschleife Ausfahrt | **GP15** | **20** | Taster 2 *(optional)* |
+| Masse Taster | GND | **18** | anderes Bein beider Taster *(optional)* |
+| Servo-Versorgung 5 V | VBUS | **40** | über die **+**-Schiene an beide Servos, rot |
+
+Alle GND-Pins des Pico sind intern verbunden. Jeder Servo nimmt einfach den GND-Pin direkt neben
+seinem Signal-Pin – eine **−**-Schiene braucht es nicht.
 
 > Die Pins sind im Code **nur an einer Stelle** definiert: [`include/pins.h`](../include/pins.h).
 > Wer anders verdrahtet, ändert diese Datei **und** die Tabelle in
@@ -89,23 +94,23 @@ Links wird nach unten gezählt (1–20), rechts von unten nach oben (21–40).
                       ┌──[ USB ]──┐
              GP0  1 ──┤●          ├── 40  VBUS  ◄── Servo + (5 V)
              GP1  2 ──┤           ├── 39  VSYS
-             GND  3 ──┤           ├── 38  GND   ◄── Masse-Schiene
+             GND  3 ──┤           ├── 38  GND
              GP2  4 ──┤           ├── 37  3V3_EN
              GP3  5 ──┤           ├── 36  3V3 OUT   (NICHT für Servos!)
              GP4  6 ──┤           ├── 35  ADC_VREF
              GP5  7 ──┤           ├── 34  GP28
-             GND  8 ──┤           ├── 33  GND
-             GP6  9 ──┤           ├── 32  GP27
+             GND  8 ──┤           ├── 33  GND   ◄── Servo 1 braun
+             GP6  9 ──┤           ├── 32  GP27  ◄── Servo 1 orange (Einfahrt)
              GP7 10 ──┤           ├── 31  GP26
-Servo 1 ►    GP8 11 ──┤           ├── 30  RUN
-Servo 2 ►    GP9 12 ──┤           ├── 29  GP22
+             GP8 11 ──┤           ├── 30  RUN
+             GP9 12 ──┤           ├── 29  GP22
              GND 13 ──┤           ├── 28  GND
             GP10 14 ──┤           ├── 27  GP21
             GP11 15 ──┤           ├── 26  GP20
             GP12 16 ──┤           ├── 25  GP19
             GP13 17 ──┤           ├── 24  GP18
-             GND 18 ──┤           ├── 23  GND
-Taster 1 ►  GP14 19 ──┤           ├── 22  GP17
+Taster GND ► GND 18 ──┤           ├── 23  GND   ◄── Servo 2 braun
+Taster 1 ►  GP14 19 ──┤           ├── 22  GP17  ◄── Servo 2 orange (Ausfahrt)
 Taster 2 ►  GP15 20 ──┤           ├── 21  GP16
                       └───────────┘
 ```
@@ -122,32 +127,35 @@ Taster 2 ►  GP15 20 ──┤           ├── 21  GP16
 - [ ] Den Pico mit einem Klebeband als **«2 Schranken»** beschriften (Pico 1 als **«1 Kasse»**).
   Die beiden Boards sehen identisch aus.
 
-### Schritt 2 – Stromschienen
+### Schritt 2 – 5-V-Schiene
 
-- [ ] **Pin 40 (VBUS)** → rote **+**-Schiene des Breadboards.
-- [ ] **Pin 38 (GND)** → blaue **−**-Schiene des Breadboards.
+- [ ] **Pin 40 (VBUS)** → rote **+**-Schiene des Breadboards: ein Jumper-Kabel von einem freien Loch
+  in der Breadboard-Reihe von Pin 40 auf die **+**-Schiene.
 
-VBUS liefert die 5 V direkt vom USB-Anschluss – genau das, was die SG90 brauchen.
+VBUS liefert die 5 V direkt vom USB-Anschluss – genau das, was die SG90 brauchen. Es gibt nur einen
+VBUS-Pin; über die Schiene bekommen beide Servos ihre 5 V. Eine **−**-Schiene ist nicht nötig, weil
+jeder Servo einen eigenen GND-Pin direkt neben seinem Signal-Pin nutzt.
 
 ### Schritt 3 – Servo Einfahrt
 
-Ein SG90 hat drei Adern:
+Ein SG90 hat drei Adern in einem Stecker. In jedes Loch des Steckers ein Male-Male-Jumper-Kabel
+stecken und jedes Kabel in die Breadboard-Reihe des passenden Pins führen:
 
 | Ader | Bedeutung | Anschluss |
 |---|---|---|
-| braun | GND | **−**-Schiene |
+| braun | GND | **Pin 33 (GND)** |
 | rot | 5 V | **+**-Schiene |
-| orange | Signal | **GP8 (Pin 11)** |
+| orange | Signal | **Pin 32 (GP27)** |
 
-- [ ] Braun → **−**-Schiene
+- [ ] Braun → **Pin 33**
 - [ ] Rot → **+**-Schiene
-- [ ] Orange → **Pin 11**
+- [ ] Orange → **Pin 32**
 
 ### Schritt 4 – Servo Ausfahrt
 
-- [ ] Braun → **−**-Schiene
+- [ ] Braun → **Pin 23 (GND)**
 - [ ] Rot → **+**-Schiene
-- [ ] Orange → **Pin 12 (GP9)**
+- [ ] Orange → **Pin 22 (GP17)**
 
 ### Schritt 5 – Sicherheitsschleifen (Taster, optional)
 
@@ -165,37 +173,38 @@ Widerstand**: Gedrückt zieht der Taster den Pin auf GND (= belegt).
 
 Falls Taster vorhanden sind:
 
-- [ ] Taster 1: ein Bein → **Pin 19 (GP14)**, anderes Bein → **−**-Schiene
-- [ ] Taster 2: ein Bein → **Pin 20 (GP15)**, anderes Bein → **−**-Schiene
+- [ ] Taster 1: ein Bein → **Pin 19 (GP14)**, anderes Bein → **Pin 18 (GND)**
+- [ ] Taster 2: ein Bein → **Pin 20 (GP15)**, anderes Bein → **Pin 18 (GND)**
 
-> Tipp: Pin 18 ist ebenfalls GND und liegt direkt neben Pin 19 – praktisch für kurze Kabel.
+> Pin 18 liegt direkt neben Pin 19 und 20; beide Taster teilen sich seine Breadboard-Reihe.
 > Bei 4-beinigen Tastern die **diagonal** gegenüberliegenden Beine verwenden, dann stimmt es sicher.
 
 ### Schritt 6 – Gesamtbild
 
 ```
                  Breadboard
-   + Schiene ════════════════════════════════════  (rot,  5 V von Pin 40)
-   − Schiene ════════════════════════════════════  (blau, GND von Pin 38)
-                 │   │          │   │      │    │
-              rot│   │braun  rot│   │braun │    │
-             ┌───┴───┴─┐   ┌────┴───┴┐   ┌─┴─┐ ┌┴──┐
-             │ Servo 1 │   │ Servo 2 │   │T 1│ │T 2│  ← Taster optional
-             │Einfahrt │   │Ausfahrt │   └─┬─┘ └┬──┘
-             └────┬────┘   └────┬────┘     │    │
-            orange│       orange│          │    │
-                  ▼             ▼          ▼    ▼
-               Pin 11        Pin 12     Pin 19 Pin 20
-               (GP8)         (GP9)      (GP14) (GP15)
+   + Schiene ════════════════════════════════════  (rot, 5 V von Pin 40)
+                  │rot             │rot
+             ┌────┴────┐      ┌────┴────┐      ┌─────┐   ┌─────┐
+             │ Servo 1 │      │ Servo 2 │      │ T 1 │   │ T 2 │  ← Taster optional
+             │Einfahrt │      │Ausfahrt │      └┬───┬┘   └┬───┬┘
+             └─┬─────┬─┘      └─┬─────┬─┘       │   │     │   │
+               │     │          │     │         │   └──┬──┘   │
+               ▼     ▼          ▼     ▼         ▼      ▼      ▼
+   Pin         32    33         22    23        19     18     20
+              GP27  GND        GP17  GND       GP14   GND    GP15
+             orange braun     orange braun
 ```
 
 ### Schritt 7 – Kontrolle vor dem Einstecken
 
 - [ ] Kein Kabel steckt auf **Pin 36 (3V3 OUT)** – die Servos würden den 3.3-V-Regler überlasten.
-- [ ] Beide braunen Servo-Adern (und die Taster, falls vorhanden) hängen an derselben **−**-Schiene
-  (gemeinsame Masse).
+  Pin 36 liegt nur vier Pins über dem Servo-1-Signal, also genau hinschauen.
+- [ ] Beide roten Servo-Adern stecken auf der **+**-Schiene, die mit Pin 40 verbunden ist.
 - [ ] Rot und braun sind nicht vertauscht.
-- [ ] Die orangen Signaladern stecken auf Pin 11 und 12, nicht auf den GND-Pins 8 oder 13 daneben.
+- [ ] Servo 1: orange auf **Pin 32**, braun auf **Pin 33** – die beiden liegen direkt nebeneinander,
+  nicht vertauschen. Servo 2 ebenso: orange auf **Pin 22**, braun auf **Pin 23**.
+- [ ] Die braunen Adern brauchen keine gemeinsame Schiene: alle GND-Pins des Pico sind intern verbunden.
 
 ### Hinweise zur Stromversorgung
 
@@ -203,7 +212,8 @@ Falls Taster vorhanden sind:
 - Zwei SG90 an USB-VBUS funktionieren für den Prototyp. Ein Servo zieht beim Anlaufen aber kurz bis
   zu ~650 mA. Startet der Pico beim Bewegen neu oder zittern die Servos:
   1. anderen USB-Port / ein USB-Netzteil statt Laptop-Port verwenden,
-  2. einen **470-µF-Elko** zwischen **+** und **−** Schiene stecken (Minus-Streifen an −),
+  2. einen **470-µF-Elko** zwischen die **+**-Schiene und die Breadboard-Reihe von **Pin 38 (GND)**
+     stecken (Minus-Streifen an GND),
   3. oder die Servos aus einem separaten 5-V-Netzteil speisen – **GND des Netzteils mit GND des Pico
      verbinden**, sonst funktioniert das Signal nicht.
 
