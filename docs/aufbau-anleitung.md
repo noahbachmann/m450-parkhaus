@@ -300,36 +300,23 @@ Beide Picos verwenden **dieselbe** `secrets.h`. Welche IP ein Pico nimmt, entsch
 
 ### 6.4 So baut die Firmware die Verbindung auf
 
-Zur Orientierung – so sieht der WLAN-Start mit dem earlephilhower-Core aus (wird in Roadmap-Schritt 3
-für beide Picos umgesetzt):
+Zur Orientierung – so baut die Firmware die WLAN-Verbindung mit dem earlephilhower-Core auf.
+
+Der echte Code liegt in `src/common/net.cpp` (WLAN + NTP) und `src/common/status_led.cpp` (LED).
+Kurzfassung:
 
 ```cpp
-#include <WiFi.h>
-#include <time.h>
-#include "secrets.h"
+IPAddress ip(KASSE_IP);                        // auf Pico 2: SCHRANKEN_IP
+WiFi.config(ip, IPAddress(GATEWAY_IP), IPAddress(GATEWAY_IP), IPAddress(SUBNET_MASK)); // IP, DNS, Gateway, Maske
+WiFi.beginNoBlock(WIFI_SSID, WIFI_PASSWORD);   // kehrt sofort zurück, Verbindung läuft im Hintergrund
 
-void connectWifi()
-{
-    IPAddress ip(KASSE_IP);            // auf Pico 2: SCHRANKEN_IP
-    IPAddress gateway(GATEWAY_IP);
-    IPAddress subnet(SUBNET_MASK);
-    WiFi.config(ip, gateway, gateway, subnet);   // IP, DNS, Gateway, Maske
-
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));   // blinken = noch nicht bereit
-        delay(250);
-    }
-
-    NTP.begin("pool.ntp.org", "time.google.com");   // Uhrzeit aus dem Internet
-    NTP.waitSet();
-
-    digitalWrite(LED_BUILTIN, HIGH);   // Dauerlicht = bereit
-    Serial.print("Verbunden, IP: ");
-    Serial.println(WiFi.localIP());
-}
+// in loop(): sobald verbunden, einmal NTP.begin("pool.ntp.org", "time.google.com");
+// LED blinkt, bis WLAN und Uhrzeit bereit sind, danach Dauerlicht
 ```
+
+Wichtig für die LED des Pico W: Sie hängt am WLAN-Chip. `digitalRead(LED_BUILTIN)` liefert dort nicht den
+zuletzt geschriebenen Wert, darum merkt sich die Firmware den Zustand selbst. Ausserdem darf nichts
+blockieren (`WiFi.begin()` wartet bis zu 30 s, `NTP.waitSet()` bis zu 10 s), sonst blinkt die LED nicht.
 
 ---
 

@@ -10,8 +10,8 @@ confirmation moves a step to "done". Failures they report are fixed in the same 
 | # | Step | Status |
 |---|---|---|
 | 1 | Foundation: envs, plate + tariff libs, native tests | done (verified by user 2026-10-19) |
-| 2 | Domain logic in `lib/` | awaiting user verification |
-| 3 | Shared board glue | open |
+| 2 | Domain logic in `lib/` | done (verified by user 2026-10-19) |
+| 3 | Shared board glue | awaiting user verification |
 | 4 | Pico 1 "Kasse" firmware | open |
 | 5 | Pico 2 "Schranken" firmware | open |
 | 6 | Integration + phase-1 system test | open |
@@ -48,12 +48,19 @@ confirmation moves a step to "done". Failures they report are fixed in the same 
   payment, codec, kasse_api), 61 cases passed; `pio run -e kasse` and `pio run -e schranken` still
   `SUCCESS`; the "Domain rules" section in [architecture.md](architecture.md) matches what you want.
 
-## 3 — Shared board glue (`src/common/` or a board-only lib)
+## 3 — Shared board glue (`src/common/`, built into both envs via `build_src_filter`)
 
-- WiFi with fixed IP from `secrets.h`, NTP sync, LED (solid = ready, blinking = WLAN/NTP not ready).
-- LittleFS atomic write (`<name>.tmp` → rename to `<name>.json`), load at boot.
-- Test-data reset defaults matching the KZ table.
+- WiFi with fixed IP from `secrets.h` (non-blocking `beginNoBlock`, retry every 20 s), NTP sync,
+  LED (solid = ready, blinking = WLAN/NTP not ready). LED state is tracked in a variable: on the
+  Pico W `digitalRead(LED_BUILTIN)` does not return the written value.
+- LittleFS (`board_build.filesystem_size = 0.5m`) atomic write (`<name>.tmp` → rename to
+  `<name>.json`), load at boot, defaults written if the file is missing or invalid.
+- Test-data reset defaults matching the KZ table: `lib/testdata` (native-tested).
+- Temporary smoke-test `main.cpp` on both boards: boot counter in `/boot.json`, status line every 5 s.
 - **Done when:** both Picos join the WLAN, sync time, and persist/reload a test file across reboot.
+- **User verifies:** `pio test -e native` → 9 suites, 63 cases passed; `pio run` → both `SUCCESS`;
+  per Pico: LED blinks then goes solid, serial shows IP, Zurich time (±2 s), boot counter increases
+  after each power cycle; hotspot off → LED blinks, back on → reconnects within ~20 s.
 
 ## 4 — Pico 1 "Kasse" firmware
 
