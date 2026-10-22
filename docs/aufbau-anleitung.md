@@ -3,8 +3,9 @@
 Schritt-für-Schritt-Anleitung für den Hardware-Aufbau mit **2 × Raspberry Pi Pico W** und
 **2 × Servo SG90**, die Einrichtung des WLANs und das erste Flashen.
 
-> **Stand:** Verdrahtung, Pins und WLAN-Konfiguration sind festgelegt. Die Firmware für WLAN, Webserver
-> und Servos (Roadmap-Schritte 3–5) ist noch in Arbeit. Abschnitt 8 beschreibt deshalb den Zielzustand.
+> **Stand:** Verdrahtung, Pins und WLAN-Konfiguration sind festgelegt. WLAN/NTP (Schritt 3) und die
+> Kasse-Firmware auf Pico 1 (Schritt 4, Test: [anleitung-schritt-4-kasse.md](anleitung-schritt-4-kasse.md))
+> sind umgesetzt; die Schranken-Firmware (Schritt 5) ist noch in Arbeit. Abschnitt 8 beschreibt deshalb den Zielzustand.
 > Mit dem Schnelltest in [Abschnitt 7.3](#73-hardware-schnelltest-optional) lässt sich die Verdrahtung
 > aber schon jetzt prüfen.
 
@@ -426,7 +427,7 @@ Weboberflächen im Browser:
 
 | Adresse | Inhalt |
 |---|---|
-| `http://<KASSE_IP>/` | Kasse und Automat |
+| `http://<KASSE_IP>/kasse`, `http://<KASSE_IP>/automat` | Kasse und Automat |
 | `http://<SCHRANKEN_IP>/` | Registrierung und Kamera-Simulation |
 
 Schnittstelle der Kasse direkt testen:

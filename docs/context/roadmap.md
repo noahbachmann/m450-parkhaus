@@ -11,8 +11,8 @@ confirmation moves a step to "done". Failures they report are fixed in the same 
 |---|---|---|
 | 1 | Foundation: envs, plate + tariff libs, native tests | done (verified by user 2026-10-19) |
 | 2 | Domain logic in `lib/` | done (verified by user 2026-10-19) |
-| 3 | Shared board glue | awaiting user verification |
-| 4 | Pico 1 "Kasse" firmware | open |
+| 3 | Shared board glue | done (verified by user 2026-10-22) |
+| 4 | Pico 1 "Kasse" firmware | awaiting user verification |
 | 5 | Pico 2 "Schranken" firmware | open |
 | 6 | Integration + phase-1 system test | open |
 | 7 | Phase 2: Testkonzept scope | later |
@@ -67,7 +67,14 @@ confirmation moves a step to "done". Failures they report are fixed in the same 
 - WebServer port 80: `GET /api/status`, `POST /api/entry`, `POST /api/exit`.
 - Kasse page (search plate, entry time, duration, fee, record payment) and Automat page.
 - Sessions persisted in `/sessions.json`.
+- Page texts and cash input parsing as pure functions in `lib/kasse_view` (native-tested); HTML in
+  `src/kasse/pages.cpp`, routes in `src/kasse/main.cpp`. Test-data reset `POST /reset`.
+  Step-3 boot counter removed from Kasse.
 - **Done when:** TF-29 via curl passes; TF-18..22 pass with entries created via curl.
+- **User verifies** (walkthrough: `docs/anleitung-schritt-4-kasse.md`): `pio test -e native` →
+  10 suites, 72 cases passed; `pio run` → both `SUCCESS`; on Pico 1: TF-29 (20 curl requests, each
+  < 1 s), TF-18 (R-01..R-12 via backdated entries), TF-19 (1 h 20 min / CHF 4.00 / tariff note),
+  TF-20, TF-21, TF-22 in the browser; paid status survives a power cycle.
 
 ## 5 — Pico 2 "Schranken" firmware
 

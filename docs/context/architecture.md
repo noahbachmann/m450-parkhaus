@@ -121,6 +121,19 @@ running. The registration check happens on Pico 2 before `/api/entry`. Pico 1 do
 The Kasse/Automat pages are served by Pico 1 itself and call its internal logic directly (no API
 needed). Later phases may add JSON endpoints for them if the pages use fetch().
 
+**Pico 1 web pages (step 4, decided 2026-10-22):** server-rendered HTML forms, no JavaScript.
+- `GET /` → 303 to `/kasse`.
+- `GET /kasse?kz=` — search: active session, else the latest closed one; list of all sessions; reset button.
+- `GET /automat?kz=` — search: active session only; none → «Kein offener Parkvorgang für <PLATE>».
+- `POST /kasse/pay`, `POST /automat/pay` — form fields `kz`, `method` (`card_ok|card_declined|twint|cash`),
+  `amount` (CHF, cash only). Post/redirect/get: the result is kept in RAM and shown once after a 303 to
+  `<page>?kz=<PLATE>&m=<id>`, so a reload doesn't pay twice. The pay form stays visible on a paid session so
+  a second attempt shows «bereits bezahlt» (TF-20).
+- `POST /reset` — test-data reset (no sessions, tx counter 1), 303 to `/kasse`.
+- Sessions are written to flash after every successful entry, exit and payment (incl. partial cash).
+- The JSON API reads the request body from WebServer's `plain` argument, which is only set for a
+  non-form content type: clients must send `Content-Type: application/json`.
+
 ## Domain rules (decided 2026-10-19, step 2)
 
 - **Fee 0 (free time):** payment is refused («nothing to pay»), the session stays `open`; exit closes
@@ -136,7 +149,8 @@ needed). Later phases may add JSON endpoints for them if the pages use fetch().
   `26 h 3 min`. Europe/Zurich offset is computed by a pure function (EU rule), not via `TZ`.
 
 Libraries: `lib/registration`, `lib/session` (store, state machine, payment), `lib/format`,
-`lib/codec` (JSON files), `lib/kasse_api` (API handlers → status + body).
+`lib/codec` (JSON files), `lib/kasse_api` (API handlers → status + body), `lib/kasse_view` (Kasse/Automat
+page texts, CHF input parsing).
 
 File formats (LittleFS):
 - `/registrations.json`: `{"registrations":[{"name":"Test Kunde A","kz":"LU123456"}]}`
