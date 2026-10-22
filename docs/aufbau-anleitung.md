@@ -310,7 +310,7 @@ IPAddress ip(KASSE_IP);                        // auf Pico 2: SCHRANKEN_IP
 WiFi.config(ip, IPAddress(GATEWAY_IP), IPAddress(GATEWAY_IP), IPAddress(SUBNET_MASK)); // IP, DNS, Gateway, Maske
 WiFi.beginNoBlock(WIFI_SSID, WIFI_PASSWORD);   // kehrt sofort zurück, Verbindung läuft im Hintergrund
 
-// in loop(): sobald verbunden, einmal NTP.begin("pool.ntp.org", "time.google.com");
+// in loop(): sobald verbunden, Zeitserver per DNS suchen und NTP.begin(server) – bis die Zeit stimmt alle 15 s erneut
 // LED blinkt, bis WLAN und Uhrzeit bereit sind, danach Dauerlicht
 ```
 
