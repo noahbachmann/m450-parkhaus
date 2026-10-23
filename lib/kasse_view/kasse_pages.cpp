@@ -6,40 +6,6 @@
 
 namespace
 {
-const char* STYLE = "body{font-family:system-ui,sans-serif;max-width:860px;margin:0 auto;padding:16px;"
-                    "background:#f6f7f9;color:#1d232b}"
-                    "nav a{margin-right:16px;font-weight:600}"
-                    "h1{font-size:1.5rem}h2{font-size:1.15rem;margin-top:28px}"
-                    "form{margin:12px 0}input,button{font-size:1rem;padding:6px 10px}"
-                    "button{cursor:pointer}"
-                    "table{border-collapse:collapse;width:100%;background:#fff}"
-                    "th,td{text-align:left;padding:6px 8px;border-bottom:1px solid #dde1e6}"
-                    ".card{background:#fff;border:1px solid #dde1e6;border-radius:6px;padding:12px 16px;margin:12px 0}"
-                    ".card th{width:180px;color:#555}"
-                    ".notice{padding:10px 14px;border-radius:6px;margin:12px 0;font-weight:600}"
-                    ".ok{background:#dff3e4;color:#14532d}.info{background:#fff4d6;color:#713f12}"
-                    ".err{background:#fde2e1;color:#7f1d1d}"
-                    ".methods label{display:block;margin:6px 0}.muted{color:#666;font-size:.9rem}"
-                    ".scroll{overflow-x:auto}";
-
-void appendNotice(std::string& html, const char* cls, const std::string& text)
-{
-    html += "<p class=\"notice ";
-    html += cls;
-    html += "\">" + htmlEscape(text) + "</p>";
-}
-
-void appendRow(std::string& html, const char* label, const std::string& value)
-{
-    if (value.empty())
-    {
-        return;
-    }
-    html += "<tr><th>";
-    html += label;
-    html += "</th><td>" + htmlEscape(value) + "</td></tr>";
-}
-
 void appendSession(std::string& html, const SessionView& v)
 {
     html += "<div class=\"card\"><table>";
@@ -113,14 +79,8 @@ std::string renderPage(Page page, const SessionStore& store, const std::string& 
     bool kasse = page == Page::Kasse;
     std::string html;
     html.reserve(4096);
-    html += "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\">"
-            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>";
-    html += kasse ? "Kasse" : "Automat";
-    html += " – Parkhaus</title><style>";
-    html += STYLE;
-    html += "</style></head><body><nav><a href=\"/kasse\">Kasse</a><a href=\"/automat\">Automat</a></nav><h1>";
-    html += kasse ? "Kasse" : "Automat – Parkgebühr bezahlen";
-    html += "</h1>";
+    appendPageStart(html, kasse ? "Kasse" : "Automat", "<a href=\"/kasse\">Kasse</a><a href=\"/automat\">Automat</a>",
+                    kasse ? "Kasse" : "Automat – Parkgebühr bezahlen");
 
     if (!timeOk)
     {
@@ -178,6 +138,6 @@ std::string renderPage(Page page, const SessionStore& store, const std::string& 
     {
         html += "<p class=\"muted\">Stand: " + formatDateTime(now) + "</p>";
     }
-    html += "</body></html>";
+    appendPageEnd(html);
     return html;
 }

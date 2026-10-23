@@ -1,12 +1,17 @@
 #include <Arduino.h>
+#include <HTTPClient.h>
+#include <Servo.h>
+#include <WebServer.h>
 #include <WiFi.h>
-#include <stdlib.h>
 #include <string>
 
+#include "barrier.h"
 #include "codec.h"
 #include "format.h"
+#include "gate.h"
 #include "net.h"
 #include "pins.h"
+#include "schranken_view.h"
 #include "secrets.h"
 #include "status_led.h"
 #include "storage.h"
@@ -14,22 +19,72 @@
 
 namespace
 {
+constexpr unsigned long REPORT_INTERVAL_MS = 30000;
+constexpr uint16_t KASSE_TIMEOUT_MS = 1000;
+
+// Calls Pico 1 over HTTP. Any transport error is reported as status <= 0 (= unreachable).
+class HttpKasseLink : public KasseLink
+{
+public:
+    HttpReply postJson(const char* path, const std::string& body) override
+    {
+        if (!wifiReady())
+        {
+            return {};
+        }
+        WiFiClient client;
+        HTTPClient http;
+        http.setTimeout(KASSE_TIMEOUT_MS);
+        String url = String("http://") + IPAddress(KASSE_IP).toString() + path;
+        if (!http.begin(client, url))
+        {
+            return {};
+        }
+        http.addHeader("Content-Type", "application/json");
+        HttpReply reply;
+        reply.status = http.POST(String(body.c_str()));
+        if (reply.status > 0)
+        {
+            reply.body = http.getString().c_str();
+        }
+        http.end();
+        return reply;
+    }
+};
+
+struct Lane
+{
+    Lane(const char* laneName, uint8_t servo, uint8_t loop) : name(laneName), servoPin(servo), loopPin(loop)
+    {
+    }
+
+    const char* name;
+    uint8_t servoPin;
+    uint8_t loopPin;
+    Servo servo;
+    Barrier barrier;
+    int writtenAngle = -1;
+    LaneView view;
+};
+
+WebServer server(80);
+bool serverStarted = false;
+HttpKasseLink kasse;
 RegistrationList registrations;
-uint32_t bootCount = 0;
+Lane entryLane{"Einfahrt", PIN_ENTRY_SERVO, PIN_ENTRY_LOOP};
+Lane exitLane{"Ausfahrt", PIN_EXIT_SERVO, PIN_EXIT_LOOP};
 unsigned long lastReportMs = 0;
 
-// Step-3 smoke test: proves that a file survives a reboot.
-uint32_t countBoot()
+// Result of the last registration POST, shown once after the redirect.
+uint32_t noticeId = 0;
+Notice lastNotice;
+
+void saveRegistrations()
 {
-    std::string text;
-    uint32_t boots = 0;
-    if (storageRead("boot", text))
+    if (!storageWrite("registrations", registrationsToJson(registrations)))
     {
-        boots = strtoul(text.c_str(), nullptr, 10);
+        Serial.println("registrations: write FAILED");
     }
-    boots++;
-    storageWrite("boot", std::to_string(boots));
-    return boots;
 }
 
 void loadRegistrations()
@@ -38,9 +93,168 @@ void loadRegistrations()
     if (!storageRead("registrations", json) || !registrationsFromJson(json, registrations))
     {
         loadDefaultRegistrations(registrations);
-        storageWrite("registrations", registrationsToJson(registrations));
+        saveRegistrations();
         Serial.println("registrations: defaults written");
+        return;
     }
+    Serial.print("registrations: loaded ");
+    Serial.println(registrations.all().size());
+}
+
+void logRequest(int status)
+{
+    Serial.print("[http] ");
+    Serial.print(server.method() == HTTP_GET ? "GET " : "POST ");
+    Serial.print(server.uri());
+    if (server.hasArg("kz"))
+    {
+        Serial.print(" kz=");
+        Serial.print(server.arg("kz"));
+    }
+    Serial.print(" -> ");
+    Serial.println(status);
+}
+
+std::string argOf(const char* name)
+{
+    return server.arg(name).c_str();
+}
+
+void redirect(const String& url)
+{
+    server.sendHeader("Location", url);
+    server.send(303);
+    logRequest(303);
+}
+
+void sendHtml(const std::string& html)
+{
+    server.send(200, "text/html; charset=utf-8", String(html.c_str()));
+    logRequest(200);
+}
+
+void driveServo(Lane& lane)
+{
+    int angle = lane.barrier.angle();
+    if (angle != lane.writtenAngle)
+    {
+        lane.servo.write(angle);
+        lane.writtenAngle = angle;
+        Serial.print("[barrier] ");
+        Serial.print(lane.name);
+        Serial.println(lane.barrier.state() == BarrierState::Open ? " open" : " closed");
+    }
+}
+
+void applyGate(Lane& lane, const GateResult& r)
+{
+    unsigned long startMs = millis();
+    if (r.open)
+    {
+        lane.barrier.open(static_cast<uint32_t>(startMs));
+        driveServo(lane);
+    }
+    lane.view.cls = r.cls;
+    lane.view.terminal = r.message;
+    Serial.print("[gate] ");
+    Serial.print(lane.name);
+    Serial.print(" ");
+    Serial.print(r.plate.c_str());
+    Serial.print(": ");
+    Serial.println(r.message.c_str());
+}
+
+void onEntry()
+{
+    unsigned long startMs = millis();
+    applyGate(entryLane, entryRequest(registrations, argOf("kz"), argOf("entry"), kasse));
+    Serial.print("[gate] decision after ");
+    Serial.print(millis() - startMs);
+    Serial.println(" ms");
+    redirect("/kamera");
+}
+
+void onExit()
+{
+    unsigned long startMs = millis();
+    applyGate(exitLane, exitRequest(argOf("kz"), kasse));
+    Serial.print("[gate] decision after ");
+    Serial.print(millis() - startMs);
+    Serial.println(" ms");
+    redirect("/kamera");
+}
+
+void showCamera()
+{
+    entryLane.view.open = entryLane.barrier.state() == BarrierState::Open;
+    exitLane.view.open = exitLane.barrier.state() == BarrierState::Open;
+    sendHtml(renderCameraPage(entryLane.view, exitLane.view));
+}
+
+void showRegistration()
+{
+    Notice notice;
+    if (server.hasArg("m") && server.arg("m").toInt() == static_cast<long>(noticeId))
+    {
+        notice = lastNotice;
+    }
+    sendHtml(renderRegistrationPage(registrations, notice));
+}
+
+void finishRegistrationForm(const FormResult& r)
+{
+    if (r.changed)
+    {
+        saveRegistrations();
+    }
+    Serial.print("[registration] ");
+    Serial.println(r.notice.text.c_str());
+    lastNotice = r.notice;
+    noticeId++;
+    redirect("/registrierung?m=" + String(noticeId));
+}
+
+void onReset()
+{
+    loadDefaultRegistrations(registrations);
+    saveRegistrations();
+    Serial.println("registrations: test-data reset");
+    finishRegistrationForm({{"ok", "Testdaten zurückgesetzt – Registrierungen KZ-01, KZ-02, KZ-08, KZ-10"}, false});
+}
+
+void onNotFound()
+{
+    server.send(404, "text/plain; charset=utf-8", "Nicht gefunden");
+    logRequest(404);
+}
+
+void setupRoutes()
+{
+    server.on("/", HTTP_GET, []() { redirect("/kamera"); });
+    server.on("/kamera", HTTP_GET, showCamera);
+    server.on("/kamera/einfahrt", HTTP_POST, onEntry);
+    server.on("/kamera/ausfahrt", HTTP_POST, onExit);
+    server.on("/registrierung", HTTP_GET, showRegistration);
+    server.on("/registrierung/add", HTTP_POST,
+              []() { finishRegistrationForm(handleRegistrationForm(registrations, argOf("name"), argOf("kz"))); });
+    server.on("/registrierung/delete", HTTP_POST,
+              []() { finishRegistrationForm(handleDeleteForm(registrations, argOf("kz"))); });
+    server.on("/reset", HTTP_POST, onReset);
+    server.onNotFound(onNotFound);
+}
+
+void beginLane(Lane& lane)
+{
+    pinMode(lane.loopPin, INPUT_PULLUP);
+    lane.servo.attach(lane.servoPin);
+    driveServo(lane);
+}
+
+void updateLane(Lane& lane, unsigned long nowMs)
+{
+    bool occupied = digitalRead(lane.loopPin) == LOW;
+    lane.barrier.update(static_cast<uint32_t>(nowMs), occupied);
+    driveServo(lane);
 }
 
 void report()
@@ -49,8 +263,6 @@ void report()
     Serial.print(wifiReady() ? WiFi.localIP().toString() : String("not connected"));
     Serial.print(" | time ");
     Serial.print(timeReady() ? formatDateTime(nowUtc()).c_str() : "not synced");
-    Serial.print(" | boot #");
-    Serial.print(bootCount);
     Serial.print(" | registrations ");
     Serial.println(registrations.all().size());
 }
@@ -60,14 +272,14 @@ void setup()
 {
     Serial.begin(115200);
     statusLedBegin();
-    pinMode(PIN_ENTRY_LOOP, INPUT_PULLUP);
-    pinMode(PIN_EXIT_LOOP, INPUT_PULLUP);
+    beginLane(entryLane);
+    beginLane(exitLane);
     if (!storageBegin())
     {
         Serial.println("LittleFS mount failed");
     }
-    bootCount = countBoot();
     loadRegistrations();
+    setupRoutes();
     netBegin(IPAddress(SCHRANKEN_IP));
 }
 
@@ -76,7 +288,21 @@ void loop()
     unsigned long nowMs = millis();
     netUpdate(nowMs);
     statusLedUpdate(wifiReady() && timeReady(), nowMs);
-    if (nowMs - lastReportMs >= 5000)
+    updateLane(entryLane, nowMs);
+    updateLane(exitLane, nowMs);
+
+    if (!serverStarted && wifiReady())
+    {
+        server.begin();
+        serverStarted = true;
+        Serial.println("HTTP server listening on port 80");
+    }
+    if (serverStarted)
+    {
+        server.handleClient();
+    }
+
+    if (nowMs - lastReportMs >= REPORT_INTERVAL_MS)
     {
         lastReportMs = nowMs;
         report();

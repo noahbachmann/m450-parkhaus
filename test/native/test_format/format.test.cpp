@@ -61,6 +61,46 @@ void test_duration()
     TEST_ASSERT_EQUAL_STRING("0 h 0 min", formatDuration(-10).c_str());
 }
 
+void test_parse_local_date_time()
+{
+    int64_t e = 0;
+    TEST_ASSERT_TRUE(parseLocalDateTime("2025-10-15T14:06:40", e));
+    TEST_ASSERT_EQUAL_INT64(1760530000, e);
+    TEST_ASSERT_TRUE(parseLocalDateTime(" 15.10.2025 14:06:40 ", e));
+    TEST_ASSERT_EQUAL_INT64(1760530000, e);
+    TEST_ASSERT_TRUE(parseLocalDateTime("2025-10-15T14:06", e));
+    TEST_ASSERT_EQUAL_INT64(1760530000 - 40, e);
+    TEST_ASSERT_TRUE(parseLocalDateTime("01.01.2026 01:00", e));
+    TEST_ASSERT_EQUAL_INT64(1767225600, e);
+}
+
+void test_parse_local_date_time_at_dst_switch()
+{
+    int64_t e = 0;
+    TEST_ASSERT_TRUE(parseLocalDateTime("29.03.2026 03:00:00", e));
+    TEST_ASSERT_EQUAL_INT64(CEST_START_2026, e);
+    TEST_ASSERT_TRUE(parseLocalDateTime("29.03.2026 02:30", e)); // gap: read as CET
+    TEST_ASSERT_EQUAL_INT64(CEST_START_2026 + 1800, e);
+    TEST_ASSERT_TRUE(parseLocalDateTime("25.10.2026 02:30", e)); // overlap: CEST
+    TEST_ASSERT_EQUAL_INT64(CEST_END_2026 - 1800, e);
+    TEST_ASSERT_TRUE(parseLocalDateTime("25.10.2026 03:00", e));
+    TEST_ASSERT_EQUAL_INT64(CEST_END_2026 + 3600, e);
+}
+
+void test_parse_local_date_time_rejects()
+{
+    int64_t e = 7;
+    TEST_ASSERT_FALSE(parseLocalDateTime("", e));
+    TEST_ASSERT_FALSE(parseLocalDateTime("gestern", e));
+    TEST_ASSERT_FALSE(parseLocalDateTime("15.10.2025", e));
+    TEST_ASSERT_FALSE(parseLocalDateTime("15.10.2025 14:06x", e));
+    TEST_ASSERT_FALSE(parseLocalDateTime("31.04.2026 10:00", e));
+    TEST_ASSERT_FALSE(parseLocalDateTime("15.13.2025 10:00", e));
+    TEST_ASSERT_FALSE(parseLocalDateTime("15.10.2025 24:00", e));
+    TEST_ASSERT_FALSE(parseLocalDateTime("2025-10-15 14:06", e));
+    TEST_ASSERT_EQUAL_INT64(7, e);
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -69,5 +109,8 @@ int main()
     RUN_TEST(test_date_time_local);
     RUN_TEST(test_date_time_across_dst_switch);
     RUN_TEST(test_duration);
+    RUN_TEST(test_parse_local_date_time);
+    RUN_TEST(test_parse_local_date_time_at_dst_switch);
+    RUN_TEST(test_parse_local_date_time_rejects);
     return UNITY_END();
 }

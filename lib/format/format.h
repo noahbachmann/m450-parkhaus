@@ -16,3 +16,8 @@ std::string formatDateTime(int64_t epoch);
 // Seconds -> "<h> h <m> min", minutes rounded down: 4800 -> "1 h 20 min", 300 -> "0 h 5 min".
 // Negative durations are shown as zero.
 std::string formatDuration(int64_t seconds);
+
+// Europe/Zurich local time -> epoch seconds (UTC). Accepts "JJJJ-MM-TTTHH:MM[:SS]" (HTML datetime-local)
+// and "TT.MM.JJJJ HH:MM[:SS]", surrounding whitespace ignored. In the autumn overlap hour the earlier
+// (CEST) instant wins; a time in the spring gap is read as CET. False for anything else.
+bool parseLocalDateTime(const std::string& text, int64_t& epoch);

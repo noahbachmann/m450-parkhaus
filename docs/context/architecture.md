@@ -134,6 +134,19 @@ needed). Later phases may add JSON endpoints for them if the pages use fetch().
 - The JSON API reads the request body from WebServer's `plain` argument, which is only set for a
   non-form content type: clients must send `Content-Type: application/json`.
 
+**Pico 2 web pages (step 5, decided 2026-10-23):** server-rendered HTML forms, same style as Pico 1.
+- `GET /` → 303 to `/kamera`.
+- `GET /kamera` — one card per lane: barrier state, last terminal text, plate field, «Erfassen»; the entry
+  card also has an optional `datetime-local` entry time (Europe/Zurich, empty = now).
+- `POST /kamera/einfahrt` (fields `kz`, `entry`), `POST /kamera/ausfahrt` (`kz`) → decision, 303 to `/kamera`.
+- `GET /registrierung`, `POST /registrierung/add` (`name`, `kz`), `POST /registrierung/delete` (`kz`),
+  `POST /reset` (default registrations); post/redirect/get with a one-time notice like Pico 1.
+- Entry/exit decisions are pure functions in `lib/gate` behind a `KasseLink` interface (firmware:
+  `HTTPClient`, 1000 ms timeout; tests: fakes or the real `kasse_api` handlers). Only a well-formed
+  201 (entry) or 200 with `closed`/`closed_free` (exit) opens; everything else keeps the barrier closed.
+- `lib/barrier` holds the barrier state machine (servo angles 0° closed, 90° open); the firmware writes
+  the angle to the servo whenever it changes.
+
 ## Domain rules (decided 2026-10-19, step 2)
 
 - **Fee 0 (free time):** payment is refused («nothing to pay»), the session stays `open`; exit closes
@@ -150,7 +163,9 @@ needed). Later phases may add JSON endpoints for them if the pages use fetch().
 
 Libraries: `lib/registration`, `lib/session` (store, state machine, payment), `lib/format`,
 `lib/codec` (JSON files), `lib/kasse_api` (API handlers → status + body), `lib/kasse_view` (Kasse/Automat
-page texts, CHF input parsing, pay-form handling, page HTML).
+page texts, CHF input parsing, pay-form handling, page HTML), `lib/html` (shared page building blocks),
+`lib/barrier` (barrier state machine), `lib/gate` (entry/exit decisions on Pico 2), `lib/schranken_view`
+(registration and camera pages).
 
 File formats (LittleFS):
 - `/registrations.json`: `{"registrations":[{"name":"Test Kunde A","kz":"LU123456"}]}`

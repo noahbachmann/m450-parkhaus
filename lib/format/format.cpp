@@ -95,3 +95,54 @@ std::string formatDuration(int64_t seconds)
                   static_cast<long>(seconds % 3600 / 60));
     return buf;
 }
+
+bool parseLocalDateTime(const std::string& text, int64_t& epoch)
+{
+    size_t begin = text.find_first_not_of(" \t");
+    size_t end = text.find_last_not_of(" \t");
+    if (begin == std::string::npos)
+    {
+        return false;
+    }
+    std::string s = text.substr(begin, end - begin + 1);
+
+    unsigned y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0;
+    int used = 0;
+    // %n records how far sscanf got, so trailing garbage is rejected.
+    bool iso = s.size() > 4 && s[4] == '-';
+    const char* withSec = iso ? "%4u-%2u-%2uT%2u:%2u:%2u%n" : "%2u.%2u.%4u %2u:%2u:%2u%n";
+    const char* noSec = iso ? "%4u-%2u-%2uT%2u:%2u%n" : "%2u.%2u.%4u %2u:%2u%n";
+    unsigned* first = iso ? &y : &d;
+    unsigned* third = iso ? &d : &y;
+    if (!(std::sscanf(s.c_str(), withSec, first, &mo, third, &h, &mi, &sec, &used) == 6 &&
+          static_cast<size_t>(used) == s.size()))
+    {
+        sec = 0;
+        used = 0;
+        if (!(std::sscanf(s.c_str(), noSec, first, &mo, third, &h, &mi, &used) == 5 &&
+              static_cast<size_t>(used) == s.size()))
+        {
+            return false;
+        }
+    }
+    if (y < 1970 || mo < 1 || mo > 12 || d < 1 || h > 23 || mi > 59 || sec > 59)
+    {
+        return false;
+    }
+    int64_t days = daysFromCivil(y, mo, d);
+    if (civilFromDays(days).day != d)
+    {
+        return false; // e.g. 31.04.
+    }
+    int64_t local = days * DAY + h * 3600 + mi * 60 + sec;
+    for (int32_t offset : {7200, 3600})
+    {
+        if (zurichOffsetSeconds(local - offset) == offset)
+        {
+            epoch = local - offset;
+            return true;
+        }
+    }
+    epoch = local - 3600;
+    return true;
+}

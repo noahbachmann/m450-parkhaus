@@ -19,7 +19,7 @@ verified. No `test/board/` suites and no `v1.0` tag.
 | 2 | Domain logic in `lib/` | done (verified by user 2026-10-19) |
 | 3 | Shared board glue | done (verified by user 2026-10-22) |
 | 4 | Pico 1 "Kasse" firmware | awaiting user verification |
-| 5 | Pico 2 "Schranken" firmware | open |
+| 5 | Pico 2 "Schranken" firmware | awaiting user verification |
 | 6 | Integration + phase-1 system test | open |
 | 7 | Phase 2: Testkonzept scope | later |
 
@@ -88,7 +88,11 @@ verified. No `test/board/` suites and no `v1.0` tag.
 - HTTP client to Pico 1 (1000 ms timeout; any error → barrier stays closed).
 - Servos: open on success (≤ 2 s total), close after `BARRIER_MIN_OPEN_MS` (5 s) once the safety loop
   is free. Loops are optional hardware: must work with nothing connected to GP14/GP15.
-- **Done when:** TF-01..04, 06, 07, 10, 11, 23..25, 30 pass against a running Pico 1.
+- Logic in `lib/barrier`, `lib/gate` (via `KasseLink`), `lib/schranken_view`, `parseLocalDateTime` in
+  `lib/format`, shared HTML in `lib/html`; glue in `src/schranken/main.cpp`. Step-3 boot counter removed.
+- **Done when:** native suites cover registration (TF-01..03), entry/exit decisions incl. fail-safe on
+  timeout and malformed replies (TF-04, 07, 10, 11, 23, 24, 30), barrier timing and backdated entry time.
+- **User verifies:** `pio test -e native` → 13 suites, 106 cases passed; `pio run` → both `SUCCESS`.
 
 ## 6 — Integration + phase-1 system test
 

@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string>
 
+#include "html.h"
 #include "payment.h"
 #include "session.h"
 
@@ -36,17 +37,7 @@ bool paymentSucceeded(const PaymentResult& result);
 // «Kein offener Parkvorgang für SZ555»
 std::string noSessionMessage(const std::string& plate);
 
-struct Notice
-{
-    const char* cls = ""; // "ok", "info" or "err"; empty = no notice
-    std::string text;
-};
-
-struct PayFormResult
-{
-    Notice notice;
-    bool changed = false; // sessions were modified and must be written to flash
-};
+using PayFormResult = FormResult;
 
 // Form fields of POST /kasse/pay and /automat/pay: kz, method (card_ok|card_declined|twint|cash),
 // amount in CHF (cash only).
@@ -58,5 +49,3 @@ bool parsePayMethod(const std::string& name, PayMethod& method);
 
 // "10", "10.5", "10.50", "10,50", "CHF 10.00" -> 1050 Rappen. False for anything else, 0 or > CHF 1000.
 bool parseChf(const std::string& text, uint32_t& rappen);
-
-std::string htmlEscape(const std::string& text);

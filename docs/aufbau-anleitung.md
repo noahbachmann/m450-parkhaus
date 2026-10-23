@@ -5,7 +5,8 @@ Schritt-für-Schritt-Anleitung für den Hardware-Aufbau mit **2 × Raspberry Pi 
 
 > **Stand:** Verdrahtung, Pins und WLAN-Konfiguration sind festgelegt. WLAN/NTP (Schritt 3) und die
 > Kasse-Firmware auf Pico 1 (Schritt 4, Test: [anleitung-schritt-4-kasse.md](anleitung-schritt-4-kasse.md))
-> sind umgesetzt; die Schranken-Firmware (Schritt 5) ist noch in Arbeit. Abschnitt 8 beschreibt deshalb den Zielzustand.
+> und die Schranken-Firmware auf Pico 2 (Schritt 5) sind umgesetzt. Ab Schritt 4 wurde nur noch mit den
+> Unit-Tests auf dem PC geprüft (keine Picos mehr verfügbar); Abschnitt 8 ist auf Hardware ungetestet.
 > Mit dem Schnelltest in [Abschnitt 7.3](#73-hardware-schnelltest-optional) lässt sich die Verdrahtung
 > aber schon jetzt prüfen.
 
@@ -400,7 +401,7 @@ git checkout src/schranken/main.cpp
 
 ## 8. Inbetriebnahme und Test
 
-> Beschreibt den Zielzustand nach Roadmap-Schritt 5.
+> Stand nach Roadmap-Schritt 5. Auf Hardware nicht getestet.
 
 ### 8.1 Startreihenfolge
 
@@ -428,7 +429,8 @@ Weboberflächen im Browser:
 | Adresse | Inhalt |
 |---|---|
 | `http://<KASSE_IP>/kasse`, `http://<KASSE_IP>/automat` | Kasse und Automat |
-| `http://<SCHRANKEN_IP>/` | Registrierung und Kamera-Simulation |
+| `http://<SCHRANKEN_IP>/kamera` | Kamera-Simulation (Einfahrt mit optionaler Einfahrtszeit, Ausfahrt) |
+| `http://<SCHRANKEN_IP>/registrierung` | Registrierung (hinzufügen, löschen, Testdaten zurücksetzen) |
 
 Schnittstelle der Kasse direkt testen:
 
