@@ -1,0 +1,7 @@
+.git
+.pio
+.vscode
+sim-data
+docs
+test
+*.pdf

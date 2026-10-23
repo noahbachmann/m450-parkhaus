@@ -1,0 +1,26 @@
+# PC simulator: Pico 1 "Kasse" (API, Kasse/Automat, sessions) and Pico 2 "Schranken" (registration, camera,
+# barriers), talking HTTP like the real boards. Start: docker compose up --build
+services:
+  kasse:
+    build: .
+    image: parkhaus-sim
+    command: sim_kasse
+    init: true
+    ports:
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - ./sim-data/kasse:/data
+
+  schranken:
+    build: .
+    image: parkhaus-sim
+    command: sim_schranken
+    init: true
+    environment:
+      KASSE_URL: http://kasse:8081
+    ports:
+      - "127.0.0.1:8082:8082"
+    volumes:
+      - ./sim-data/schranken:/data
+    depends_on:
+      - kasse

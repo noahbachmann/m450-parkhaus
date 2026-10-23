@@ -30,7 +30,8 @@ PlatformIO only. Parent `M450/CLAUDE.md` says cmake/make/ctest — wrong here.
     pio run -e kasse -t upload           flash Pico 1 (same with -e schranken)
     pio device monitor -b 115200         serial console
     pio test -e native                   host-side unit tests, no board
-    pio run -e sim -t exec               PC simulator of both Picos (localhost:8081 / 8082)
+    docker compose up --build            PC simulator: Kasse localhost:8081, Schranken localhost:8082
+    pio run -e sim_kasse -t exec         same without Docker (plus -e sim_schranken in a 2nd terminal)
     pio test -e kasse                    on-board tests, board required (later)
 
 ## Layout
@@ -38,7 +39,7 @@ PlatformIO only. Parent `M450/CLAUDE.md` says cmake/make/ctest — wrong here.
     lib/<name>/      logic, one folder per library
     src/kasse/       Pico 1 hardware glue (env kasse)
     src/schranken/   Pico 2 hardware glue (env schranken)
-    src/sim/         PC simulator glue (env sim): keep routes in sync with both board main.cpp
+    src/sim/         PC simulator glue (envs sim_kasse, sim_schranken, Docker): keep routes in sync with the boards
     include/         shared headers
     test/native/test_<name>/<name>.test.cpp   host-only suite (Unity), one folder = one program with its own main()
     test/board/test_<name>/<name>.test.cpp    on-board suite (later)

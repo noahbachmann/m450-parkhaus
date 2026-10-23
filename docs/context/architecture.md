@@ -187,11 +187,19 @@ File formats (LittleFS):
 
 ## PC simulator (decided 2026-10-23)
 
-`[env:sim]` builds `src/sim/` natively: both Picos in one process, Kasse on `localhost:8081`, Schranken on
-`localhost:8082`, using the same `lib/` code as the firmware. Only the glue differs: a minimal own HTTP
-server (Winsock/POSIX, no dependency), files in `sim-data/` instead of LittleFS, PC clock instead of NTP,
-a `/sim` page instead of loop buttons and Pico 1's power switch. Routes and texts must stay identical to
-the firmware's; when a route is added to a `src/<board>/main.cpp`, add it to `src/sim/main.cpp` too.
+Two native programs with the same `lib/` code as the firmware, talking HTTP like the boards:
+- `src/sim/kasse/` (env `sim_kasse`, `localhost:8081`): Pico 1 — API, Kasse/Automat pages, sessions.
+- `src/sim/schranken/` (env `sim_schranken`, `localhost:8082`): Pico 2 — registration, camera page,
+  barriers, `/sim` page for the safety loops. Calls the Kasse at `KASSE_URL` (default
+  `http://localhost:8081`) with a 1000 ms total timeout.
+- `src/sim/common/`: own minimal HTTP server + client (Winsock/POSIX, no dependency), data files, banner.
+- Config by environment: `SIM_HOST` (listen address, default `127.0.0.1`), `SIM_DATA` (default
+  `sim-data`), `KASSE_URL`.
+- Docker: `Dockerfile` (build stage `gcc:13-bookworm`, ArduinoJson single header 7.4.3, static libstdc++;
+  runtime `debian:bookworm-slim`), `docker-compose.yml` with services `kasse` and `schranken`, ports bound
+  to 127.0.0.1, data in `./sim-data/<service>`. Pico 1 off = `docker compose stop kasse`.
+- Only the glue differs from the firmware. Routes and texts must stay identical; when a route is added to
+  a `src/<board>/main.cpp`, add it to `src/sim/<board>/main.cpp` too.
 
 ## Code layout (decided)
 

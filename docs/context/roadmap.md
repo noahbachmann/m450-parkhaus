@@ -22,7 +22,7 @@ verified. No `test/board/` suites and no `v1.0` tag.
 | 5 | Pico 2 "Schranken" firmware | done (verified by user 2026-10-23, native + build) |
 | 6 | Integration + phase-1 system test | done (verified by user 2026-10-23, native + build) |
 | 7a | Phase 2: barrier safety | awaiting user verification |
-| S | PC simulator (`env:sim`) | awaiting user verification |
+| S | PC simulator (Docker / `sim_kasse` + `sim_schranken`) | awaiting user verification |
 | 7b | Phase 2: event log + operator view | open |
 | 7c | Phase 2: exit terminal | open |
 | 7d | Phase 2: tariff page + wrap-up | open |
@@ -123,14 +123,18 @@ Hardware test suites under `test/board/` and the `v1.0` tag are dropped (no hard
 
 ### S — PC simulator (added 2026-10-23, user request)
 
-- `[env:sim]` (`platform = native`, `build_src_filter = +<sim/>`), start with `pio run -e sim -t exec`.
-- `src/sim/http_server.*`: minimal HTTP/1.0 server, single thread, `select()` over two ports, Winsock on
-  Windows (`ws2_32` linked by `scripts/sim_link.py`), POSIX elsewhere. No third-party HTTP library.
-- `src/sim/main.cpp`: Kasse on `localhost:8081`, Schranken on `localhost:8082`, `/sim` control page for
-  the loops and "Kasse off". Pico 2 → Pico 1 goes through the Kasse routing in-process. Data in
-  `sim-data/*.json` (gitignored), PC clock as time.
-- **User verifies:** `pio run -e sim -t exec`, then in the browser: register, entry (also backdated),
-  pay, exit, loop/Kasse toggles. `pio test -e native` and `pio run` unchanged (14 suites, 133 cases).
+- Two programs like the two boards: `src/sim/kasse/` (Pico 1, API + pages + sessions, port 8081) and
+  `src/sim/schranken/` (Pico 2, port 8082) calling the Kasse over real HTTP (1000 ms timeout).
+  Shared glue in `src/sim/common/` (own HTTP server/client, Winsock or POSIX).
+- Docker: `docker compose up --build` (services `kasse`, `schranken`). Without Docker:
+  `pio run -e sim_kasse -t exec` and `pio run -e sim_schranken -t exec` in two terminals.
+- Found while testing (open, needs a decision): if Pico 1 answers an entry only after Pico 2's 1000 ms
+  timeout, the session is opened although the barrier stayed closed; the retry then gets
+  «Parkvorgang bereits offen». Affects the firmware too.
+- **User verifies:** `docker compose up --build`, then in the browser: register, entry (also backdated),
+  pay, exit, loop toggles, `docker compose stop kasse` / `start kasse`. Optional:
+  `pio run -e sim_kasse` and `-e sim_schranken` build on Windows. `pio test -e native` and `pio run`
+  unchanged (14 suites, 133 cases).
 
 ### 7b — Event log + operator view
 

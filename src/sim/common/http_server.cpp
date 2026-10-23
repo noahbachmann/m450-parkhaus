@@ -4,25 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <winsock2.h>
-#include <ws2tcpip.h>
-using socket_t = SOCKET;
-#define closeSocket closesocket
-#else
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/select.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <unistd.h>
-using socket_t = int;
-constexpr socket_t INVALID_SOCKET = -1;
-#define closeSocket close
-#endif
+#include "socket_compat.h"
 
 namespace
 {
@@ -184,13 +166,7 @@ namespace
 
     void handleClient(socket_t client, const HttpHandler& handler)
     {
-#ifdef _WIN32
-        DWORD timeout = 2000;
-        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
-#else
-        timeval timeout{2, 0};
-        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-#endif
+        setSocketTimeouts(client, 2000);
         HttpRequest req;
         HttpResponse res;
         if (!readRequest(client, req))
@@ -215,7 +191,7 @@ namespace
         closeSocket(client);
     }
 
-    socket_t openListener(uint16_t port)
+    socket_t openListener(const std::string& host, uint16_t port)
     {
         socket_t s = socket(AF_INET, SOCK_STREAM, 0);
         if (s == INVALID_SOCKET)
@@ -227,7 +203,11 @@ namespace
         sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_port = htons(port);
-        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1)
+        {
+            closeSocket(s);
+            return INVALID_SOCKET;
+        }
         if (bind(s, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 || listen(s, 16) != 0)
         {
             closeSocket(s);
@@ -282,23 +262,52 @@ std::string urlDecode(const std::string& text)
     return out;
 }
 
-bool runHttpServers(const std::vector<HttpListener>& listeners, const std::function<void()>& tick)
+bool socketsInit()
 {
 #ifdef _WIN32
-    SetConsoleOutputCP(CP_UTF8);
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+    static bool done = false;
+    if (!done)
+    {
+        SetConsoleOutputCP(CP_UTF8);
+        WSADATA wsa;
+        if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+        {
+            return false;
+        }
+        done = true;
+    }
+#endif
+    return true;
+}
+
+void setSocketTimeouts(socket_t s, int timeoutMs)
+{
+#ifdef _WIN32
+    DWORD timeout = static_cast<DWORD>(timeoutMs);
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+#else
+    timeval timeout{timeoutMs / 1000, (timeoutMs % 1000) * 1000};
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+#endif
+}
+
+bool runHttpServers(const std::string& host, const std::vector<HttpListener>& listeners,
+                    const std::function<void()>& tick)
+{
+    if (!socketsInit())
     {
         return false;
     }
-#endif
     std::vector<socket_t> sockets;
     for (const HttpListener& l : listeners)
     {
-        socket_t s = openListener(l.port);
+        socket_t s = openListener(host, l.port);
         if (s == INVALID_SOCKET)
         {
-            std::fprintf(stderr, "Port %u kann nicht geöffnet werden (schon belegt?)\n", l.port);
+            std::fprintf(stderr, "%s:%u kann nicht geöffnet werden (Port belegt oder Adresse ungültig?)\n",
+                         host.c_str(), l.port);
             return false;
         }
         sockets.push_back(s);

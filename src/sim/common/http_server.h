@@ -36,9 +36,10 @@ struct HttpListener
     HttpHandler handler;
 };
 
-// Binds every listener on 127.0.0.1 and serves forever. tick() runs between requests, at least every 20 ms.
-// Returns false if a port can't be opened.
-bool runHttpServers(const std::vector<HttpListener>& listeners, const std::function<void()>& tick);
+// Binds every listener on host (e.g. "127.0.0.1", "0.0.0.0" in Docker) and serves forever.
+// tick() runs between requests, at least every 20 ms. Returns false if a port can't be opened.
+bool runHttpServers(const std::string& host, const std::vector<HttpListener>& listeners,
+                    const std::function<void()>& tick);
 
 // "a+b%C3%A4" -> "a bä"
 std::string urlDecode(const std::string& text);

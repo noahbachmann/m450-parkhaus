@@ -60,10 +60,21 @@ pio device monitor -b 115200
 
 ### PC-Simulator (ohne Hardware)
 
-Beide Picos laufen als ein Programm auf dem PC, mit derselben Logik aus `lib/` wie die Firmware:
+Beide Picos laufen als zwei Programme auf dem PC, mit derselben Logik aus `lib/` wie die Firmware.
+Wie auf der Hardware hält **Pico 1 «Kasse»** die Parkvorgänge und die Logik; **Pico 2 «Schranken»**
+fragt die Kasse per HTTP ab (Timeout 1000 ms).
+
+**Mit Docker (empfohlen):**
 
 ```
-pio run -e sim -t exec
+docker compose up --build
+```
+
+**Ohne Docker** (zwei Terminals, PlatformIO):
+
+```
+pio run -e sim_kasse -t exec
+pio run -e sim_schranken -t exec
 ```
 
 Danach im Browser:
@@ -71,15 +82,18 @@ Danach im Browser:
 | Adresse | Inhalt |
 |---|---|
 | `http://localhost:8081/kasse`, `/automat` | Pico 1: Kasse und Automat |
+| `http://localhost:8081/api/status?kz=LU123456` | Pico 1: JSON-Schnittstelle (auch `POST /api/entry`, `/api/exit`) |
 | `http://localhost:8082/kamera`, `/registrierung` | Pico 2: Kamerasimulation und Registrierung |
-| `http://localhost:8082/sim` | Steuerung: Sicherungsschleifen belegen/freigeben, Pico 1 aus-/einschalten |
+| `http://localhost:8082/sim` | Steuerung: Sicherungsschleifen belegen/freigeben |
 
 - Auf jeder Seite verlinkt eine dunkle Leiste alle Seiten beider «Picos».
-- Pico 2 fragt Pico 1 im selben Programm ab; «Kasse ausschalten» verhält sich wie ein Timeout.
+- Pico 1 «ausschalten» (TF-11, TF-30): `docker compose stop kasse` bzw. das Kasse-Programm beenden;
+  wieder einschalten mit `docker compose start kasse`. Die Schranken bleiben dann zu.
 - Die Schranken werden als Text angezeigt («offen», «schliesst», «geschlossen»); Seite neu laden, um
-  den aktuellen Stand zu sehen. Die Konsole zeigt alle Anfragen und Schrankenbewegungen.
-- Daten liegen in `sim-data/` (gleiches JSON-Format wie im Flash der Picos). Ordner löschen = Testdaten.
-- Die Uhr ist die Uhr des PCs. Beenden mit Ctrl+C.
+  den aktuellen Stand zu sehen. Die Konsole zeigt alle Anfragen, Entscheide und Schrankenbewegungen.
+- Daten liegen in `sim-data/kasse/` und `sim-data/schranken/` (gleiches JSON-Format wie im Flash der
+  Picos). Ordner löschen = Testdaten.
+- Die Uhr ist die Uhr des PCs.
 
 ### Tests
 
