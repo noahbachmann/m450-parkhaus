@@ -22,6 +22,7 @@ verified. No `test/board/` suites and no `v1.0` tag.
 | 5 | Pico 2 "Schranken" firmware | done (verified by user 2026-10-23, native + build) |
 | 6 | Integration + phase-1 system test | done (verified by user 2026-10-23, native + build) |
 | 7a | Phase 2: barrier safety | awaiting user verification |
+| S | PC simulator (`env:sim`) | awaiting user verification |
 | 7b | Phase 2: event log + operator view | open |
 | 7c | Phase 2: exit terminal | open |
 | 7d | Phase 2: tariff page + wrap-up | open |
@@ -119,6 +120,17 @@ Hardware test suites under `test/board/` and the `v1.0` tag are dropped (no hard
 - Firmware: barriers + loops run on core 1 (`setup1`/`loop1`) so a blocking HTTP call on core 0 can't
   delay a stop; cores share only single-writer atomics. Events go to Serial (event log in 7b).
 - **User verifies:** `pio test -e native` → 14 suites, 133 cases passed; `pio run` → both `SUCCESS`.
+
+### S — PC simulator (added 2026-10-23, user request)
+
+- `[env:sim]` (`platform = native`, `build_src_filter = +<sim/>`), start with `pio run -e sim -t exec`.
+- `src/sim/http_server.*`: minimal HTTP/1.0 server, single thread, `select()` over two ports, Winsock on
+  Windows (`ws2_32` linked by `scripts/sim_link.py`), POSIX elsewhere. No third-party HTTP library.
+- `src/sim/main.cpp`: Kasse on `localhost:8081`, Schranken on `localhost:8082`, `/sim` control page for
+  the loops and "Kasse off". Pico 2 → Pico 1 goes through the Kasse routing in-process. Data in
+  `sim-data/*.json` (gitignored), PC clock as time.
+- **User verifies:** `pio run -e sim -t exec`, then in the browser: register, entry (also backdated),
+  pay, exit, loop/Kasse toggles. `pio test -e native` and `pio run` unchanged (14 suites, 133 cases).
 
 ### 7b — Event log + operator view
 

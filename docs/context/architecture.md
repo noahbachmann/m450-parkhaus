@@ -185,6 +185,14 @@ File formats (LittleFS):
   "cash":0,"method":"card","tx":"TX-000001","status":"paid"}]}` (method `none|card|twint|cash`,
   status `open|paid|closed|closed_free`). An invalid file is rejected as a whole.
 
+## PC simulator (decided 2026-10-23)
+
+`[env:sim]` builds `src/sim/` natively: both Picos in one process, Kasse on `localhost:8081`, Schranken on
+`localhost:8082`, using the same `lib/` code as the firmware. Only the glue differs: a minimal own HTTP
+server (Winsock/POSIX, no dependency), files in `sim-data/` instead of LittleFS, PC clock instead of NTP,
+a `/sim` page instead of loop buttons and Pico 1's power switch. Routes and texts must stay identical to
+the firmware's; when a route is added to a `src/<board>/main.cpp`, add it to `src/sim/main.cpp` too.
+
 ## Code layout (decided)
 
 One PlatformIO project:

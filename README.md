@@ -58,6 +58,29 @@ pio test -e native      # Unit- und Systemtests auf dem PC (ohne Board)
 pio device monitor -b 115200
 ```
 
+### PC-Simulator (ohne Hardware)
+
+Beide Picos laufen als ein Programm auf dem PC, mit derselben Logik aus `lib/` wie die Firmware:
+
+```
+pio run -e sim -t exec
+```
+
+Danach im Browser:
+
+| Adresse | Inhalt |
+|---|---|
+| `http://localhost:8081/kasse`, `/automat` | Pico 1: Kasse und Automat |
+| `http://localhost:8082/kamera`, `/registrierung` | Pico 2: Kamerasimulation und Registrierung |
+| `http://localhost:8082/sim` | Steuerung: Sicherungsschleifen belegen/freigeben, Pico 1 aus-/einschalten |
+
+- Auf jeder Seite verlinkt eine dunkle Leiste alle Seiten beider «Picos».
+- Pico 2 fragt Pico 1 im selben Programm ab; «Kasse ausschalten» verhält sich wie ein Timeout.
+- Die Schranken werden als Text angezeigt («offen», «schliesst», «geschlossen»); Seite neu laden, um
+  den aktuellen Stand zu sehen. Die Konsole zeigt alle Anfragen und Schrankenbewegungen.
+- Daten liegen in `sim-data/` (gleiches JSON-Format wie im Flash der Picos). Ordner löschen = Testdaten.
+- Die Uhr ist die Uhr des PCs. Beenden mit Ctrl+C.
+
 ### Tests
 
 - **Unit-Tests** pro Modul in `test/native/test_<modul>/` (Tarif, Kennzeichen, Parkvorgänge, Zahlung,
