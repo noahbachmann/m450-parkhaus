@@ -18,9 +18,9 @@ verified. No `test/board/` suites and no `v1.0` tag.
 | 1 | Foundation: envs, plate + tariff libs, native tests | done (verified by user 2026-10-19) |
 | 2 | Domain logic in `lib/` | done (verified by user 2026-10-19) |
 | 3 | Shared board glue | done (verified by user 2026-10-22) |
-| 4 | Pico 1 "Kasse" firmware | awaiting user verification |
-| 5 | Pico 2 "Schranken" firmware | awaiting user verification |
-| 6 | Integration + phase-1 system test | open |
+| 4 | Pico 1 "Kasse" firmware | done (verified by user 2026-10-23, native + build) |
+| 5 | Pico 2 "Schranken" firmware | done (verified by user 2026-10-23, native + build) |
+| 6 | Integration + phase-1 system test | awaiting user verification |
 | 7 | Phase 2: Testkonzept scope | later |
 
 ## 1 — Foundation
@@ -96,8 +96,12 @@ verified. No `test/board/` suites and no `v1.0` tag.
 
 ## 6 — Integration + phase-1 system test
 
-- Full TU-2 setup; run all phase-1 TFs incl. TF-08 timing and TF-32; fix defects.
-- Update the German `README.md` (implemented user stories table).
+- Native system test `test/native/test_system/`: Pico 2 logic (registrations, `lib/gate`, `lib/barrier`)
+  calls Pico 1 logic (`kasse_api` handlers, `handlePayForm`, pages) through an in-process `KasseLink`
+  with a simulated clock and a "Kasse off" switch; reboot = codec round-trip. One test per phase-1 TF:
+  01–04, 06–11, 18–25, 29, 30, 32. No defects found.
+- German `docs/testprotokoll.md` (results + what only hardware could show), `README.md` user story table.
+- **User verifies:** `pio test -e native` → 14 suites, 127 cases passed; `pio run` → both `SUCCESS`.
 
 ## 7 — Phase 2 (Testkonzept scope, later)
 
