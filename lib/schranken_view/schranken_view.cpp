@@ -2,9 +2,11 @@
 
 #include "plate.h"
 
+const char* const SCHRANKEN_NAV = "<a href=\"/kamera\">Kamerasimulation</a>"
+                                  "<a href=\"/registrierung\">Registrierung</a><a href=\"/betrieb\">Betrieb</a>";
+
 namespace
 {
-    const char* NAV = "<a href=\"/kamera\">Kamerasimulation</a><a href=\"/registrierung\">Registrierung</a>";
 
     void appendLane(std::string& html, const char* title, const char* action, bool withEntryTime, const LaneView& lane)
     {
@@ -82,7 +84,7 @@ std::string renderRegistrationPage(const RegistrationList& list, const Notice& n
 {
     std::string html;
     html.reserve(4096);
-    appendPageStart(html, "Registrierung", NAV, "Registrierung");
+    appendPageStart(html, "Registrierung", SCHRANKEN_NAV, "Registrierung");
     if (notice.cls[0] != '\0')
     {
         appendNotice(html, notice.cls, notice.text);
@@ -121,7 +123,7 @@ std::string renderCameraPage(const LaneView& entry, const LaneView& exit)
 {
     std::string html;
     html.reserve(4096);
-    appendPageStart(html, "Kamerasimulation", NAV, "Kamerasimulation");
+    appendPageStart(html, "Kamerasimulation", SCHRANKEN_NAV, "Kamerasimulation");
     html += "<div class=\"lanes\">";
     appendLane(html, "Einfahrt", "/kamera/einfahrt", true, entry);
     appendLane(html, "Ausfahrt", "/kamera/ausfahrt", false, exit);

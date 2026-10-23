@@ -29,7 +29,7 @@ void saveSessions()
 
 HttpResponse api(const ApiResponse& r)
 {
-    return {r.status, "application/json", r.body, ""};
+    return {r.status, "application/json", r.body, "", ""};
 }
 
 HttpResponse redirectWithNotice(const std::string& path, const std::string& plate, const Notice& notice)

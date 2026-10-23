@@ -14,6 +14,7 @@ enum class SessionStatus
     Paid,
     Closed,
     ClosedFree,
+    ClosedUnpaid, // operator opened the exit without payment
 };
 
 enum class PaymentMethod
@@ -40,7 +41,7 @@ struct ParkingSession
 // Open or paid: the plate is in the car park.
 bool isActive(SessionStatus status);
 
-// German UI labels: «offen», «bezahlt», «abgeschlossen», «abgeschlossen (Freizeit)».
+// German UI labels: «offen», «bezahlt», «abgeschlossen», «abgeschlossen (Freizeit)», «ohne Zahlung ausgefahren».
 const char* sessionStatusLabel(SessionStatus status);
 // «Karte», «TWINT», «Bargeld»; empty for None.
 const char* paymentMethodLabel(PaymentMethod method);
@@ -60,6 +61,7 @@ struct ExitResult
     {
         Closed,
         ClosedFree,
+        ClosedUnpaid,
         Unpaid,
         NoSession,
         InvalidPlate,
@@ -79,6 +81,9 @@ public:
 
     // Paid -> Closed; open with fee 0 -> ClosedFree; open with fee > 0 -> Unpaid, nothing changes.
     ExitResult tryExit(const std::string& rawPlate, int64_t now);
+    // Operator remote opening at the exit: like tryExit, but a session that can't close normally (unpaid,
+    // or clock before entry) closes as ClosedUnpaid; amountRappen keeps the unpaid fee.
+    ExitResult forceExit(const std::string& rawPlate, int64_t now);
 
     // Open or paid session for the plate, nullptr if none.
     ParkingSession* findActive(const std::string& rawPlate);

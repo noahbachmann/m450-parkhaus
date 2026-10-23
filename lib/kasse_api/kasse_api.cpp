@@ -104,7 +104,7 @@ ApiResponse handleExit(SessionStore& store, const std::string& body, int64_t now
 {
     JsonDocument req;
     std::string plate;
-    if (!parseBody(body, req, plate))
+    if (!parseBody(body, req, plate) || (!req["override"].isNull() && !req["override"].is<bool>()))
     {
         return error(400, "bad_request");
     }
@@ -116,15 +116,17 @@ ApiResponse handleExit(SessionStore& store, const std::string& body, int64_t now
     {
         return error(503, "time_not_synced");
     }
-    ExitResult r = store.tryExit(plate, now);
+    ExitResult r = req["override"].as<bool>() ? store.forceExit(plate, now) : store.tryExit(plate, now);
     JsonDocument doc;
     switch (r.kind)
     {
     case ExitResult::Kind::Closed:
     case ExitResult::Kind::ClosedFree:
+    case ExitResult::Kind::ClosedUnpaid:
         doc["kz"] = plate;
-        doc["status"] = sessionStatusName(r.kind == ExitResult::Kind::Closed ? SessionStatus::Closed
-                                                                              : SessionStatus::ClosedFree);
+        doc["status"] = sessionStatusName(r.kind == ExitResult::Kind::Closed       ? SessionStatus::Closed
+                                          : r.kind == ExitResult::Kind::ClosedFree ? SessionStatus::ClosedFree
+                                                                                   : SessionStatus::ClosedUnpaid);
         doc["exit"] = r.exit;
         doc["fee"] = r.feeRappen;
         return respond(200, doc);

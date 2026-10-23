@@ -181,6 +181,27 @@ void test_status_labels()
     TEST_ASSERT_EQUAL_STRING("Bargeld", paymentMethodLabel(PaymentMethod::Cash));
 }
 
+void test_force_exit()
+{
+    SessionStore store;
+    store.openEntry("ZH98765", NOW - 150 * MIN);
+    ExitResult unpaid = store.forceExit("ZH98765", NOW);
+    TEST_ASSERT_TRUE(ExitResult::Kind::ClosedUnpaid == unpaid.kind);
+    TEST_ASSERT_EQUAL_UINT32(600, unpaid.feeRappen);
+    const ParkingSession* s = store.findLatest("ZH98765");
+    TEST_ASSERT_TRUE(SessionStatus::ClosedUnpaid == s->status);
+    TEST_ASSERT_EQUAL_INT64(NOW, s->exit);
+    TEST_ASSERT_EQUAL_UINT32(600, s->amountRappen);
+    TEST_ASSERT_NULL(store.findActive("ZH98765"));
+
+    store.openEntry("AG1", NOW - 5 * MIN);
+    TEST_ASSERT_TRUE(ExitResult::Kind::ClosedFree == store.forceExit("AG1", NOW).kind);
+    store.openEntry("UR1", NOW);
+    TEST_ASSERT_TRUE(ExitResult::Kind::ClosedUnpaid == store.forceExit("UR1", NOW - HOUR).kind);
+    TEST_ASSERT_TRUE(ExitResult::Kind::NoSession == store.forceExit("SZ555", NOW).kind);
+    TEST_ASSERT_EQUAL_STRING("ohne Zahlung ausgefahren", sessionStatusLabel(SessionStatus::ClosedUnpaid));
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -199,5 +220,6 @@ int main()
     RUN_TEST(test_new_session_after_closed_one);
     RUN_TEST(test_full_store_drops_oldest_closed);
     RUN_TEST(test_status_labels);
+    RUN_TEST(test_force_exit);
     return UNITY_END();
 }

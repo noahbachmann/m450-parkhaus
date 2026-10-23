@@ -7,6 +7,9 @@
 
 // Pico 2 pages: registration (/registrierung) and camera simulation (/kamera).
 
+// Navigation links of all Pico 2 pages.
+extern const char* const SCHRANKEN_NAV;
+
 // «Kennzeichen registriert», «Kennzeichen bereits registriert», …
 std::string registrationMessage(RegistrationResult result);
 

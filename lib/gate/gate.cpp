@@ -20,6 +20,13 @@ namespace
         return r;
     }
 
+    GateResult unreachable(const std::string& plate)
+    {
+        GateResult r = closed(plate, UNREACHABLE);
+        r.unreachable = true;
+        return r;
+    }
+
     GateResult opened(const std::string& plate, const std::string& message)
     {
         GateResult r;
@@ -93,7 +100,7 @@ GateResult entryRequest(const RegistrationList& registrations, const std::string
     HttpReply reply = kasse.postJson("/api/entry", body);
     if (reply.status <= 0)
     {
-        return closed(plate, UNREACHABLE);
+        return unreachable(plate);
     }
     if (reply.status == 201)
     {
@@ -142,7 +149,7 @@ GateResult exitRequest(const std::string& rawPlate, KasseLink& kasse)
     HttpReply reply = kasse.postJson("/api/exit", body);
     if (reply.status <= 0)
     {
-        return closed(plate, UNREACHABLE);
+        return unreachable(plate);
     }
     JsonDocument doc;
     bool parsed = parseReply(reply, doc);

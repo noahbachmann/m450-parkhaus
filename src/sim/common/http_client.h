@@ -8,3 +8,5 @@
 // baseUrl like "http://kasse:8081". Whole request incl. connect is bounded by timeoutMs.
 // Any failure (bad URL, DNS, refused, timeout, garbage) -> status 0, like an unreachable Pico 1.
 HttpReply httpPostJson(const std::string& baseUrl, const std::string& path, const std::string& body, int timeoutMs);
+// Same as GET, e.g. path "/api/status?kz=LU123456".
+HttpReply httpGetJson(const std::string& baseUrl, const std::string& path, int timeoutMs);

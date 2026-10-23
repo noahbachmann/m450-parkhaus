@@ -23,6 +23,8 @@ const char* sessionStatusLabel(SessionStatus status)
         return "abgeschlossen";
     case SessionStatus::ClosedFree:
         return "abgeschlossen (Freizeit)";
+    case SessionStatus::ClosedUnpaid:
+        return "ohne Zahlung ausgefahren";
     }
     return "";
 }
@@ -112,6 +114,20 @@ ExitResult SessionStore::tryExit(const std::string& rawPlate, int64_t now)
     s->exit = now;
     s->amountRappen = 0;
     return {ExitResult::Kind::ClosedFree, 0, now};
+}
+
+ExitResult SessionStore::forceExit(const std::string& rawPlate, int64_t now)
+{
+    ExitResult r = tryExit(rawPlate, now);
+    if (r.kind != ExitResult::Kind::Unpaid && r.kind != ExitResult::Kind::TimeError)
+    {
+        return r;
+    }
+    ParkingSession* s = findActive(rawPlate);
+    s->status = SessionStatus::ClosedUnpaid;
+    s->exit = now;
+    s->amountRappen = r.kind == ExitResult::Kind::Unpaid ? r.feeRappen : 0;
+    return {ExitResult::Kind::ClosedUnpaid, s->amountRappen, now};
 }
 
 ParkingSession* SessionStore::findActive(const std::string& rawPlate)

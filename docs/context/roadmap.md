@@ -23,7 +23,7 @@ verified. No `test/board/` suites and no `v1.0` tag.
 | 6 | Integration + phase-1 system test | done (verified by user 2026-10-23, native + build) |
 | 7a | Phase 2: barrier safety | awaiting user verification |
 | S | PC simulator (Docker / `sim_kasse` + `sim_schranken`) | awaiting user verification |
-| 7b | Phase 2: event log + operator view | open |
+| 7b | Phase 2: event log + operator view | awaiting user verification |
 | 7c | Phase 2: exit terminal | open |
 | 7d | Phase 2: tariff page + wrap-up | open |
 
@@ -138,7 +138,17 @@ Hardware test suites under `test/board/` and the `v1.0` tag are dropped (no hard
 
 ### 7b — Event log + operator view
 
-- Event log on Pico 2; operator view (user «betrieb»), remote opening with mandatory reason (TF-14, 16, 17, 31).
+- `lib/event_log` (+ `/events.json` via `lib/codec`), `lib/operator_view` (lane status, remote opening,
+  logging helpers, `/betrieb` page). Pico 1: status `closed_unpaid`, `SessionStore::forceExit`,
+  `/api/exit` `override`. `KasseLink` gained `getJson` for `/api/status`; `GateResult.unreachable`.
+- Firmware + simulator: `/betrieb` (Basic auth «betrieb»), `/betrieb/oeffnen`; safety stops, loop faults,
+  Kasse-unreachable and remote openings are logged; Pico 2 reset also clears the log.
+  `OPERATOR_PASSWORD` added to `secrets.example.h`.
+- Tests: TF-14, 15 (log), 16, 17, 30 (fault logged), 31 in the system test; unit suites `event_log`,
+  `operator_view`; `forceExit`, `override`, `closed_unpaid` codec.
+- **User verifies:** `pio test -e native` → 16 suites, 153 cases passed; `pio run` → both `SUCCESS`
+  (a `#warning` about `OPERATOR_PASSWORD` is expected until it's added to your `secrets.h`);
+  `docker compose up --build` → `http://localhost:8082/betrieb` (betrieb / parkhaus).
 
 ### 7c — Exit terminal
 

@@ -52,14 +52,20 @@ Gefundene Fehler: keine.
 
 ## Phase 2 (Testkonzept-Umfang)
 
-Unit-Tests der Schrankenlogik (`test/native/test_barrier/`). Die Uhr läuft in 10-ms-Schritten wie die
-Hauptschleife auf dem Pico.
+Unit-Tests der Schrankenlogik (`test/native/test_barrier/`, die Uhr läuft in 10-ms-Schritten wie die
+Hauptschleife auf dem Pico), der Leitstelle (`test/native/test_operator_view/`) und Systemtests in
+`test/native/test_system/`. Zusätzlich im PC-Simulator (Docker) von Hand nachvollzogen.
 
 | TF | Prio | Testfunktion | Geprüft | Ergebnis |
 |---|---|---|---|---|
 | TF-12 | 1 | `test_tf12_stays_open_while_occupied` | 30 s belegt: bleibt ganz offen; schliesst erst nach Freigabe | bestanden |
 | TF-13 | 1 | `test_tf13_loop_during_closing_stops_and_reopens` | 3× Schleife während des Schliessens: Stopp im selben Durchlauf, ganz offen; danach normales Schliessen | bestanden |
-| TF-15 | 2 | `test_tf15_fault_after_five_minutes_once`, `test_camera_page_shows_loop_fault_tf15` | 4:50 keine Meldung, 5:10 «Sicherungsschleife Einfahrt länger als 5 min belegt», Schranke bleibt offen | bestanden (Eintrag im Ereignisprotokoll: Schritt 7b) |
+| TF-15 | 2 | `test_tf15_fault_after_five_minutes_once`, `test_camera_page_shows_loop_fault_tf15`, `test_tf15_loop_fault_logged_once` | 4:50 keine Meldung, 5:10 «Sicherungsschleife Einfahrt länger als 5 min belegt» in UI und Protokoll, Schranke bleibt offen | bestanden |
+| TF-14 | 2 | `test_tf14_six_safety_stops_logged`, `test_operator_page_filter_tf14` | 3× pro Schranke Stopp beim Schliessen → genau 6 Einträge «Sicherheitsabschaltung» mit Schranke und Zeit, Filter zeigt nur diese | bestanden |
+| TF-16 | 2 | `test_tf16_remote_opening_at_entry`, `test_remote_open_entry_opens_session_tf16` | Leitstelle sieht «Einfahrt», «BE4711», «kein Parkvorgang»; Öffnen mit «Kennzeichen nicht erkannt» öffnet, eröffnet Parkvorgang, Protokoll mit Benutzer, Zeit, Spur, Grund | bestanden |
+| TF-17 | 2 | `test_tf17_remote_opening_needs_reason`, `test_remote_open_without_reason_tf17` | Ohne Grund: bleibt zu, «Bitte Grund auswählen», nichts protokolliert | bestanden |
+| TF-30 (Protokoll) | 1 | `test_tf30_fault_logged` | «Kasse nicht erreichbar» wird mit Spur und Kennzeichen protokolliert | bestanden |
+| TF-31 | 2 | `test_tf31_remote_opening_at_exit_without_payment`, `test_remote_open_exit_unpaid_tf31` | Öffnet; Protokoll mit Zeit, «betrieb», «Ausfahrt», Kennzeichen, «Kulanz», «ohne Zahlung»; Parkvorgang «ohne Zahlung ausgefahren» | bestanden |
 
 ## Nicht geprüft (nur mit Hardware möglich)
 

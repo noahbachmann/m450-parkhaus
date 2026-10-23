@@ -19,6 +19,8 @@ public:
     virtual ~KasseLink() = default;
     // POST with Content-Type application/json to Pico 1, e.g. path "/api/entry".
     virtual HttpReply postJson(const char* path, const std::string& body) = 0;
+    // GET from Pico 1, e.g. "/api/status?kz=LU123456".
+    virtual HttpReply getJson(const std::string& pathAndQuery) = 0;
 };
 
 struct GateResult
@@ -27,6 +29,7 @@ struct GateResult
     const char* cls = "err"; // "ok" or "err", for the page
     std::string plate;    // normalized input
     std::string message;  // German terminal text
+    bool unreachable = false; // Pico 1 didn't answer (logged as a fault)
 };
 
 // Entry: valid + registered plate -> POST /api/entry. entryTimeInput empty = now (Pico 1 stamps it),

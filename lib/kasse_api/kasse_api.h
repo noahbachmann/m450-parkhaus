@@ -20,5 +20,6 @@ ApiResponse handleStatus(const SessionStore& store, const std::string& kzParam, 
 // POST /api/entry, body {"kz":"..."} or {"kz":"...","entry":<epoch>}
 ApiResponse handleEntry(SessionStore& store, const std::string& body, int64_t now, bool timeSynced);
 
-// POST /api/exit, body {"kz":"..."}
+// POST /api/exit, body {"kz":"..."}; {"kz":"...","override":true} = operator remote opening (closes unpaid
+// sessions as closed_unpaid)
 ApiResponse handleExit(SessionStore& store, const std::string& body, int64_t now, bool timeSynced);

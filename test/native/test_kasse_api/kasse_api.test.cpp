@@ -122,6 +122,21 @@ void test_exit_errors()
     TEST_ASSERT_TRUE(SessionStatus::Paid == store.findActive("LU123456")->status);
 }
 
+void test_exit_override_tf31()
+{
+    SessionStore store = testData();
+    assertResponse(200, "{\"kz\":\"ZH98765\",\"status\":\"closed_unpaid\",\"exit\":1760530000,\"fee\":600}",
+                   handleExit(store, "{\"kz\":\"ZH98765\",\"override\":true}", NOW, true));
+    assertResponse(200, "{\"kz\":\"LU123456\",\"status\":\"closed\",\"exit\":1760530000,\"fee\":400}",
+                   handleExit(store, "{\"kz\":\"LU123456\",\"override\":true}", NOW, true));
+    assertResponse(404, "{\"error\":\"no_session\"}", handleExit(store, "{\"kz\":\"SZ555\",\"override\":true}", NOW, true));
+    store.openEntry("UR1", NOW - 3 * HOUR);
+    assertResponse(402, "{\"error\":\"unpaid\",\"fee\":600}",
+                   handleExit(store, "{\"kz\":\"UR1\",\"override\":false}", NOW, true));
+    assertResponse(400, "{\"error\":\"bad_request\"}", handleExit(store, "{\"kz\":\"UR1\",\"override\":1}", NOW, true));
+    TEST_ASSERT_TRUE(SessionStatus::Open == store.findActive("UR1")->status);
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -133,5 +148,6 @@ int main()
     RUN_TEST(test_entry_errors);
     RUN_TEST(test_exit);
     RUN_TEST(test_exit_errors);
+    RUN_TEST(test_exit_override_tf31);
     return UNITY_END();
 }

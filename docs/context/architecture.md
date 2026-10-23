@@ -44,8 +44,8 @@ Pico 1 has no external hardware.
 | Automat web UI: pay by plate, card/TWINT/cash + change | Camera simulation UI: entry and exit plate input, optional entry time, (later) call button, abort |
 | Tariff calculation ([tariff.md](tariff.md)) | Barrier control: 2 servos, open/close |
 | Parking sessions, **persisted in flash** (survive reboot) | Safety loops + safety logic (step 7a) |
-| Payment-status endpoint for Pico 2 | Event log (later): remote openings, safety stops, faults |
-| Endpoint to open a session at entry (and close at exit) | Operator view, user «betrieb» (later) |
+| Payment-status endpoint for Pico 2 | Event log (step 7b): remote openings, safety stops, faults |
+| Endpoint to open a session at entry (and close at exit) | Operator view, user «betrieb» (step 7b) |
 
 The registration list lives on Pico 2 (Testkonzept test object 01). Sessions live on Pico 1.
 
@@ -73,8 +73,8 @@ closed, «Kasse nicht erreichbar – bitte Ruftaste drücken». **Fail-safe: any
   normalization. Shared pure function in `lib/` (Pico 2 validates input; Pico 1 validates API params).
 - **Registration:** name, normalized plate (unique).
 - **Parking session:** plate, entry time, exit time, amount, payment method, transaction ref, status.
-  Status: `open` → `paid` → `closed`. Also `closed_free` («abgeschlossen (Freizeit)») and later
-  `closed_unpaid` («ohne Zahlung ausgefahren»). At most one open/paid (not closed) session per plate.
+  Status: `open` → `paid` → `closed`. Also `closed_free` («abgeschlossen (Freizeit)») and
+  `closed_unpaid` («ohne Zahlung ausgefahren», operator remote opening at the exit, step 7b). At most one open/paid (not closed) session per plate.
   Unpaid exit attempt or abort leaves it `open`.
 - **Time:** **NTP over WLAN** at boot on both Picos. Internally Unix epoch seconds (UTC); displayed in
   Europe/Zurich (`TZ = "CET-1CEST,M3.5.0,M10.5.0/3"`) as `TT.MM.JJJJ HH:MM:SS`. **Pico 1 is
@@ -84,7 +84,7 @@ closed, «Kasse nicht erreichbar – bitte Ruftaste drücken». **Fail-safe: any
 - **Storage:** **LittleFS + JSON (ArduinoJson)**. All data is held in RAM (structs) and loaded at boot.
   On every change the file is written to `<name>.tmp`, then renamed over `<name>.json` (atomic, survives
   a power cut during a write; TF-11/TF-30 pull the power on purpose).
-  Pico 1: `/sessions.json`. Pico 2: `/registrations.json` (later also `/events.json`).
+  Pico 1: `/sessions.json`. Pico 2: `/registrations.json`, `/events.json`.
   A **test-data reset** (button/endpoint on each Pico) rewrites the files from built-in defaults
   matching the KZ table in test-concept.md. No database: a Pico W has no room for one and the data is
   tiny (tens of records).
@@ -109,8 +109,9 @@ Pico 2 client timeout: **1000 ms** (keeps the entry ≤ 2 s). Timeout or connect
   503 `store_full` (50 sessions, none closed to drop)
 
 **`POST /api/exit`** — try to close the session; Pico 2 opens the barrier only on 200
-- body `{"kz":"LU123456"}`
-- 200 `{"kz":"LU123456","status":"closed"|"closed_free","exit":1760533600,"fee":400}`
+- body `{"kz":"LU123456"}`; operator remote opening: `{"kz":"LU123456","override":true}` (non-bool → 400)
+- 200 `{"kz":"LU123456","status":"closed"|"closed_free","exit":1760533600,"fee":400}`; with `override` an
+  unpaid session (or clock before entry) closes as `"closed_unpaid"`, `fee` = the unpaid amount
 - 402 `{"error":"unpaid","fee":400}` → «Gebühr CHF 4.00 nicht bezahlt – bitte am Automaten bezahlen»
 - 404 `no_session` · 400 `invalid_plate` · 503 `time_not_synced` (also when the clock is before the
   session's entry time)
@@ -159,6 +160,23 @@ needed). Later phases may add JSON endpoints for them if the pages use fetch().
   core 0. Core 0 → core 1: an open-request counter; core 1 → core 0: state and fault flag. All are
   `std::atomic` written by one core only (plain loads/stores, lock-free on the RP2040).
 
+**Event log + operator view (step 7b, decided 2026-10-23):**
+- `lib/event_log`: at most 100 events, oldest dropped; types «Sicherheitsabschaltung», «Störung
+  Sicherungsschleife», «Fernöffnung», «Kasse nicht erreichbar», «Ruftaste» (7c). Each with time (Pico 2
+  NTP), lane, plate, user, reason, note. Written to `/events.json` after every new event. The test-data
+  reset on Pico 2 also clears the log.
+- `GET /betrieb` (HTTP Basic auth, user «betrieb», password `OPERATOR_PASSWORD` in `secrets.h`; missing →
+  build warning and example password `parkhaus`): per lane barrier state, last plate typed there, its
+  status from `GET /api/status` («kein Parkvorgang», «bezahlt», «unbezahlt (CHF x.xx)», «Kasse nicht
+  erreichbar»), loop fault; «Schranke öffnen» (`<details>`) → plate + reason → «Bestätigen»; event log
+  with a type filter (`?filter=safety_stop`).
+- `POST /betrieb/oeffnen` (`lane`, `kz`, `reason`): reason must be one of «Kennzeichen nicht erkannt»,
+  «Kulanz», «Technische Störung», else «Bitte Grund auswählen» and nothing happens. Entry: `/api/entry`
+  for a valid plate (session opened). Exit: `/api/exit` with `override` (unpaid → `closed_unpaid`, note
+  «ohne Zahlung»). The barrier opens even if Pico 1 doesn't answer; the note records the session outcome.
+- Firmware: core 1 hands barrier events to core 0 through a per-lane single-producer/single-consumer
+  queue; core 0 timestamps, logs and writes them (core 1 never touches LittleFS).
+
 ## Domain rules (decided 2026-10-19, step 2)
 
 - **Fee 0 (free time):** payment is refused («nothing to pay»), the session stays `open`; exit closes
@@ -177,13 +195,17 @@ Libraries: `lib/registration`, `lib/session` (store, state machine, payment), `l
 `lib/codec` (JSON files), `lib/kasse_api` (API handlers → status + body), `lib/kasse_view` (Kasse/Automat
 page texts, CHF input parsing, pay-form handling, page HTML), `lib/html` (shared page building blocks),
 `lib/barrier` (barrier state machine), `lib/gate` (entry/exit decisions on Pico 2), `lib/schranken_view`
-(registration and camera pages).
+(registration and camera pages), `lib/event_log` (event log), `lib/operator_view` (operator view, remote
+opening, logging helpers).
 
 File formats (LittleFS):
 - `/registrations.json`: `{"registrations":[{"name":"Test Kunde A","kz":"LU123456"}]}`
 - `/sessions.json`: `{"nextTx":2,"sessions":[{"kz":"LU123456","entry":1760525200,"exit":0,"amount":400,
   "cash":0,"method":"card","tx":"TX-000001","status":"paid"}]}` (method `none|card|twint|cash`,
-  status `open|paid|closed|closed_free`). An invalid file is rejected as a whole.
+  status `open|paid|closed|closed_free|closed_unpaid`). An invalid file is rejected as a whole.
+- `/events.json`: `{"events":[{"t":1760530000,"type":"remote_opening","lane":"entry","kz":"BE4711",
+  "user":"betrieb","reason":"Kennzeichen nicht erkannt","note":"Parkvorgang eröffnet"}]}` (type
+  `safety_stop|loop_fault|remote_opening|kasse_unreachable|call_button`, lane `entry|exit|""`).
 
 ## PC simulator (decided 2026-10-23)
 

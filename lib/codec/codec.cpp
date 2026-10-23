@@ -17,6 +17,7 @@ namespace
         {"paid", static_cast<int>(SessionStatus::Paid)},
         {"closed", static_cast<int>(SessionStatus::Closed)},
         {"closed_free", static_cast<int>(SessionStatus::ClosedFree)},
+        {"closed_unpaid", static_cast<int>(SessionStatus::ClosedUnpaid)},
     };
 
     const Named METHOD_NAMES[] = {
@@ -179,5 +180,54 @@ bool sessionsFromJson(const std::string& json, SessionStore& store)
         loaded.push_back(s);
     }
     store.restore(std::move(loaded), doc["nextTx"].as<uint32_t>());
+    return true;
+}
+
+std::string eventsToJson(const EventLog& log)
+{
+    JsonDocument doc;
+    JsonArray arr = doc["events"].to<JsonArray>();
+    for (const Event& e : log.all())
+    {
+        JsonObject o = arr.add<JsonObject>();
+        o["t"] = e.time;
+        o["type"] = eventTypeName(e.type);
+        o["lane"] = gateLaneName(e.lane);
+        o["kz"] = e.plate;
+        o["user"] = e.user;
+        o["reason"] = e.reason;
+        o["note"] = e.note;
+    }
+    std::string out;
+    serializeJson(doc, out);
+    return out;
+}
+
+bool eventsFromJson(const std::string& json, EventLog& log)
+{
+    JsonDocument doc;
+    if (deserializeJson(doc, json) != DeserializationError::Ok || !doc["events"].is<JsonArrayConst>())
+    {
+        return false;
+    }
+    std::vector<Event> loaded;
+    for (JsonVariantConst v : doc["events"].as<JsonArrayConst>())
+    {
+        Event e;
+        if (!v["t"].is<int64_t>() || !v["type"].is<const char*>() || !v["lane"].is<const char*>() ||
+            !v["kz"].is<const char*>() || !v["user"].is<const char*>() || !v["reason"].is<const char*>() ||
+            !v["note"].is<const char*>() || !eventTypeFromName(v["type"].as<std::string>(), e.type) ||
+            !gateLaneFromName(v["lane"].as<std::string>(), e.lane))
+        {
+            return false;
+        }
+        e.time = v["t"].as<int64_t>();
+        e.plate = v["kz"].as<std::string>();
+        e.user = v["user"].as<std::string>();
+        e.reason = v["reason"].as<std::string>();
+        e.note = v["note"].as<std::string>();
+        loaded.push_back(e);
+    }
+    log.restore(std::move(loaded));
     return true;
 }

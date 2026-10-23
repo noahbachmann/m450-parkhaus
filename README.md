@@ -31,8 +31,9 @@ Unit- und Systemtests auf dem PC geprüft (siehe [docs/testprotokoll.md](docs/te
 | US-07 | Parkuhr startet automatisch bei der Einfahrt, ein offener Parkvorgang pro Kennzeichen (AK1, 2, 4, 5) | umgesetzt |
 | US-13 | Erkennung bei der Ausfahrt, Parkvorgang wird beendet (AK1, AK2) | umgesetzt |
 | US-14 | Parkdauer und Gebühr an Kasse und Automat, angefangene Stunden und Freiminuten (AK1, AK2) | umgesetzt |
-| US-16 | Ausfahrt nur bei bezahlter Gebühr oder CHF 0.00 (AK1) | umgesetzt |
+| US-16 | Ausfahrt nur bei bezahlter Gebühr oder CHF 0.00 (AK1); jede Öffnung ohne Zahlung wird mit Grund und Benutzer protokolliert (AK5) | umgesetzt |
 | US-17 | Bezahlen am Automaten über das Kennzeichen: Karte, TWINT, Bargeld mit Rückgeld (AK1, AK2) | umgesetzt |
+| US-08 | Hilfe bei nicht erkanntem Kennzeichen: Leitstelle sieht Spur, Kennzeichen, Zahlungsstatus; Fernöffnung nur mit Grund, eröffnet bei der Einfahrt einen Parkvorgang, wird protokolliert (AK2–5) | umgesetzt (Phase 2) |
 | US-09 | Sichere Schrankenbewegung: schliesst nur bei freier Schleife, Stopp und Öffnen beim Schliessen, Störmeldung nach 5 min (AK1–3) | umgesetzt (Phase 2) |
 | Auftrag | Ein- und Ausfahrtsschranke (Servos) | umgesetzt, auf Hardware ungetestet |
 | Auftrag | Berechnung der Parkgebühr | umgesetzt |
@@ -46,6 +47,7 @@ Unit- und Systemtests auf dem PC geprüft (siehe [docs/testprotokoll.md](docs/te
 | Pico 1 | `/api/status`, `/api/entry`, `/api/exit` | JSON-Schnittstelle für Pico 2 |
 | Pico 2 | `/kamera` | Kamerasimulation: Kennzeichen bei Ein- und Ausfahrt eingeben, optional rückdatierte Einfahrtszeit |
 | Pico 2 | `/registrierung` | Kennzeichen registrieren, löschen, Testdaten zurücksetzen |
+| Pico 2 | `/betrieb` | Leitstelle (Benutzer «betrieb»): Spuren, Fernöffnung mit Grund, Ereignisprotokoll mit Filter |
 
 Hardware-Aufbau, Pinbelegung und WLAN-Einrichtung: [docs/aufbau-anleitung.md](docs/aufbau-anleitung.md)
 
@@ -84,6 +86,7 @@ Danach im Browser:
 | `http://localhost:8081/kasse`, `/automat` | Pico 1: Kasse und Automat |
 | `http://localhost:8081/api/status?kz=LU123456` | Pico 1: JSON-Schnittstelle (auch `POST /api/entry`, `/api/exit`) |
 | `http://localhost:8082/kamera`, `/registrierung` | Pico 2: Kamerasimulation und Registrierung |
+| `http://localhost:8082/betrieb` | Pico 2: Leitstelle, Anmeldung «betrieb» / «parkhaus» |
 | `http://localhost:8082/sim` | Steuerung: Sicherungsschleifen belegen/freigeben |
 
 - Auf jeder Seite verlinkt eine dunkle Leiste alle Seiten beider «Picos».

@@ -8,15 +8,22 @@
 
 #include "barrier.h"
 #include "codec.h"
+#include "event_log.h"
 #include "format.h"
 #include "gate.h"
 #include "net.h"
+#include "operator_view.h"
 #include "pins.h"
 #include "schranken_view.h"
 #include "secrets.h"
 #include "status_led.h"
 #include "storage.h"
 #include "testdata.h"
+
+#ifndef OPERATOR_PASSWORD
+#warning "OPERATOR_PASSWORD missing in include/secrets.h, using the example password"
+#define OPERATOR_PASSWORD "parkhaus"
+#endif
 
 namespace
 {
@@ -28,6 +35,18 @@ class HttpKasseLink : public KasseLink
 {
 public:
     HttpReply postJson(const char* path, const std::string& body) override
+    {
+        return request(path, &body);
+    }
+
+    HttpReply getJson(const std::string& pathAndQuery) override
+    {
+        return request(pathAndQuery.c_str(), nullptr);
+    }
+
+private:
+    // POST if body is given, GET otherwise.
+    HttpReply request(const char* path, const std::string* body)
     {
         if (!wifiReady())
         {
@@ -41,9 +60,16 @@ public:
         {
             return {};
         }
-        http.addHeader("Content-Type", "application/json");
         HttpReply reply;
-        reply.status = http.POST(String(body.c_str()));
+        if (body != nullptr)
+        {
+            http.addHeader("Content-Type", "application/json");
+            reply.status = http.POST(String(body->c_str()));
+        }
+        else
+        {
+            reply.status = http.GET();
+        }
         if (reply.status > 0)
         {
             reply.body = http.getString().c_str();
@@ -53,14 +79,48 @@ public:
     }
 };
 
+// Barrier events from core 1 to core 0 (single producer, single consumer). Core 0 logs them with the NTP
+// time and writes the log to flash; core 1 must not touch the log or LittleFS.
+struct BarrierEventQueue
+{
+    static constexpr uint32_t SIZE = 8;
+    BarrierEvent items[SIZE] = {};
+    std::atomic<uint32_t> head{0}; // written by core 1
+    std::atomic<uint32_t> tail{0}; // written by core 0
+
+    void push(BarrierEvent e)
+    {
+        uint32_t h = head.load();
+        if (h - tail.load() < SIZE)
+        {
+            items[h % SIZE] = e;
+            head.store(h + 1);
+        }
+    }
+
+    bool pop(BarrierEvent& e)
+    {
+        uint32_t t = tail.load();
+        if (t == head.load())
+        {
+            return false;
+        }
+        e = items[t % SIZE];
+        tail.store(t + 1);
+        return true;
+    }
+};
+
 // Barriers and loops run on core 1 (setup1/loop1), so a blocking HTTP call on core 0 never delays a
 // safety stop. The cores share only the atomics below, each written by one core.
 struct Lane
 {
-    Lane(const char* laneName, uint8_t servo, uint8_t loop) : name(laneName), servoPin(servo), loopPin(loop)
+    Lane(GateLane laneId, uint8_t servo, uint8_t loop)
+        : id(laneId), name(gateLaneLabel(laneId)), servoPin(servo), loopPin(loop)
     {
     }
 
+    GateLane id;
     const char* name;
     uint8_t servoPin;
     uint8_t loopPin;
@@ -70,6 +130,7 @@ struct Lane
     // core 1 -> core 0
     std::atomic<int> state{static_cast<int>(BarrierState::Closed)};
     std::atomic<bool> fault{false};
+    BarrierEventQueue events;
 
     // core 1 only
     Servo servo;
@@ -80,19 +141,43 @@ struct Lane
 
     // core 0 only
     LaneView view;
+    std::string lastPlate;
 };
 
 WebServer server(80);
 bool serverStarted = false;
 HttpKasseLink kasse;
 RegistrationList registrations;
-Lane entryLane{"Einfahrt", PIN_ENTRY_SERVO, PIN_ENTRY_LOOP};
-Lane exitLane{"Ausfahrt", PIN_EXIT_SERVO, PIN_EXIT_LOOP};
+EventLog eventLog;
+Lane entryLane{GateLane::Entry, PIN_ENTRY_SERVO, PIN_ENTRY_LOOP};
+Lane exitLane{GateLane::Exit, PIN_EXIT_SERVO, PIN_EXIT_LOOP};
 unsigned long lastReportMs = 0;
 
-// Result of the last registration POST, shown once after the redirect.
+// Result of the last registration / operator POST, shown once after the redirect.
 uint32_t noticeId = 0;
 Notice lastNotice;
+
+void saveEvents()
+{
+    if (!storageWrite("events", eventsToJson(eventLog)))
+    {
+        Serial.println("events: write FAILED");
+    }
+}
+
+void loadEvents()
+{
+    std::string json;
+    if (!storageRead("events", json) || !eventsFromJson(json, eventLog))
+    {
+        eventLog.clear();
+        saveEvents();
+        Serial.println("events: empty log written");
+        return;
+    }
+    Serial.print("events: loaded ");
+    Serial.println(eventLog.all().size());
+}
 
 void saveRegistrations()
 {
@@ -166,11 +251,21 @@ void driveServo(Lane& lane)
     }
 }
 
+void openBarrier(Lane& lane)
+{
+    lane.openRequests.store(lane.openRequests.load() + 1);
+}
+
 void applyGate(Lane& lane, const GateResult& r)
 {
     if (r.open)
     {
-        lane.openRequests.store(lane.openRequests.load() + 1);
+        openBarrier(lane);
+    }
+    lane.lastPlate = r.plate;
+    if (logGateResult(eventLog, lane.id, r, nowUtc()))
+    {
+        saveEvents();
     }
     lane.view.cls = r.cls;
     lane.view.terminal = r.message;
@@ -215,14 +310,81 @@ void showCamera()
     sendHtml(renderCameraPage(entryLane.view, exitLane.view));
 }
 
-void showRegistration()
+Notice pendingNotice()
 {
-    Notice notice;
     if (server.hasArg("m") && server.arg("m").toInt() == static_cast<long>(noticeId))
     {
-        notice = lastNotice;
+        return lastNotice;
     }
-    sendHtml(renderRegistrationPage(registrations, notice));
+    return {};
+}
+
+void redirectWithNotice(const String& path, const Notice& notice)
+{
+    lastNotice = notice;
+    noticeId++;
+    redirect(path + "?m=" + String(noticeId));
+}
+
+void showRegistration()
+{
+    sendHtml(renderRegistrationPage(registrations, pendingNotice()));
+}
+
+// HTTP Basic auth, user «betrieb». False = 401 sent, stop handling.
+bool operatorAuthenticated()
+{
+    if (server.authenticate(OPERATOR_USER, OPERATOR_PASSWORD))
+    {
+        return true;
+    }
+    server.requestAuthentication(BASIC_AUTH, "Parkhaus Betrieb");
+    logRequest(401);
+    return false;
+}
+
+OperatorLane operatorLane(Lane& lane)
+{
+    OperatorLane o;
+    o.lane = lane.id;
+    o.barrier = barrierStateLabel(static_cast<BarrierState>(lane.state.load()));
+    o.lastPlate = lane.lastPlate;
+    o.status = laneStatus(kasse, lane.lastPlate);
+    o.fault = lane.fault.load() ? loopFaultMessage(lane.name) : "";
+    return o;
+}
+
+void showOperator()
+{
+    if (!operatorAuthenticated())
+    {
+        return;
+    }
+    OperatorLane entry = operatorLane(entryLane);
+    OperatorLane exit = operatorLane(exitLane);
+    sendHtml(renderOperatorPage(entry, exit, eventLog, argOf("filter"), pendingNotice()));
+}
+
+void onRemoteOpen()
+{
+    if (!operatorAuthenticated())
+    {
+        return;
+    }
+    GateLane id = GateLane::None;
+    gateLaneFromName(argOf("lane"), id);
+    RemoteOpenResult r = remoteOpen(id, argOf("kz"), argOf("reason"), nowUtc(), kasse, eventLog);
+    if (r.open)
+    {
+        openBarrier(id == GateLane::Entry ? entryLane : exitLane);
+    }
+    if (r.logged)
+    {
+        saveEvents();
+    }
+    Serial.print("[betrieb] ");
+    Serial.println(r.notice.text.c_str());
+    redirectWithNotice("/betrieb", r.notice);
 }
 
 void finishRegistrationForm(const FormResult& r)
@@ -233,17 +395,18 @@ void finishRegistrationForm(const FormResult& r)
     }
     Serial.print("[registration] ");
     Serial.println(r.notice.text.c_str());
-    lastNotice = r.notice;
-    noticeId++;
-    redirect("/registrierung?m=" + String(noticeId));
+    redirectWithNotice("/registrierung", r.notice);
 }
 
 void onReset()
 {
     loadDefaultRegistrations(registrations);
     saveRegistrations();
-    Serial.println("registrations: test-data reset");
-    finishRegistrationForm({{"ok", "Testdaten zurückgesetzt – Registrierungen KZ-01, KZ-02, KZ-08, KZ-10"}, false});
+    eventLog.clear();
+    saveEvents();
+    Serial.println("registrations + events: test-data reset");
+    finishRegistrationForm(
+        {{"ok", "Testdaten zurückgesetzt – Registrierungen KZ-01, KZ-02, KZ-08, KZ-10, Ereignisprotokoll leer"}, false});
 }
 
 void onNotFound()
@@ -264,6 +427,8 @@ void setupRoutes()
     server.on("/registrierung/delete", HTTP_POST,
               []() { finishRegistrationForm(handleDeleteForm(registrations, argOf("kz"))); });
     server.on("/reset", HTTP_POST, onReset);
+    server.on("/betrieb", HTTP_GET, showOperator);
+    server.on("/betrieb/oeffnen", HTTP_POST, onRemoteOpen);
     server.onNotFound(onNotFound);
 }
 
@@ -284,19 +449,28 @@ void updateLane(Lane& lane, uint32_t nowMs)
     }
     bool occupied = digitalRead(lane.loopPin) == LOW;
     BarrierEvent event = lane.barrier.update(nowMs, occupied);
-    if (event == BarrierEvent::SafetyStop)
-    {
-        Serial.print("[safety] Sicherheitsabschaltung ");
-        Serial.println(lane.name);
-    }
-    else if (event == BarrierEvent::LoopFault)
-    {
-        Serial.print("[safety] ");
-        Serial.println(loopFaultMessage(lane.name).c_str());
-    }
     driveServo(lane);
+    if (event != BarrierEvent::None)
+    {
+        lane.events.push(event);
+    }
     lane.state.store(static_cast<int>(lane.barrier.state()));
     lane.fault.store(lane.barrier.loopFault());
+}
+
+// Core 0: logs barrier events handed over by core 1.
+void drainBarrierEvents(Lane& lane)
+{
+    BarrierEvent event;
+    while (lane.events.pop(event))
+    {
+        logBarrierEvent(eventLog, lane.id, event, nowUtc());
+        saveEvents();
+        Serial.print("[safety] ");
+        Serial.print(eventTypeLabel(eventLog.all().back().type));
+        Serial.print(" ");
+        Serial.println(lane.name);
+    }
 }
 
 void report()
@@ -319,6 +493,7 @@ void setup()
         Serial.println("LittleFS mount failed");
     }
     loadRegistrations();
+    loadEvents();
     setupRoutes();
     netBegin(IPAddress(SCHRANKEN_IP));
 }
@@ -328,6 +503,8 @@ void loop()
     unsigned long nowMs = millis();
     netUpdate(nowMs);
     statusLedUpdate(wifiReady() && timeReady(), nowMs);
+    drainBarrierEvents(entryLane);
+    drainBarrierEvents(exitLane);
 
     if (!serverStarted && wifiReady())
     {

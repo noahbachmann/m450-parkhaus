@@ -9,6 +9,7 @@
 #include "kasse_api.h"
 #include "kasse_pages.h"
 #include "kasse_view.h"
+#include "operator_view.h"
 #include "registration.h"
 #include "schranken_view.h"
 #include "session.h"
@@ -29,6 +30,13 @@ namespace
         return text.find(part) != std::string::npos;
     }
 
+    // "/api/status?kz=LU123456" -> "LU123456" (plates are sent normalized, no escaping needed)
+    std::string urlArg(const std::string& pathAndQuery, const std::string& name)
+    {
+        size_t at = pathAndQuery.find(name + "=");
+        return at == std::string::npos ? "" : pathAndQuery.substr(at + name.size() + 1);
+    }
+
     class System : public KasseLink
     {
     public:
@@ -36,6 +44,9 @@ namespace
         SessionStore sessions;
         Barrier entryBarrier;
         Barrier exitBarrier;
+        EventLog log;
+        std::string lastEntryPlate;
+        std::string lastExitPlate;
         int64_t now = START;
         uint32_t nowMs = 1000;
         bool kasseOn = true;
@@ -59,6 +70,16 @@ namespace
             return {r.status, r.body};
         }
 
+        HttpReply getJson(const std::string& pathAndQuery) override
+        {
+            if (!kasseOn)
+            {
+                return {};
+            }
+            ApiResponse r = handleStatus(sessions, urlArg(pathAndQuery, "kz"), now);
+            return {r.status, r.body};
+        }
+
         GateResult entry(const std::string& kz, const std::string& entryTime = "")
         {
             GateResult r = entryRequest(registrations, kz, entryTime, *this);
@@ -66,6 +87,8 @@ namespace
             {
                 entryBarrier.open(nowMs);
             }
+            lastEntryPlate = r.plate;
+            logGateResult(log, GateLane::Entry, r, now);
             return r;
         }
 
@@ -82,6 +105,8 @@ namespace
             {
                 exitBarrier.open(nowMs);
             }
+            lastExitPlate = r.plate;
+            logGateResult(log, GateLane::Exit, r, now);
             return r;
         }
 
@@ -107,9 +132,41 @@ namespace
             {
                 now++;
                 nowMs += 1000;
-                entryBarrier.update(nowMs, entryLoop);
-                exitBarrier.update(nowMs, exitLoop);
+                logBarrierEvent(log, GateLane::Entry, entryBarrier.update(nowMs, entryLoop), now);
+                logBarrierEvent(log, GateLane::Exit, exitBarrier.update(nowMs, exitLoop), now);
             }
+        }
+
+        // Operator «Schranke öffnen» → «Bestätigen».
+        RemoteOpenResult remote(GateLane lane, const std::string& kz, const std::string& reason)
+        {
+            RemoteOpenResult r = remoteOpen(lane, kz, reason, now, *this, log);
+            if (r.open)
+            {
+                (lane == GateLane::Entry ? entryBarrier : exitBarrier).open(nowMs);
+            }
+            return r;
+        }
+
+        // Advances time in 100 ms steps (closing takes 2 s, so a loop can hit it mid-sweep).
+        void waitMs(uint32_t ms, bool entryLoop = false, bool exitLoop = false)
+        {
+            for (uint32_t t = 0; t < ms; t += 100)
+            {
+                nowMs += 100;
+                logBarrierEvent(log, GateLane::Entry, entryBarrier.update(nowMs, entryLoop), now);
+                logBarrierEvent(log, GateLane::Exit, exitBarrier.update(nowMs, exitLoop), now);
+            }
+        }
+
+        size_t eventCount(EventType type) const
+        {
+            size_t n = 0;
+            for (const Event& e : log.all())
+            {
+                n += e.type == type ? 1 : 0;
+            }
+            return n;
         }
 
         void rebootKasse()
@@ -478,6 +535,101 @@ void test_tf32_whole_system()
     TEST_ASSERT_EQUAL(SessionStatus::Closed, sys.sessions.findLatest("OW2026")->status);
 }
 
+void test_tf14_six_safety_stops_logged()
+{
+    System sys;
+    for (int round = 0; round < 3; ++round)
+    {
+        for (GateLane lane : {GateLane::Entry, GateLane::Exit})
+        {
+            bool entry = lane == GateLane::Entry;
+            (entry ? sys.entryBarrier : sys.exitBarrier).open(sys.nowMs);
+            sys.waitMs(BARRIER_MIN_OPEN_MS + 1000); // 1 s into the closing sweep
+            TEST_ASSERT_EQUAL(BarrierState::Closing, (entry ? sys.entryBarrier : sys.exitBarrier).state());
+            sys.waitMs(100, entry, !entry);
+            TEST_ASSERT_EQUAL(BarrierState::Open, (entry ? sys.entryBarrier : sys.exitBarrier).state());
+            sys.waitMs(BARRIER_MIN_OPEN_MS + BARRIER_CLOSE_MS + 100);
+            TEST_ASSERT_EQUAL(BarrierState::Closed, (entry ? sys.entryBarrier : sys.exitBarrier).state());
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT(6, sys.eventCount(EventType::SafetyStop));
+    std::string html = renderOperatorPage(OperatorLane{}, OperatorLane{GateLane::Exit}, sys.log, "safety_stop", Notice{});
+    TEST_ASSERT_TRUE(contains(html, "6 Einträge"));
+    TEST_ASSERT_TRUE(contains(html, "<td>Sicherheitsabschaltung</td><td>Einfahrt</td>"));
+    TEST_ASSERT_TRUE(contains(html, "<td>Sicherheitsabschaltung</td><td>Ausfahrt</td>"));
+}
+
+void test_tf15_loop_fault_logged_once()
+{
+    System sys;
+    sys.entryBarrier.open(sys.nowMs);
+    sys.wait(4 * MIN + 50, true);
+    TEST_ASSERT_EQUAL_UINT(0, sys.eventCount(EventType::LoopFault));
+    sys.wait(20, true);
+    TEST_ASSERT_EQUAL_UINT(1, sys.eventCount(EventType::LoopFault));
+    TEST_ASSERT_EQUAL(BarrierState::Open, sys.entryBarrier.state());
+    TEST_ASSERT_EQUAL_STRING("Sicherungsschleife Einfahrt länger als 5 min belegt", sys.log.all().back().note.c_str());
+}
+
+void test_tf16_remote_opening_at_entry()
+{
+    System sys;
+    assertClosed(sys.entry("BE 4711"), "BE4711 – nicht registriert, bitte Ruftaste drücken");
+    TEST_ASSERT_EQUAL_STRING("BE4711", sys.lastEntryPlate.c_str());
+    TEST_ASSERT_EQUAL_STRING("kein Parkvorgang", laneStatus(sys, sys.lastEntryPlate).c_str());
+
+    RemoteOpenResult r = sys.remote(GateLane::Entry, sys.lastEntryPlate, "Kennzeichen nicht erkannt");
+    TEST_ASSERT_TRUE(r.open);
+    TEST_ASSERT_EQUAL(BarrierState::Open, sys.entryBarrier.state());
+    TEST_ASSERT_NOT_NULL(sys.sessions.findActive("BE4711"));
+    const Event& e = sys.log.all().back();
+    TEST_ASSERT_EQUAL(EventType::RemoteOpening, e.type);
+    TEST_ASSERT_EQUAL_STRING("betrieb", e.user.c_str());
+    TEST_ASSERT_EQUAL(GateLane::Entry, e.lane);
+    TEST_ASSERT_EQUAL_INT64(sys.now, e.time);
+    TEST_ASSERT_EQUAL_STRING("Kennzeichen nicht erkannt", e.reason.c_str());
+}
+
+void test_tf17_remote_opening_needs_reason()
+{
+    System sys;
+    sys.entry("BE4711");
+    RemoteOpenResult r = sys.remote(GateLane::Entry, "BE4711", "");
+    TEST_ASSERT_FALSE(r.open);
+    TEST_ASSERT_EQUAL_STRING("Bitte Grund auswählen", r.notice.text.c_str());
+    TEST_ASSERT_EQUAL(BarrierState::Closed, sys.entryBarrier.state());
+    TEST_ASSERT_EQUAL_UINT(0, sys.log.all().size());
+}
+
+void test_tf30_fault_logged()
+{
+    System sys;
+    sys.kasseOn = false;
+    sys.exit("ZH98765");
+    sys.exit("LU123456");
+    TEST_ASSERT_EQUAL_UINT(2, sys.eventCount(EventType::KasseUnreachable));
+    TEST_ASSERT_EQUAL(GateLane::Exit, sys.log.all()[0].lane);
+}
+
+void test_tf31_remote_opening_at_exit_without_payment()
+{
+    System sys;
+    assertOpen(sys.entryAgo("ZH98765", 2 * HOUR + 30 * MIN));
+    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen");
+    TEST_ASSERT_EQUAL_STRING("unbezahlt (CHF 6.00)", laneStatus(sys, sys.lastExitPlate).c_str());
+
+    RemoteOpenResult r = sys.remote(GateLane::Exit, sys.lastExitPlate, "Kulanz");
+    TEST_ASSERT_TRUE(r.open);
+    TEST_ASSERT_EQUAL(BarrierState::Open, sys.exitBarrier.state());
+    const Event& e = sys.log.all().back();
+    TEST_ASSERT_EQUAL_STRING("betrieb", e.user.c_str());
+    TEST_ASSERT_EQUAL(GateLane::Exit, e.lane);
+    TEST_ASSERT_EQUAL_STRING("ZH98765", e.plate.c_str());
+    TEST_ASSERT_EQUAL_STRING("Kulanz", e.reason.c_str());
+    TEST_ASSERT_EQUAL_STRING("ohne Zahlung", e.note.c_str());
+    TEST_ASSERT_TRUE(contains(sys.page(Page::Kasse, "ZH98765"), "<td>ohne Zahlung ausgefahren</td>"));
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -502,5 +654,11 @@ int main()
     RUN_TEST(test_tf29_status_interface_twenty_requests);
     RUN_TEST(test_tf30_kasse_off_at_exit_paid_status_persisted);
     RUN_TEST(test_tf32_whole_system);
+    RUN_TEST(test_tf14_six_safety_stops_logged);
+    RUN_TEST(test_tf15_loop_fault_logged_once);
+    RUN_TEST(test_tf16_remote_opening_at_entry);
+    RUN_TEST(test_tf17_remote_opening_needs_reason);
+    RUN_TEST(test_tf30_fault_logged);
+    RUN_TEST(test_tf31_remote_opening_at_exit_without_payment);
     return UNITY_END();
 }

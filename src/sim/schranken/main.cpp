@@ -3,11 +3,13 @@
 
 #include "barrier.h"
 #include "codec.h"
+#include "event_log.h"
 #include "format.h"
 #include "gate.h"
 #include "html.h"
 #include "http_client.h"
 #include "http_server.h"
+#include "operator_view.h"
 #include "registration.h"
 #include "schranken_view.h"
 #include "sim_common.h"
@@ -16,12 +18,14 @@
 // Simulated Pico 2 "Schranken": registration and camera pages, barriers, real HTTP calls to the Kasse
 // at KASSE_URL (default http://localhost:8081). Same routes as src/schranken/main.cpp, plus /sim, which
 // stands in for the safety loop buttons. Pico 1 off = stop the Kasse program or container.
+// Operator view /betrieb: user «betrieb», password OPERATOR_PASSWORD (default "parkhaus").
 
 namespace
 {
 constexpr int KASSE_TIMEOUT_MS = 1000;
 
 std::string kasseUrl;
+std::string operatorPassword;
 
 class HttpKasseLink : public KasseLink
 {
@@ -33,24 +37,49 @@ public:
                     r.status > 0 ? r.body.c_str() : "(keine Antwort)");
         return r;
     }
+
+    HttpReply getJson(const std::string& pathAndQuery) override
+    {
+        return httpGetJson(kasseUrl, pathAndQuery, KASSE_TIMEOUT_MS);
+    }
 };
 
 struct Lane
 {
+    GateLane id;
     const char* name;
     Barrier barrier;
     bool loopOccupied = false;
     LaneView view;
+    std::string lastPlate;
 };
 
 HttpKasseLink kasse;
 RegistrationList registrations;
-Lane entryLane{"Einfahrt", {}, false, {}};
-Lane exitLane{"Ausfahrt", {}, false, {}};
+EventLog eventLog;
+Lane entryLane{GateLane::Entry, "Einfahrt", {}, false, {}, ""};
+Lane exitLane{GateLane::Exit, "Ausfahrt", {}, false, {}, ""};
 
-// Result of the last registration POST, shown once after the redirect.
+// Result of the last registration / operator POST, shown once after the redirect.
 uint32_t noticeId = 0;
 Notice lastNotice;
+
+void saveEvents()
+{
+    writeDataFile("events", eventsToJson(eventLog));
+}
+
+Notice pendingNotice(const HttpRequest& req)
+{
+    return req.arg("m") == std::to_string(noticeId) ? lastNotice : Notice{};
+}
+
+HttpResponse redirectWithNotice(const std::string& path, const Notice& notice)
+{
+    lastNotice = notice;
+    noticeId++;
+    return redirect(path + "?m=" + std::to_string(noticeId));
+}
 
 void saveRegistrations()
 {
@@ -62,6 +91,11 @@ void applyGate(Lane& lane, const GateResult& r)
     if (r.open)
     {
         lane.barrier.open(nowMs());
+    }
+    lane.lastPlate = r.plate;
+    if (logGateResult(eventLog, lane.id, r, nowUtc()))
+    {
+        saveEvents();
     }
     lane.view.cls = r.cls;
     lane.view.terminal = r.message;
@@ -81,9 +115,45 @@ HttpResponse finishRegistrationForm(const FormResult& r)
         saveRegistrations();
     }
     std::printf("[registration] %s\n", r.notice.text.c_str());
-    lastNotice = r.notice;
-    noticeId++;
-    return redirect("/registrierung?m=" + std::to_string(noticeId));
+    return redirectWithNotice("/registrierung", r.notice);
+}
+
+OperatorLane operatorLane(Lane& lane)
+{
+    OperatorLane o;
+    o.lane = lane.id;
+    o.barrier = barrierStateLabel(lane.barrier.state());
+    o.lastPlate = lane.lastPlate;
+    o.status = laneStatus(kasse, lane.lastPlate);
+    o.fault = lane.barrier.loopFault() ? loopFaultMessage(lane.name) : "";
+    return o;
+}
+
+HttpResponse operatorRoute(const HttpRequest& req)
+{
+    if (!basicAuthOk(req, OPERATOR_USER, operatorPassword))
+    {
+        return basicAuthChallenge("Parkhaus Betrieb");
+    }
+    if (req.method == "GET")
+    {
+        OperatorLane entry = operatorLane(entryLane);
+        OperatorLane exit = operatorLane(exitLane);
+        return simPage(renderOperatorPage(entry, exit, eventLog, req.arg("filter"), pendingNotice(req)));
+    }
+    GateLane id = GateLane::None;
+    gateLaneFromName(req.arg("lane"), id);
+    RemoteOpenResult r = remoteOpen(id, req.arg("kz"), req.arg("reason"), nowUtc(), kasse, eventLog);
+    if (r.open)
+    {
+        (id == GateLane::Entry ? entryLane : exitLane).barrier.open(nowMs());
+    }
+    if (r.logged)
+    {
+        saveEvents();
+    }
+    std::printf("[betrieb] %s\n", r.notice.text.c_str());
+    return redirectWithNotice("/betrieb", r.notice);
 }
 
 void appendLoopControl(std::string& html, const char* field, const Lane& lane)
@@ -145,12 +215,11 @@ HttpResponse route(const HttpRequest& req)
     }
     if (get && req.path == "/registrierung")
     {
-        Notice notice;
-        if (req.arg("m") == std::to_string(noticeId))
-        {
-            notice = lastNotice;
-        }
-        return simPage(renderRegistrationPage(registrations, notice));
+        return simPage(renderRegistrationPage(registrations, pendingNotice(req)));
+    }
+    if ((get && req.path == "/betrieb") || (post && req.path == "/betrieb/oeffnen"))
+    {
+        return operatorRoute(req);
     }
     if (post && req.path == "/registrierung/add")
     {
@@ -164,8 +233,11 @@ HttpResponse route(const HttpRequest& req)
     {
         loadDefaultRegistrations(registrations);
         saveRegistrations();
+        eventLog.clear();
+        saveEvents();
         return finishRegistrationForm(
-            {{"ok", "Testdaten zurückgesetzt – Registrierungen KZ-01, KZ-02, KZ-08, KZ-10"}, false});
+            {{"ok", "Testdaten zurückgesetzt – Registrierungen KZ-01, KZ-02, KZ-08, KZ-10, Ereignisprotokoll leer"},
+             false});
     }
     if (get && req.path == "/sim")
     {
@@ -190,13 +262,10 @@ void updateLane(Lane& lane, uint32_t ms)
 {
     BarrierState before = lane.barrier.state();
     BarrierEvent event = lane.barrier.update(ms, lane.loopOccupied);
-    if (event == BarrierEvent::SafetyStop)
+    if (logBarrierEvent(eventLog, lane.id, event, nowUtc()))
     {
-        std::printf("[safety] Sicherheitsabschaltung %s\n", lane.name);
-    }
-    else if (event == BarrierEvent::LoopFault)
-    {
-        std::printf("[safety] %s\n", loopFaultMessage(lane.name).c_str());
+        saveEvents();
+        std::printf("[safety] %s %s\n", eventTypeLabel(eventLog.all().back().type), lane.name);
     }
     if (lane.barrier.state() != before)
     {
@@ -225,18 +294,32 @@ void loadRegistrations()
     }
     std::printf("registrations: loaded %u\n", static_cast<unsigned>(registrations.all().size()));
 }
+
+void loadEvents()
+{
+    std::string json;
+    if (!readDataFile("events", json) || !eventsFromJson(json, eventLog))
+    {
+        eventLog.clear();
+        saveEvents();
+    }
+    std::printf("events: %u\n", static_cast<unsigned>(eventLog.all().size()));
+}
 }
 
 int main()
 {
     kasseUrl = envOr("KASSE_URL", "http://localhost:8081");
+    operatorPassword = envOr("OPERATOR_PASSWORD", "parkhaus");
     loadRegistrations();
+    loadEvents();
     std::string host = listenHost();
     std::printf("Simulator Pico 2 «Schranken», %s, Daten in %s/, Kasse unter %s\n", formatDateTime(nowUtc()).c_str(),
                 dataDir().c_str(), kasseUrl.c_str());
     std::printf("  http://localhost:%u/kamera   http://localhost:%u/registrierung   http://localhost:%u/sim"
                 "   (lauscht auf %s)\n",
                 SCHRANKEN_PORT, SCHRANKEN_PORT, SCHRANKEN_PORT, host.c_str());
+    std::printf("  http://localhost:%u/betrieb   (Benutzer «betrieb», Passwort aus OPERATOR_PASSWORD)\n", SCHRANKEN_PORT);
     std::printf("Beenden mit Ctrl+C\n");
     std::fflush(stdout);
     return runHttpServers(host, {{SCHRANKEN_PORT, route}}, tick) ? 0 : 1;

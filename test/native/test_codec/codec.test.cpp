@@ -156,6 +156,14 @@ void test_status_names()
     TEST_ASSERT_EQUAL_STRING("paid", sessionStatusName(SessionStatus::Paid));
     TEST_ASSERT_EQUAL_STRING("closed", sessionStatusName(SessionStatus::Closed));
     TEST_ASSERT_EQUAL_STRING("closed_free", sessionStatusName(SessionStatus::ClosedFree));
+    TEST_ASSERT_EQUAL_STRING("closed_unpaid", sessionStatusName(SessionStatus::ClosedUnpaid));
+
+    SessionStore store;
+    store.openEntry("ZH98765", 1760521000);
+    store.forceExit("ZH98765", 1760530000);
+    SessionStore loaded;
+    TEST_ASSERT_TRUE(sessionsFromJson(sessionsToJson(store), loaded));
+    TEST_ASSERT_TRUE(SessionStatus::ClosedUnpaid == loaded.all()[0].status);
 }
 
 int main()

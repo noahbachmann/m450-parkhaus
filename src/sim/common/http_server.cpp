@@ -20,6 +20,8 @@ namespace
             return "Created";
         case 303:
             return "See Other";
+        case 401:
+            return "Unauthorized";
         case 400:
             return "Bad Request";
         case 402:
@@ -124,6 +126,10 @@ namespace
                 {
                     contentType = lower(value);
                 }
+                else if (name == "authorization")
+                {
+                    req.authorization = value;
+                }
             }
             pos = end == std::string::npos ? head.size() : end + 2;
         }
@@ -171,7 +177,7 @@ namespace
         HttpResponse res;
         if (!readRequest(client, req))
         {
-            res = {400, "text/plain; charset=utf-8", "Bad Request", ""};
+            res = {400, "text/plain; charset=utf-8", "Bad Request", "", ""};
         }
         else
         {
@@ -185,6 +191,10 @@ namespace
         if (!res.location.empty())
         {
             out += "Location: " + res.location + "\r\n";
+        }
+        if (!res.wwwAuthenticate.empty())
+        {
+            out += "WWW-Authenticate: " + res.wwwAuthenticate + "\r\n";
         }
         out += "Cache-Control: no-store\r\nConnection: close\r\n\r\n" + res.body;
         sendAll(client, out);

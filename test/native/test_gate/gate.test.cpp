@@ -25,6 +25,13 @@ namespace
             lastBody = body;
             return reply;
         }
+
+        HttpReply getJson(const std::string& pathAndQuery) override
+        {
+            calls++;
+            lastPath = pathAndQuery;
+            return reply;
+        }
     };
 
     // Pico 1's real API handlers on a real store.
@@ -38,6 +45,12 @@ namespace
         {
             ApiResponse r = std::string(path) == "/api/entry" ? handleEntry(store, body, now, true)
                                                                : handleExit(store, body, now, true);
+            return {r.status, r.body};
+        }
+
+        HttpReply getJson(const std::string& pathAndQuery) override
+        {
+            ApiResponse r = handleStatus(store, pathAndQuery.substr(pathAndQuery.find('=') + 1), now);
             return {r.status, r.body};
         }
     };
@@ -103,9 +116,11 @@ void test_entry_error_replies_tf10_tf11()
     fake.reply = {409, "{\"error\":\"already_open\"}"};
     TEST_ASSERT_EQUAL_STRING("Parkvorgang bereits offen – bitte Ruftaste drücken",
                              entryRequest(regs, "ZH98765", "", fake).message.c_str());
+    TEST_ASSERT_FALSE(entryRequest(regs, "ZH98765", "", fake).unreachable);
     fake.reply = {0, ""};
     GateResult r = entryRequest(regs, "LU123456", "", fake);
     TEST_ASSERT_FALSE(r.open);
+    TEST_ASSERT_TRUE(r.unreachable);
     TEST_ASSERT_EQUAL_STRING("Kasse nicht erreichbar – bitte Ruftaste drücken", r.message.c_str());
     fake.reply = {400, "{\"error\":\"entry_in_future\"}"};
     TEST_ASSERT_EQUAL_STRING("Einfahrtszeit liegt in der Zukunft",

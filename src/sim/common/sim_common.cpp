@@ -83,7 +83,51 @@ HttpResponse redirect(const std::string& location)
 
 HttpResponse notFound()
 {
-    return {404, "text/plain; charset=utf-8", "Nicht gefunden", ""};
+    return {404, "text/plain; charset=utf-8", "Nicht gefunden", "", ""};
+}
+
+namespace
+{
+std::string base64Decode(const std::string& in)
+{
+    static const std::string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    uint32_t buffer = 0;
+    int bits = 0;
+    for (char c : in)
+    {
+        size_t v = chars.find(c);
+        if (v == std::string::npos)
+        {
+            break; // '=' padding or garbage ends the data
+        }
+        buffer = (buffer << 6) | static_cast<uint32_t>(v);
+        bits += 6;
+        if (bits >= 8)
+        {
+            bits -= 8;
+            out += static_cast<char>((buffer >> bits) & 0xFF);
+        }
+    }
+    return out;
+}
+}
+
+bool basicAuthOk(const HttpRequest& req, const std::string& user, const std::string& password)
+{
+    const std::string prefix = "Basic ";
+    if (req.authorization.compare(0, prefix.size(), prefix) != 0)
+    {
+        return false;
+    }
+    return base64Decode(req.authorization.substr(prefix.size())) == user + ":" + password;
+}
+
+HttpResponse basicAuthChallenge(const char* realm)
+{
+    HttpResponse r{401, "text/plain; charset=utf-8", "Anmeldung erforderlich", "", ""};
+    r.wwwAuthenticate = std::string("Basic realm=\"") + realm + "\"";
+    return r;
 }
 
 HttpResponse simPage(const std::string& html)
@@ -97,6 +141,7 @@ HttpResponse simPage(const std::string& html)
                          link(KASSE_PORT, "/kasse", "Kasse") + " · " + link(KASSE_PORT, "/automat", "Automat") +
                          " · " + link(SCHRANKEN_PORT, "/kamera", "Kamera") + " · " +
                          link(SCHRANKEN_PORT, "/registrierung", "Registrierung") + " · " +
+                         link(SCHRANKEN_PORT, "/betrieb", "Betrieb") + " · " +
                          link(SCHRANKEN_PORT, "/sim", "Steuerung (Schleifen)") + "</div>";
     std::string out = html;
     size_t body = out.find("<body>");
@@ -104,5 +149,5 @@ HttpResponse simPage(const std::string& html)
     {
         out.insert(body + 6, banner);
     }
-    return {200, "text/html; charset=utf-8", out, ""};
+    return {200, "text/html; charset=utf-8", out, "", ""};
 }
