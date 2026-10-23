@@ -1,5 +1,6 @@
 #include <unity.h>
 
+#include "kasse_pages.h"
 #include "kasse_view.h"
 #include "payment.h"
 #include "session.h"
@@ -9,6 +10,11 @@ namespace
     constexpr int64_t NOW = 1760530000; // 15.10.2025 14:06:40 Zurich (CEST)
     constexpr int64_t MIN = 60;
     constexpr int64_t HOUR = 3600;
+
+    bool contains(const std::string& html, const char* text)
+    {
+        return html.find(text) != std::string::npos;
+    }
 }
 
 void setUp()
@@ -158,6 +164,123 @@ void test_html_escape()
     TEST_ASSERT_EQUAL_STRING("LU123456", htmlEscape("LU123456").c_str());
 }
 
+void test_pay_form_tf20_card_then_already_paid()
+{
+    SessionStore store;
+    store.openEntry("LU123456", NOW - 80 * MIN);
+    PayFormResult first = handlePayForm(store, "lu 123456", "card_ok", "", NOW, true);
+    TEST_ASSERT_TRUE(first.changed);
+    TEST_ASSERT_EQUAL_STRING("ok", first.notice.cls);
+    TEST_ASSERT_EQUAL_STRING("Bezahlt – CHF 4.00, Karte – Transaktion TX-000001", first.notice.text.c_str());
+
+    PayFormResult second = handlePayForm(store, "LU123456", "card_ok", "", NOW + 5, true);
+    TEST_ASSERT_FALSE(second.changed);
+    TEST_ASSERT_EQUAL_STRING("err", second.notice.cls);
+    TEST_ASSERT_EQUAL_STRING("bereits bezahlt", second.notice.text.c_str());
+    TEST_ASSERT_EQUAL_UINT32(2, store.nextTxNumber());
+}
+
+void test_pay_form_tf21_cash()
+{
+    SessionStore store;
+    store.openEntry("LU123456", NOW - 150 * MIN);
+    PayFormResult change = handlePayForm(store, "LU123456", "cash", "10.00", NOW, true);
+    TEST_ASSERT_EQUAL_STRING("Bezahlt – CHF 6.00, Bargeld – Transaktion TX-000001 – Rückgeld CHF 4.00",
+                             change.notice.text.c_str());
+
+    store.openEntry("AG1", NOW - 30 * MIN);
+    PayFormResult partial = handlePayForm(store, "AG1", "cash", "1", NOW, true);
+    TEST_ASSERT_TRUE(partial.changed);
+    TEST_ASSERT_EQUAL_STRING("info", partial.notice.cls);
+    TEST_ASSERT_EQUAL_STRING("Restbetrag CHF 1.00 – unbezahlt", partial.notice.text.c_str());
+    PayFormResult rest = handlePayForm(store, "AG1", "cash", "1,00", NOW, true);
+    TEST_ASSERT_EQUAL_STRING("ok", rest.notice.cls);
+    TEST_ASSERT_EQUAL_STRING("Bezahlt – CHF 2.00, Bargeld – Transaktion TX-000002 – Rückgeld CHF 0.00",
+                             rest.notice.text.c_str());
+}
+
+void test_pay_form_rejects_bad_input()
+{
+    SessionStore store;
+    store.openEntry("LU123456", NOW - 80 * MIN);
+    PayFormResult noMethod = handlePayForm(store, "LU123456", "bitcoin", "", NOW, true);
+    TEST_ASSERT_EQUAL_STRING("Bitte Zahlungsmittel wählen", noMethod.notice.text.c_str());
+    PayFormResult badCash = handlePayForm(store, "LU123456", "cash", "zehn", NOW, true);
+    TEST_ASSERT_EQUAL_STRING("Bitte eingeworfenen Betrag in CHF eingeben", badCash.notice.text.c_str());
+    PayFormResult noTime = handlePayForm(store, "LU123456", "card_ok", "", NOW, false);
+    TEST_ASSERT_EQUAL_STRING("Uhrzeit nicht synchronisiert – bitte später erneut versuchen",
+                             noTime.notice.text.c_str());
+    PayFormResult declined = handlePayForm(store, "LU123456", "card_declined", "", NOW, true);
+    TEST_ASSERT_FALSE(declined.changed);
+    TEST_ASSERT_EQUAL_STRING("Zahlung abgelehnt – anderes Zahlungsmittel wählen", declined.notice.text.c_str());
+    TEST_ASSERT_EQUAL(SessionStatus::Open, store.findActive("LU123456")->status);
+}
+
+void test_kasse_page_tf19()
+{
+    SessionStore store;
+    store.openEntry("LU123456", NOW - 80 * MIN);
+    std::string html = renderPage(Page::Kasse, store, "lu 123456", Notice{}, NOW, true);
+    TEST_ASSERT_TRUE(contains(html, "<td>LU123456</td>"));
+    TEST_ASSERT_TRUE(contains(html, "<td>15.10.2025 12:46:40</td>"));
+    TEST_ASSERT_TRUE(contains(html, "<td>1 h 20 min</td>"));
+    TEST_ASSERT_TRUE(contains(html, "<td>CHF 4.00</td>"));
+    TEST_ASSERT_TRUE(contains(html, "2 angefangene Stunden"));
+    TEST_ASSERT_TRUE(contains(html, "action=\"/kasse/pay\""));
+    TEST_ASSERT_TRUE(contains(html, "Parkvorgänge"));
+    TEST_ASSERT_TRUE(contains(html, "action=\"/reset\""));
+}
+
+void test_paid_session_keeps_pay_form_tf20()
+{
+    SessionStore store;
+    store.openEntry("LU123456", NOW - 80 * MIN);
+    pay(store, "LU123456", PayMethod::CardOk, NOW);
+    Notice notice{"ok", "Bezahlt – CHF 4.00, Karte – Transaktion TX-000001"};
+    std::string html = renderPage(Page::Automat, store, "LU123456", notice, NOW, true);
+    TEST_ASSERT_TRUE(contains(html, "notice ok\">Bezahlt – CHF 4.00, Karte – Transaktion TX-000001"));
+    TEST_ASSERT_TRUE(contains(html, "action=\"/automat/pay\""));
+    TEST_ASSERT_FALSE(contains(html, "action=\"/reset\""));
+}
+
+void test_automat_without_session_tf22()
+{
+    SessionStore store;
+    std::string html = renderPage(Page::Automat, store, "SZ 555", Notice{}, NOW, true);
+    TEST_ASSERT_TRUE(contains(html, "Kein offener Parkvorgang für SZ555"));
+    TEST_ASSERT_FALSE(contains(html, "/pay"));
+}
+
+void test_automat_ignores_closed_kasse_shows_it()
+{
+    SessionStore store;
+    store.openEntry("AG1", NOW - 5 * MIN);
+    store.tryExit("AG1", NOW);
+    std::string automat = renderPage(Page::Automat, store, "AG1", Notice{}, NOW, true);
+    TEST_ASSERT_TRUE(contains(automat, "Kein offener Parkvorgang für AG1"));
+    std::string kasse = renderPage(Page::Kasse, store, "AG1", Notice{}, NOW, true);
+    TEST_ASSERT_TRUE(contains(kasse, "abgeschlossen (Freizeit)"));
+    TEST_ASSERT_FALSE(contains(kasse, "/kasse/pay"));
+}
+
+void test_page_escapes_query_and_flags_invalid_plate()
+{
+    SessionStore store;
+    std::string html = renderPage(Page::Kasse, store, "<script>", Notice{}, NOW, true);
+    TEST_ASSERT_FALSE(contains(html, "<script>"));
+    TEST_ASSERT_TRUE(contains(html, "&lt;script&gt;"));
+    TEST_ASSERT_TRUE(contains(html, "Ungültiges Kennzeichen"));
+}
+
+void test_page_without_time_offers_no_payment()
+{
+    SessionStore store;
+    store.openEntry("LU123456", NOW - 80 * MIN);
+    std::string html = renderPage(Page::Automat, store, "LU123456", Notice{}, NOW, false);
+    TEST_ASSERT_TRUE(contains(html, "Uhrzeit nicht synchronisiert"));
+    TEST_ASSERT_FALSE(contains(html, "/automat/pay"));
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -170,5 +293,14 @@ int main()
     RUN_TEST(test_payment_messages_tf20_tf21_tf22);
     RUN_TEST(test_parse_chf);
     RUN_TEST(test_html_escape);
+    RUN_TEST(test_pay_form_tf20_card_then_already_paid);
+    RUN_TEST(test_pay_form_tf21_cash);
+    RUN_TEST(test_pay_form_rejects_bad_input);
+    RUN_TEST(test_kasse_page_tf19);
+    RUN_TEST(test_paid_session_keeps_pay_form_tf20);
+    RUN_TEST(test_automat_without_session_tf22);
+    RUN_TEST(test_automat_ignores_closed_kasse_shows_it);
+    RUN_TEST(test_page_escapes_query_and_flags_invalid_plate);
+    RUN_TEST(test_page_without_time_offers_no_payment);
     return UNITY_END();
 }

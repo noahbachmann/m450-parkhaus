@@ -150,7 +150,7 @@ needed). Later phases may add JSON endpoints for them if the pages use fetch().
 
 Libraries: `lib/registration`, `lib/session` (store, state machine, payment), `lib/format`,
 `lib/codec` (JSON files), `lib/kasse_api` (API handlers → status + body), `lib/kasse_view` (Kasse/Automat
-page texts, CHF input parsing).
+page texts, CHF input parsing, pay-form handling, page HTML).
 
 File formats (LittleFS):
 - `/registrations.json`: `{"registrations":[{"name":"Test Kunde A","kz":"LU123456"}]}`

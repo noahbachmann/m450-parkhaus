@@ -8,7 +8,7 @@ Was in Schritt 4 dazukommt und wie man es Schritt für Schritt prüft. Vorausset
 | Datei | Inhalt |
 |---|---|
 | `src/kasse/main.cpp` | Webserver auf Port 80, Routen, Speichern der Parkvorgänge nach jeder Änderung |
-| `src/kasse/pages.cpp` | HTML der Seiten Kasse und Automat |
+| `lib/kasse_view/kasse_pages.cpp` | HTML der Seiten Kasse und Automat |
 | `lib/kasse_view/` | Texte der Seiten (Dauer, Gebühr, Tarifhinweis, Zahlungsmeldungen), Eingabe des Bargeldbetrags |
 | `test/native/test_kasse_view/` | Unit-Tests dazu (9 Fälle) |
 

@@ -7,6 +7,12 @@ Each step ends with something testable. Update the status column when a step is 
 implements a step, sets it to "awaiting user verification" and lists what to check. Only the user's
 confirmation moves a step to "done". Failures they report are fixed in the same step.
 
+**No hardware from step 4 on (decided 2026-10-23):** the user can no longer run the Picos. Every step
+is verified with `pio test -e native` + `pio run` only. Logic goes into `lib/` so it is native-tested;
+`src/` is thin glue that must compile. The phase-1 TFs run as a native in-process system test (step 6);
+what only hardware can show (servo motion, ≤ 2 s timing, WLAN, real power cycle) is documented as not
+verified. No `test/board/` suites and no `v1.0` tag.
+
 | # | Step | Status |
 |---|---|---|
 | 1 | Foundation: envs, plate + tariff libs, native tests | done (verified by user 2026-10-19) |
@@ -67,14 +73,13 @@ confirmation moves a step to "done". Failures they report are fixed in the same 
 - WebServer port 80: `GET /api/status`, `POST /api/entry`, `POST /api/exit`.
 - Kasse page (search plate, entry time, duration, fee, record payment) and Automat page.
 - Sessions persisted in `/sessions.json`.
-- Page texts and cash input parsing as pure functions in `lib/kasse_view` (native-tested); HTML in
-  `src/kasse/pages.cpp`, routes in `src/kasse/main.cpp`. Test-data reset `POST /reset`.
-  Step-3 boot counter removed from Kasse.
-- **Done when:** TF-29 via curl passes; TF-18..22 pass with entries created via curl.
-- **User verifies** (walkthrough: `docs/anleitung-schritt-4-kasse.md`): `pio test -e native` →
-  10 suites, 72 cases passed; `pio run` → both `SUCCESS`; on Pico 1: TF-29 (20 curl requests, each
-  < 1 s), TF-18 (R-01..R-12 via backdated entries), TF-19 (1 h 20 min / CHF 4.00 / tariff note),
-  TF-20, TF-21, TF-22 in the browser; paid status survives a power cycle.
+- Page texts, cash input parsing, pay-form handling (`handlePayForm`) and page HTML (`renderPage` in
+  `lib/kasse_view/kasse_pages.cpp`) are pure functions in `lib/kasse_view` (native-tested); routes in
+  `src/kasse/main.cpp`. Test-data reset `POST /reset`. Step-3 boot counter removed from Kasse.
+- **Done when:** native tests cover TF-19..22 on the rendered pages and the pay form; TF-18/TF-29 are
+  covered by the `kasse_api` suite and the step-6 system test.
+- **User verifies:** `pio test -e native` → 10 suites, 81 cases passed; `pio run` → both `SUCCESS`.
+  (The on-board walkthrough `docs/anleitung-schritt-4-kasse.md` can't be run any more.)
 
 ## 5 — Pico 2 "Schranken" firmware
 

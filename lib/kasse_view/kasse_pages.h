@@ -3,18 +3,13 @@
 #include <stdint.h>
 #include <string>
 
+#include "kasse_view.h"
 #include "session.h"
 
 enum class Page
 {
     Kasse,
     Automat,
-};
-
-struct Notice
-{
-    const char* cls = ""; // "ok", "info" or "err"; empty = no notice
-    std::string text;
 };
 
 // Base path of the page: "/kasse" or "/automat".

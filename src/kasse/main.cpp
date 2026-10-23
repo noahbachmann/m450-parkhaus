@@ -6,10 +6,9 @@
 #include "codec.h"
 #include "format.h"
 #include "kasse_api.h"
+#include "kasse_pages.h"
 #include "kasse_view.h"
 #include "net.h"
-#include "pages.h"
-#include "payment.h"
 #include "plate.h"
 #include "secrets.h"
 #include "status_led.h"
@@ -129,64 +128,19 @@ void showPage(Page page)
     logRequest(200);
 }
 
-bool parseMethod(const std::string& name, PayMethod& method)
-{
-    if (name == "card_ok")
-    {
-        method = PayMethod::CardOk;
-    }
-    else if (name == "card_declined")
-    {
-        method = PayMethod::CardDeclined;
-    }
-    else if (name == "twint")
-    {
-        method = PayMethod::Twint;
-    }
-    else if (name == "cash")
-    {
-        method = PayMethod::Cash;
-    }
-    else
-    {
-        return false;
-    }
-    return true;
-}
-
 void onPay(Page page)
 {
     std::string plate = normalizePlate(argOf("kz"));
-    String path = pagePath(page);
-    if (!timeReady())
-    {
-        redirectWithNotice(path, plate, "err", "Uhrzeit nicht synchronisiert – bitte später erneut versuchen");
-        return;
-    }
-    PayMethod method;
-    if (!parseMethod(argOf("method"), method))
-    {
-        redirectWithNotice(path, plate, "err", "Bitte Zahlungsmittel wählen");
-        return;
-    }
-    uint32_t cash = 0;
-    if (method == PayMethod::Cash && !parseChf(argOf("amount"), cash))
-    {
-        cash = 0; // pay() answers InvalidAmount
-    }
-    PaymentResult r = pay(sessions, plate, method, nowUtc(), cash);
-    if (paymentSucceeded(r))
+    PayFormResult r = handlePayForm(sessions, plate, argOf("method"), argOf("amount"), nowUtc(), timeReady());
+    if (r.changed)
     {
         saveSessions();
     }
-    const char* cls = r.kind == PaymentResult::Kind::Paid          ? "ok"
-                      : r.kind == PaymentResult::Kind::PartialCash ? "info"
-                                                                   : "err";
     Serial.print("[pay] ");
     Serial.print(plate.c_str());
     Serial.print(": ");
-    Serial.println(paymentMessage(r, plate).c_str());
-    redirectWithNotice(path, plate, cls, paymentMessage(r, plate));
+    Serial.println(r.notice.text.c_str());
+    redirectWithNotice(pagePath(page), plate, r.notice.cls, r.notice.text);
 }
 
 void onReset()

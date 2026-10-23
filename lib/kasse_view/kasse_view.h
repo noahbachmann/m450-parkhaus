@@ -36,6 +36,26 @@ bool paymentSucceeded(const PaymentResult& result);
 // «Kein offener Parkvorgang für SZ555»
 std::string noSessionMessage(const std::string& plate);
 
+struct Notice
+{
+    const char* cls = ""; // "ok", "info" or "err"; empty = no notice
+    std::string text;
+};
+
+struct PayFormResult
+{
+    Notice notice;
+    bool changed = false; // sessions were modified and must be written to flash
+};
+
+// Form fields of POST /kasse/pay and /automat/pay: kz, method (card_ok|card_declined|twint|cash),
+// amount in CHF (cash only).
+PayFormResult handlePayForm(SessionStore& store, const std::string& kz, const std::string& method,
+                            const std::string& amount, int64_t now, bool timeOk);
+
+// Form value -> method: "card_ok", "card_declined", "twint", "cash". False for anything else.
+bool parsePayMethod(const std::string& name, PayMethod& method);
+
 // "10", "10.5", "10.50", "10,50", "CHF 10.00" -> 1050 Rappen. False for anything else, 0 or > CHF 1000.
 bool parseChf(const std::string& text, uint32_t& rappen);
 

@@ -1,4 +1,4 @@
-#include "pages.h"
+#include "kasse_pages.h"
 
 #include "format.h"
 #include "kasse_view.h"
