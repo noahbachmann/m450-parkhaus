@@ -20,8 +20,11 @@ verified. No `test/board/` suites and no `v1.0` tag.
 | 3 | Shared board glue | done (verified by user 2026-10-22) |
 | 4 | Pico 1 "Kasse" firmware | done (verified by user 2026-10-23, native + build) |
 | 5 | Pico 2 "Schranken" firmware | done (verified by user 2026-10-23, native + build) |
-| 6 | Integration + phase-1 system test | awaiting user verification |
-| 7 | Phase 2: Testkonzept scope | later |
+| 6 | Integration + phase-1 system test | done (verified by user 2026-10-23, native + build) |
+| 7a | Phase 2: barrier safety | awaiting user verification |
+| 7b | Phase 2: event log + operator view | open |
+| 7c | Phase 2: exit terminal | open |
+| 7d | Phase 2: tariff page + wrap-up | open |
 
 ## 1 — Foundation
 
@@ -103,10 +106,29 @@ verified. No `test/board/` suites and no `v1.0` tag.
 - German `docs/testprotokoll.md` (results + what only hardware could show), `README.md` user story table.
 - **User verifies:** `pio test -e native` → 14 suites, 127 cases passed; `pio run` → both `SUCCESS`.
 
-## 7 — Phase 2 (Testkonzept scope, later)
+## 7 — Phase 2 (Testkonzept scope), split into 7a–7d with a user check after each
 
-- Safety loop logic: no closing while occupied, stop + reopen during closing, 5-min fault message.
-- Event log on Pico 2; operator view (user «betrieb»), remote opening with mandatory reason.
-- Call button, exit abort («Fahrzeug wendet»), payment at the exit terminal incl. 5 declined attempts.
-- Tariff page in Kasse and Automat; terminal feedback texts (TF-05, TF-26).
-- Hardware test suites under `test/board/` + per-env `test_filter` (`native/*` vs `board/*`); tag `v1.0`.
+Hardware test suites under `test/board/` and the `v1.0` tag are dropped (no hardware, decided 2026-10-23).
+
+### 7a — Barrier safety
+
+- `lib/barrier`: states closed / open / closing. Closing is a 2 s sweep (`BARRIER_CLOSE_MS`); no closing
+  while the loop is occupied; loop triggered while closing → stop and fully up in the same update
+  (`SafetyStop` event), minimum open time restarts; loop occupied ≥ 5 min → `LoopFault` event once,
+  message «Sicherungsschleife Einfahrt länger als 5 min belegt» on the camera page, barrier stays open.
+- Firmware: barriers + loops run on core 1 (`setup1`/`loop1`) so a blocking HTTP call on core 0 can't
+  delay a stop; cores share only single-writer atomics. Events go to Serial (event log in 7b).
+- **User verifies:** `pio test -e native` → 14 suites, 133 cases passed; `pio run` → both `SUCCESS`.
+
+### 7b — Event log + operator view
+
+- Event log on Pico 2; operator view (user «betrieb»), remote opening with mandatory reason (TF-14, 16, 17, 31).
+
+### 7c — Exit terminal
+
+- Call button, exit abort («Fahrzeug wendet»), payment at the exit terminal incl. 5 declined attempts
+  (TF-26, 27, 28).
+
+### 7d — Tariff page + wrap-up
+
+- Tariff page in Kasse and Automat (TF-19 rest); README, test protocol, roadmap final.

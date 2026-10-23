@@ -19,9 +19,10 @@ std::string renderRegistrationPage(const RegistrationList& list, const Notice& n
 
 struct LaneView
 {
-    bool open = false;
-    const char* cls = "";  // class of the last terminal text: "ok", "err" or empty
-    std::string terminal;  // last text shown on the lane's terminal
+    const char* barrier = "geschlossen"; // barrierStateLabel()
+    const char* cls = "";                // class of the last terminal text: "ok", "err" or empty
+    std::string terminal;                // last text shown on the lane's terminal
+    std::string fault;                   // loop fault message; empty if none
 };
 
 std::string renderCameraPage(const LaneView& entry, const LaneView& exit);

@@ -4,14 +4,60 @@ void Barrier::open(uint32_t nowMs)
 {
     current = BarrierState::Open;
     openedAtMs = nowMs;
+    currentAngle = BARRIER_OPEN_ANGLE;
 }
 
-void Barrier::update(uint32_t nowMs, bool loopOccupied)
+BarrierEvent Barrier::update(uint32_t nowMs, bool loopOccupied)
 {
-    if (current == BarrierState::Open && nowMs - openedAtMs >= BARRIER_MIN_OPEN_MS && !loopOccupied)
+    BarrierEvent event = BarrierEvent::None;
+
+    if (loopOccupied && !occupied)
     {
-        current = BarrierState::Closed;
+        occupiedSinceMs = nowMs;
     }
+    occupied = loopOccupied;
+    if (!occupied)
+    {
+        fault = false;
+    }
+    else if (!fault && nowMs - occupiedSinceMs >= LOOP_FAULT_MS)
+    {
+        fault = true;
+        event = BarrierEvent::LoopFault;
+    }
+
+    switch (current)
+    {
+    case BarrierState::Closed:
+        break;
+    case BarrierState::Open:
+        if (!occupied && nowMs - openedAtMs >= BARRIER_MIN_OPEN_MS)
+        {
+            current = BarrierState::Closing;
+            closingSinceMs = nowMs;
+        }
+        break;
+    case BarrierState::Closing:
+        if (occupied)
+        {
+            open(nowMs);
+            return BarrierEvent::SafetyStop;
+        }
+        uint32_t elapsed = nowMs - closingSinceMs;
+        if (elapsed >= BARRIER_CLOSE_MS)
+        {
+            current = BarrierState::Closed;
+            currentAngle = BARRIER_CLOSED_ANGLE;
+        }
+        else
+        {
+            currentAngle = BARRIER_OPEN_ANGLE -
+                           static_cast<int>(static_cast<int64_t>(BARRIER_OPEN_ANGLE - BARRIER_CLOSED_ANGLE) * elapsed /
+                                            BARRIER_CLOSE_MS);
+        }
+        break;
+    }
+    return event;
 }
 
 BarrierState Barrier::state() const
@@ -21,5 +67,30 @@ BarrierState Barrier::state() const
 
 int Barrier::angle() const
 {
-    return current == BarrierState::Open ? BARRIER_OPEN_ANGLE : BARRIER_CLOSED_ANGLE;
+    return currentAngle;
+}
+
+bool Barrier::loopFault() const
+{
+    return fault;
+}
+
+const char* barrierStateLabel(BarrierState state)
+{
+    switch (state)
+    {
+    case BarrierState::Open:
+        return "offen";
+    case BarrierState::Closing:
+        return "schliesst";
+    case BarrierState::Closed:
+        break;
+    }
+    return "geschlossen";
+}
+
+std::string loopFaultMessage(const char* laneName)
+{
+    return std::string("Sicherungsschleife ") + laneName + " länger als " + std::to_string(LOOP_FAULT_MS / 60000) +
+           " min belegt";
 }

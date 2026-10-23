@@ -10,8 +10,13 @@ namespace
     {
         html += "<div class=\"card\"><h2>";
         html += title;
-        html += "</h2><p>Schranke: <strong>";
-        html += lane.open ? "offen" : "geschlossen";
+        html += "</h2>";
+        if (!lane.fault.empty())
+        {
+            appendNotice(html, "err", lane.fault);
+        }
+        html += "<p>Schranke: <strong>";
+        html += lane.barrier;
         html += "</strong></p><div class=\"terminal ";
         html += lane.cls;
         html += "\">" + htmlEscape(lane.terminal) + "</div><form method=\"post\" action=\"";
@@ -120,7 +125,7 @@ std::string renderCameraPage(const LaneView& entry, const LaneView& exit)
     html += "<div class=\"lanes\">";
     appendLane(html, "Einfahrt", "/kamera/einfahrt", true, entry);
     appendLane(html, "Ausfahrt", "/kamera/ausfahrt", false, exit);
-    html += "</div><p class=\"muted\"><a href=\"/kamera\">Aktualisieren</a> – die Schranke schliesst nach 5 s, "
+    html += "</div><p class=\"muted\"><a href=\"/kamera\">Aktualisieren</a> – die Schranke schliesst frühestens nach 5 s, "
             "sobald die Sicherungsschleife frei ist.</p>";
     appendPageEnd(html);
     return html;

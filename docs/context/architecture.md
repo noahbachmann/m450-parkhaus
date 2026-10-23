@@ -43,7 +43,7 @@ Pico 1 has no external hardware.
 | Kasse web UI: search plate, show entry time/duration/fee, record payment | Registration web UI: add/list/delete plates (name + plate), persistent |
 | Automat web UI: pay by plate, card/TWINT/cash + change | Camera simulation UI: entry and exit plate input, optional entry time, (later) call button, abort |
 | Tariff calculation ([tariff.md](tariff.md)) | Barrier control: 2 servos, open/close |
-| Parking sessions, **persisted in flash** (survive reboot) | Safety loops + safety logic (later) |
+| Parking sessions, **persisted in flash** (survive reboot) | Safety loops + safety logic (step 7a) |
 | Payment-status endpoint for Pico 2 | Event log (later): remote openings, safety stops, faults |
 | Endpoint to open a session at entry (and close at exit) | Operator view, user «betrieb» (later) |
 
@@ -146,6 +146,18 @@ needed). Later phases may add JSON endpoints for them if the pages use fetch().
   201 (entry) or 200 with `closed`/`closed_free` (exit) opens; everything else keeps the barrier closed.
 - `lib/barrier` holds the barrier state machine (servo angles 0° closed, 90° open); the firmware writes
   the angle to the servo whenever it changes.
+
+**Barrier safety (step 7a, decided 2026-10-23):**
+- Closed → open immediately on a positive decision. Open → closing once `BARRIER_MIN_OPEN_MS` (5 s) has
+  passed and the loop is free. Closing = linear 2 s sweep 90° → 0° (`BARRIER_CLOSE_MS`).
+- Loop occupied while closing → stop and back to fully open in the same update (TF-13 < 0.5 s), event
+  «Sicherheitsabschaltung»; the 5 s minimum open time restarts.
+- Loop occupied for 5 min without a break → fault «Sicherungsschleife <Einfahrt|Ausfahrt> länger als 5 min
+  belegt», reported once per occupation, shown on the camera page until the loop is free. The barrier
+  stays open.
+- Pico 2 runs barriers and loops on **core 1** (`setup1`/`loop1`); web server and HTTP client stay on
+  core 0. Core 0 → core 1: an open-request counter; core 1 → core 0: state and fault flag. All are
+  `std::atomic` written by one core only (plain loads/stores, lock-free on the RP2040).
 
 ## Domain rules (decided 2026-10-19, step 2)
 

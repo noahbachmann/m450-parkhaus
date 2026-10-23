@@ -3,6 +3,7 @@
 #include <Servo.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <atomic>
 #include <string>
 
 #include "barrier.h"
@@ -52,6 +53,8 @@ public:
     }
 };
 
+// Barriers and loops run on core 1 (setup1/loop1), so a blocking HTTP call on core 0 never delays a
+// safety stop. The cores share only the atomics below, each written by one core.
 struct Lane
 {
     Lane(const char* laneName, uint8_t servo, uint8_t loop) : name(laneName), servoPin(servo), loopPin(loop)
@@ -61,9 +64,21 @@ struct Lane
     const char* name;
     uint8_t servoPin;
     uint8_t loopPin;
+
+    // core 0 -> core 1: incremented for every open command
+    std::atomic<uint32_t> openRequests{0};
+    // core 1 -> core 0
+    std::atomic<int> state{static_cast<int>(BarrierState::Closed)};
+    std::atomic<bool> fault{false};
+
+    // core 1 only
     Servo servo;
     Barrier barrier;
+    uint32_t seenOpenRequests = 0;
     int writtenAngle = -1;
+    BarrierState loggedState = BarrierState::Closed;
+
+    // core 0 only
     LaneView view;
 };
 
@@ -140,19 +155,22 @@ void driveServo(Lane& lane)
     {
         lane.servo.write(angle);
         lane.writtenAngle = angle;
+    }
+    if (lane.barrier.state() != lane.loggedState)
+    {
+        lane.loggedState = lane.barrier.state();
         Serial.print("[barrier] ");
         Serial.print(lane.name);
-        Serial.println(lane.barrier.state() == BarrierState::Open ? " open" : " closed");
+        Serial.print(": ");
+        Serial.println(barrierStateLabel(lane.loggedState));
     }
 }
 
 void applyGate(Lane& lane, const GateResult& r)
 {
-    unsigned long startMs = millis();
     if (r.open)
     {
-        lane.barrier.open(static_cast<uint32_t>(startMs));
-        driveServo(lane);
+        lane.openRequests.store(lane.openRequests.load() + 1);
     }
     lane.view.cls = r.cls;
     lane.view.terminal = r.message;
@@ -184,10 +202,16 @@ void onExit()
     redirect("/kamera");
 }
 
+void refreshView(Lane& lane)
+{
+    lane.view.barrier = barrierStateLabel(static_cast<BarrierState>(lane.state.load()));
+    lane.view.fault = lane.fault.load() ? loopFaultMessage(lane.name) : "";
+}
+
 void showCamera()
 {
-    entryLane.view.open = entryLane.barrier.state() == BarrierState::Open;
-    exitLane.view.open = exitLane.barrier.state() == BarrierState::Open;
+    refreshView(entryLane);
+    refreshView(exitLane);
     sendHtml(renderCameraPage(entryLane.view, exitLane.view));
 }
 
@@ -250,11 +274,29 @@ void beginLane(Lane& lane)
     driveServo(lane);
 }
 
-void updateLane(Lane& lane, unsigned long nowMs)
+void updateLane(Lane& lane, uint32_t nowMs)
 {
+    uint32_t requests = lane.openRequests.load();
+    if (requests != lane.seenOpenRequests)
+    {
+        lane.seenOpenRequests = requests;
+        lane.barrier.open(nowMs);
+    }
     bool occupied = digitalRead(lane.loopPin) == LOW;
-    lane.barrier.update(static_cast<uint32_t>(nowMs), occupied);
+    BarrierEvent event = lane.barrier.update(nowMs, occupied);
+    if (event == BarrierEvent::SafetyStop)
+    {
+        Serial.print("[safety] Sicherheitsabschaltung ");
+        Serial.println(lane.name);
+    }
+    else if (event == BarrierEvent::LoopFault)
+    {
+        Serial.print("[safety] ");
+        Serial.println(loopFaultMessage(lane.name).c_str());
+    }
     driveServo(lane);
+    lane.state.store(static_cast<int>(lane.barrier.state()));
+    lane.fault.store(lane.barrier.loopFault());
 }
 
 void report()
@@ -272,8 +314,6 @@ void setup()
 {
     Serial.begin(115200);
     statusLedBegin();
-    beginLane(entryLane);
-    beginLane(exitLane);
     if (!storageBegin())
     {
         Serial.println("LittleFS mount failed");
@@ -288,8 +328,6 @@ void loop()
     unsigned long nowMs = millis();
     netUpdate(nowMs);
     statusLedUpdate(wifiReady() && timeReady(), nowMs);
-    updateLane(entryLane, nowMs);
-    updateLane(exitLane, nowMs);
 
     if (!serverStarted && wifiReady())
     {
@@ -307,4 +345,17 @@ void loop()
         lastReportMs = nowMs;
         report();
     }
+}
+
+void setup1()
+{
+    beginLane(entryLane);
+    beginLane(exitLane);
+}
+
+void loop1()
+{
+    uint32_t nowMs = millis();
+    updateLane(entryLane, nowMs);
+    updateLane(exitLane, nowMs);
 }

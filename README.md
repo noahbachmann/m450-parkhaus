@@ -33,6 +33,7 @@ Unit- und Systemtests auf dem PC geprüft (siehe [docs/testprotokoll.md](docs/te
 | US-14 | Parkdauer und Gebühr an Kasse und Automat, angefangene Stunden und Freiminuten (AK1, AK2) | umgesetzt |
 | US-16 | Ausfahrt nur bei bezahlter Gebühr oder CHF 0.00 (AK1) | umgesetzt |
 | US-17 | Bezahlen am Automaten über das Kennzeichen: Karte, TWINT, Bargeld mit Rückgeld (AK1, AK2) | umgesetzt |
+| US-09 | Sichere Schrankenbewegung: schliesst nur bei freier Schleife, Stopp und Öffnen beim Schliessen, Störmeldung nach 5 min (AK1–3) | umgesetzt (Phase 2) |
 | Auftrag | Ein- und Ausfahrtsschranke (Servos) | umgesetzt, auf Hardware ungetestet |
 | Auftrag | Berechnung der Parkgebühr | umgesetzt |
 | Auftrag | Bezahlung an Kasse oder Automat | umgesetzt |

@@ -202,6 +202,8 @@ void test_tf04_entry_opens_and_closes_after_loop_released()
     sys.wait(10, true); // car on the loop
     TEST_ASSERT_EQUAL(BarrierState::Open, sys.entryBarrier.state());
     sys.wait(1);
+    TEST_ASSERT_EQUAL(BarrierState::Closing, sys.entryBarrier.state());
+    sys.wait(BARRIER_CLOSE_MS / 1000);
     TEST_ASSERT_EQUAL(BarrierState::Closed, sys.entryBarrier.state());
     TEST_ASSERT_EQUAL(BarrierState::Closed, sys.exitBarrier.state());
 }
@@ -383,10 +385,10 @@ void test_tf23_paid_exit_closes_session()
     std::string before = sys.page(Page::Kasse, "LU123456");
     TEST_ASSERT_TRUE(contains(before, "<td>abgeschlossen</td>"));
     TEST_ASSERT_TRUE(contains(before, "<td>1 h 21 min</td>"));
+    sys.wait((BARRIER_MIN_OPEN_MS + BARRIER_CLOSE_MS) / 1000);
+    TEST_ASSERT_EQUAL(BarrierState::Closed, sys.exitBarrier.state());
     sys.wait(MIN);
     TEST_ASSERT_TRUE(contains(sys.page(Page::Kasse, "LU123456"), "<td>1 h 21 min</td>"));
-    sys.wait(BARRIER_MIN_OPEN_MS / 1000);
-    TEST_ASSERT_EQUAL(BarrierState::Closed, sys.exitBarrier.state());
 }
 
 void test_tf24_unpaid_exit_then_pay_then_exit()

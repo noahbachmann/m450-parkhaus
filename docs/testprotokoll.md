@@ -50,6 +50,17 @@ Ergebnis = Ausgabe von `pio test -e native`, Suite `test_system` (dazu die Unit-
 
 Gefundene Fehler: keine.
 
+## Phase 2 (Testkonzept-Umfang)
+
+Unit-Tests der Schrankenlogik (`test/native/test_barrier/`). Die Uhr läuft in 10-ms-Schritten wie die
+Hauptschleife auf dem Pico.
+
+| TF | Prio | Testfunktion | Geprüft | Ergebnis |
+|---|---|---|---|---|
+| TF-12 | 1 | `test_tf12_stays_open_while_occupied` | 30 s belegt: bleibt ganz offen; schliesst erst nach Freigabe | bestanden |
+| TF-13 | 1 | `test_tf13_loop_during_closing_stops_and_reopens` | 3× Schleife während des Schliessens: Stopp im selben Durchlauf, ganz offen; danach normales Schliessen | bestanden |
+| TF-15 | 2 | `test_tf15_fault_after_five_minutes_once`, `test_camera_page_shows_loop_fault_tf15` | 4:50 keine Meldung, 5:10 «Sicherungsschleife Einfahrt länger als 5 min belegt», Schranke bleibt offen | bestanden (Eintrag im Ereignisprotokoll: Schritt 7b) |
+
 ## Nicht geprüft (nur mit Hardware möglich)
 
 | Punkt | Betroffene TF | Grund |
@@ -61,3 +72,4 @@ Gefundene Fehler: keine.
 | Echter Stromunterbruch während des Schreibens | TF-11, TF-30 | LittleFS-Glue in `src/common/storage.cpp` nur gebaut |
 | Uhrzeit per NTP (±2 s) | TF-09, TF-23 | im Test simulierte Uhr |
 | Webseiten im Browser bedienen | alle UI-Fälle | HTML wird im Test auf Inhalt geprüft, nicht im Browser |
+| Reaktionszeit < 0.5 s beim Stopp, Servo fährt wirklich hoch | TF-13 | Logik reagiert im selben Durchlauf; die Schranken laufen auf dem zweiten Prozessorkern, die echte Zeit ist ungemessen |
