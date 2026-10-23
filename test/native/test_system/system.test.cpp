@@ -653,6 +653,19 @@ void test_remote_opening_with_kasse_off_stays_closed()
     TEST_ASSERT_EQUAL(SessionStatus::Open, sys.sessions.findActive("ZH98765")->status);
 }
 
+void test_late_kasse_answer_then_retry_opens()
+{
+    System sys;
+    // Pico 1 opens the session, but its answer arrives after Pico 2's timeout: Pico 2 saw no answer.
+    TEST_ASSERT_EQUAL_INT(201, sys.postJson("/api/entry", "{\"kz\":\"LU123456\"}").status);
+    sys.wait(3);
+    GateResult retry = sys.entry("LU123456");
+    assertOpen(retry);
+    TEST_ASSERT_EQUAL_STRING("LU123456 – Willkommen, Einfahrt frei", retry.message.c_str());
+    TEST_ASSERT_EQUAL_UINT(1, sys.sessionCount("LU123456"));
+    TEST_ASSERT_EQUAL_INT64(START, sys.sessions.findActive("LU123456")->entry);
+}
+
 void test_tf31_remote_opening_at_exit_without_payment()
 {
     System sys;
@@ -779,6 +792,7 @@ int main()
     RUN_TEST(test_tf17_remote_opening_needs_reason);
     RUN_TEST(test_tf30_fault_logged);
     RUN_TEST(test_tf31_remote_opening_at_exit_without_payment);
+    RUN_TEST(test_late_kasse_answer_then_retry_opens);
     RUN_TEST(test_remote_opening_with_kasse_off_stays_closed);
     RUN_TEST(test_tf05_terminal_feedback_at_entry);
     RUN_TEST(test_tf26_exit_without_session);

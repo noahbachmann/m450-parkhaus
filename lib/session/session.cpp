@@ -57,9 +57,12 @@ EntryResult SessionStore::openEntry(const std::string& rawPlate, int64_t now, st
     {
         return EntryResult::InvalidPlate;
     }
-    if (findActive(plate) != nullptr)
+    if (const ParkingSession* s = findActive(plate))
     {
-        return EntryResult::AlreadyOpen;
+        bool unpaid = s->status == SessionStatus::Open && s->cashPaidRappen == 0;
+        bool sameEntry = backdatedEntry ? *backdatedEntry == s->entry
+                                        : now >= s->entry && now - s->entry < REPEAT_ENTRY_SECONDS;
+        return unpaid && sameEntry ? EntryResult::Repeated : EntryResult::AlreadyOpen;
     }
     int64_t entry = backdatedEntry.value_or(now);
     if (entry > now)

@@ -195,8 +195,10 @@ void test_against_real_kasse_handlers()
 {
     LocalKasse kasse;
     TEST_ASSERT_TRUE(entryRequest(regs, "ZH 98765", "", kasse).open);
+    TEST_ASSERT_TRUE(entryRequest(regs, "ZH98765", "", kasse).open); // repeated entry (late answer + retry)
+    kasse.now += REPEAT_ENTRY_SECONDS;
     TEST_ASSERT_FALSE(entryRequest(regs, "ZH98765", "", kasse).open);
-    kasse.now += 3600;
+    kasse.now += 3600 - REPEAT_ENTRY_SECONDS;
     GateResult unpaid = exitRequest("ZH98765", kasse);
     TEST_ASSERT_EQUAL_STRING("Gebühr CHF 2.00 nicht bezahlt – bitte am Automaten bezahlen", unpaid.message.c_str());
     TEST_ASSERT_TRUE(entryRequest(regs, "AG1", "", kasse).open);

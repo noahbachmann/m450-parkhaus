@@ -25,7 +25,7 @@ verified. No `test/board/` suites and no `v1.0` tag.
 | S | PC simulator (Docker / `sim_kasse` + `sim_schranken`) | done (verified by user 2026-10-23, Docker) |
 | 7b | Phase 2: event log + operator view | done (verified by user 2026-10-23, native + build) |
 | 7c | Phase 2: exit terminal | done (verified by user 2026-10-23, native + build + Docker) |
-| 7d | Phase 2: tariff page + wrap-up | awaiting user verification |
+| 7d | Phase 2: tariff page + wrap-up | awaiting user verification (+ repeated-entry fix) |
 
 ## 1 — Foundation
 
@@ -128,9 +128,9 @@ Hardware test suites under `test/board/` and the `v1.0` tag are dropped (no hard
   Shared glue in `src/sim/common/` (own HTTP server/client, Winsock or POSIX).
 - Docker: `docker compose up --build` (services `kasse`, `schranken`). Without Docker:
   `pio run -e sim_kasse -t exec` and `pio run -e sim_schranken -t exec` in two terminals.
-- Found while testing (open, needs a decision): if Pico 1 answers an entry only after Pico 2's 1000 ms
-  timeout, the session is opened although the barrier stayed closed; the retry then gets
-  «Parkvorgang bereits offen». Affects the firmware too.
+- Found while testing: if Pico 1 answers an entry only after Pico 2's 1000 ms timeout, the session was
+  opened although the barrier stayed closed and the retry got «Parkvorgang bereits offen». Fixed after 7d
+  (repeated entry within 30 s).
 - **User verifies:** `docker compose up --build`, then in the browser: register, entry (also backdated),
   pay, exit, loop toggles, `docker compose stop kasse` / `start kasse`. Optional:
   `pio run -e sim_kasse` and `-e sim_schranken` build on Windows. `pio test -e native` and `pio run`
@@ -171,9 +171,10 @@ Hardware test suites under `test/board/` and the `v1.0` tag are dropped (no hard
 - **User verifies:** `pio test -e native` → 17 suites, 174 cases passed; `pio run` → both `SUCCESS`;
   `docker compose up --build` → `http://localhost:8081/tarif`.
 
+- Fix after 7d (user decision 2026-10-23): late entry reply → `EntryResult::Repeated` within 30 s for an open,
+  unpaid session (see architecture, domain rules). `pio test -e native` → 17 suites, 177 cases.
+
 ## Open after step 7
 
-- Late entry reply (Pico 1 answers after Pico 2's 1000 ms timeout → session opened, barrier closed):
-  needs a decision, see step S. Listed as a known defect (class 2) in `docs/testprotokoll.md`.
-- TF-33 / TF-34 are manual tests; they can be run with the PC simulator.
+- TF-33 / TF-34 are manual tests; the user runs them later with the PC simulator.
 - Firmware has never run on hardware (built only).

@@ -68,6 +68,8 @@ void test_entry()
     SessionStore store;
     assertResponse(201, "{\"kz\":\"LU123456\",\"entry\":1760530000}",
                    handleEntry(store, "{\"kz\":\"lu 123 456\"}", NOW, true));
+    assertResponse(201, "{\"kz\":\"LU123456\",\"entry\":1760530000}", // retry after a late answer
+                   handleEntry(store, "{\"kz\":\"LU123456\"}", NOW + 2, true));
     assertResponse(409, "{\"error\":\"already_open\"}", handleEntry(store, "{\"kz\":\"LU123456\"}", NOW + MIN, true));
     TEST_ASSERT_EQUAL(1, store.all().size());
 }

@@ -116,5 +116,5 @@ Danach im Browser:
 ## Bekannte Einschränkungen
 
 - Firmware nur gebaut, nie auf den Picos gelaufen (ab Schritt 4 keine Hardware mehr).
-- Antwortet Pico 1 bei einer Einfahrt erst nach dem Timeout von 1000 ms, ist der Parkvorgang eröffnet,
-  obwohl die Schranke zu blieb; der zweite Versuch meldet «Parkvorgang bereits offen». Nicht behoben.
+- TF-10 von Hand: zwischen den beiden Einfahrten mindestens 30 s warten. Eine Wiederholung innert 30 s
+  gilt als dieselbe Einfahrt (falls die Antwort der Kasse zu spät kam) und öffnet die Schranke.

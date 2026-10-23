@@ -7,6 +7,8 @@
 #include <vector>
 
 constexpr size_t MAX_SESSIONS = 50;
+// A repeated entry within this time counts as the same entry (Pico 2 timed out, Pico 1 answered late).
+constexpr int64_t REPEAT_ENTRY_SECONDS = 30;
 
 enum class SessionStatus
 {
@@ -51,6 +53,7 @@ enum class EntryResult
     Ok,
     InvalidPlate,
     AlreadyOpen,
+    Repeated, // same entry again (late answer + retry): the existing session counts, nothing changes
     EntryInFuture,
     Full,
 };
@@ -77,6 +80,9 @@ class SessionStore
 public:
     // Opens a session stamped with now, or with backdatedEntry if given (must not be after now).
     // When the store is full, the oldest closed session is dropped; Full if none is closed.
+    // An open, unpaid session for the plate makes a repeated request Repeated instead of AlreadyOpen if it
+    // is the same entry: without backdating opened less than REPEAT_ENTRY_SECONDS ago, with backdating the
+    // same entry time.
     EntryResult openEntry(const std::string& rawPlate, int64_t now, std::optional<int64_t> backdatedEntry = {});
 
     // Paid -> Closed; open with fee 0 -> ClosedFree; open with fee > 0 -> Unpaid, nothing changes.

@@ -104,7 +104,8 @@ Pico 2 client timeout: **1000 ms** (keeps the entry ≤ 2 s). Timeout or connect
 
 **`POST /api/entry`** — open a session
 - body `{"kz":"LU123456"}` or `{"kz":"LU123456","entry":1760521000}` (backdated entry time)
-- 201 `{"kz":"LU123456","entry":1760530000}`
+- 201 `{"kz":"LU123456","entry":1760530000}`; also for a **repeated entry** (see domain rules), then with the
+  existing session's entry time
 - 409 `already_open` · 400 `invalid_plate` · 400 `entry_in_future` · 503 `time_not_synced` ·
   503 `store_full` (50 sessions, none closed to drop)
 
@@ -205,6 +206,11 @@ needed). Later phases may add JSON endpoints for them if the pages use fetch().
 
 - **Fee 0 (free time):** payment is refused («nothing to pay»), the session stays `open`; exit closes
   it as `closed_free`. `/api/status` reports such a session as `unbezahlt` with `fee: 0`.
+- **Repeated entry (decided 2026-10-23):** if Pico 1 answers an entry only after Pico 2's 1000 ms timeout,
+  the session exists although the barrier stayed closed. A retry for the same plate therefore succeeds
+  (`Repeated`, 201, nothing changes) if the session is open and unpaid (no cash inserted) and it is the same
+  entry: without backdating opened less than 30 s ago (`REPEAT_ENTRY_SECONDS`), with backdating the same
+  entry time. Otherwise `already_open` (TF-10: a second entry after ≥ 30 s is rejected).
 - **Paid = may leave:** a paid session closes at any later exit. No grace period, no extra fee.
 - **Session history:** at most 50 sessions in RAM/flash. When full, the oldest closed one is dropped;
   open/paid sessions are never dropped.

@@ -85,6 +85,7 @@ ApiResponse handleEntry(SessionStore& store, const std::string& body, int64_t no
     switch (store.openEntry(plate, now, backdated))
     {
     case EntryResult::Ok:
+    case EntryResult::Repeated:
         break;
     case EntryResult::AlreadyOpen:
         return error(409, "already_open");

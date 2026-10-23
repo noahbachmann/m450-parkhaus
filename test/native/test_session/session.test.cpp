@@ -66,6 +66,33 @@ void test_second_entry_while_open_is_rejected()
     TEST_ASSERT_EQUAL_INT64(NOW, store.findActive("ZH98765")->entry);
 }
 
+void test_repeated_entry_after_late_answer()
+{
+    SessionStore store;
+    store.openEntry("ZH 98765", NOW);
+    TEST_ASSERT_TRUE(EntryResult::Repeated == store.openEntry("ZH98765", NOW + 2));
+    TEST_ASSERT_TRUE(EntryResult::Repeated == store.openEntry("ZH98765", NOW + REPEAT_ENTRY_SECONDS - 1));
+    TEST_ASSERT_TRUE(EntryResult::AlreadyOpen == store.openEntry("ZH98765", NOW + REPEAT_ENTRY_SECONDS));
+    TEST_ASSERT_EQUAL(1, store.all().size());
+    TEST_ASSERT_EQUAL_INT64(NOW, store.findActive("ZH98765")->entry);
+
+    store.openEntry("LU123456", NOW, NOW - HOUR); // backdated: same entry time = same entry
+    TEST_ASSERT_TRUE(EntryResult::Repeated == store.openEntry("LU123456", NOW + 2, NOW - HOUR));
+    TEST_ASSERT_TRUE(EntryResult::AlreadyOpen == store.openEntry("LU123456", NOW + 2, NOW - 2 * HOUR));
+    TEST_ASSERT_TRUE(EntryResult::AlreadyOpen == store.openEntry("LU123456", NOW + 2));
+}
+
+void test_repeated_entry_not_after_payment()
+{
+    SessionStore store;
+    store.openEntry("AG1", NOW - 20 * MIN);
+    pay(store, "AG1", PayMethod::Cash, NOW, 100); // partial cash
+    TEST_ASSERT_TRUE(EntryResult::AlreadyOpen == store.openEntry("AG1", NOW, NOW - 20 * MIN));
+    store.openEntry("UR1", NOW - 2);
+    pay(store, "UR1", PayMethod::CardOk, NOW); // nothing to pay in free time: stays open, unpaid
+    TEST_ASSERT_TRUE(EntryResult::Repeated == store.openEntry("UR1", NOW));
+}
+
 void test_second_entry_while_paid_is_rejected()
 {
     SessionStore store;
@@ -210,6 +237,8 @@ int main()
     RUN_TEST(test_entry_in_future_is_rejected);
     RUN_TEST(test_invalid_plate_is_rejected);
     RUN_TEST(test_second_entry_while_open_is_rejected);
+    RUN_TEST(test_repeated_entry_after_late_answer);
+    RUN_TEST(test_repeated_entry_not_after_payment);
     RUN_TEST(test_second_entry_while_paid_is_rejected);
     RUN_TEST(test_normalized_entry_and_exit_match);
     RUN_TEST(test_paid_exit_closes_with_exit_time);

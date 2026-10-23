@@ -17,7 +17,8 @@ struct ApiResponse
 // GET /api/status?kz=<plate>
 ApiResponse handleStatus(const SessionStore& store, const std::string& kzParam, int64_t now);
 
-// POST /api/entry, body {"kz":"..."} or {"kz":"...","entry":<epoch>}
+// POST /api/entry, body {"kz":"..."} or {"kz":"...","entry":<epoch>}. A repeated entry (see
+// SessionStore::openEntry) answers 201 with the existing session's entry time.
 ApiResponse handleEntry(SessionStore& store, const std::string& body, int64_t now, bool timeSynced);
 
 // POST /api/exit, body {"kz":"..."}; {"kz":"...","override":true} = operator remote opening (closes unpaid

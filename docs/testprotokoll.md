@@ -34,7 +34,7 @@ Ergebnis = Ausgabe von `pio test -e native`, Suite `test_system` (dazu die Unit-
 | TF-07 | 1 | `test_tf07_unregistered_stays_closed_no_session` | Bleibt zu, Hinweis Ruftaste, keine Sitzung an der Kasse | bestanden |
 | TF-08 | 1 | `test_tf08_ten_entry_cycles` | 10 Zyklen KZ-01/KZ-02 abwechselnd, jedes Mal geöffnet | Ablauf bestanden, Zeitmessung (Video) nicht möglich |
 | TF-09 | 1 | `test_tf09_entry_time_and_running_duration` | Einfahrtszeit sekundengenau, Format `TT.MM.JJJJ HH:MM:SS`, Dauer wächst | bestanden |
-| TF-10 | 2 | `test_tf10_second_entry_rejected` | «Parkvorgang bereits offen – bitte Ruftaste drücken», eine Sitzung, Zeit unverändert | bestanden |
+| TF-10 | 2 | `test_tf10_second_entry_rejected` | «Parkvorgang bereits offen – bitte Ruftaste drücken», eine Sitzung, Zeit unverändert (zweite Einfahrt nach ≥ 30 s; früher gilt als Wiederholung derselben Einfahrt) | bestanden |
 | TF-11 | 2 | `test_tf11_kasse_off_at_entry` | Ohne Pico 1: zu, «Kasse nicht erreichbar …», keine Sitzung; danach Zeit des 2. Versuchs | bestanden |
 | TF-18 | 1 | `test_tf18_reference_fees_via_backdated_entry` | R-01..R-11 über rückdatierte Einfahrt an der Kasse exakt; R-12 abgelehnt | bestanden |
 | TF-19 | 2 | `test_tf19_duration_and_fee_at_kasse_and_automat`, `test_tariff_page_us14_tf19`, `test_tariff_linked_from_kasse_and_automat_tf19` | «1 h 20 min», «CHF 4.00», Hinweis 2 angefangene Stunden + 15 Freiminuten an Kasse und Automat; Tarifseite von beiden aus erreichbar, Werte gleich wie tariff.md (R-02..R-11) | bestanden |
@@ -48,7 +48,7 @@ Ergebnis = Ausgabe von `pio test -e native`, Suite `test_system` (dazu die Unit-
 | TF-30 | 1 | `test_tf30_kasse_off_at_exit_paid_status_persisted` | Ohne Pico 1 beide zu; nach Neustart KZ-01 noch bezahlt und öffnet | bestanden |
 | TF-32 | 1 | `test_tf32_whole_system` | Registrieren, Einfahrt −2 h 30 min, CHF 6.00, 1. Ausfahrt zu, Rückgeld CHF 4.00, 2. Ausfahrt offen | bestanden |
 
-Gefundene Fehler: keine.
+Gefundene Fehler in diesen Testfällen: keine (siehe unten).
 
 ## Phase 2 (Testkonzept-Umfang)
 
@@ -80,11 +80,11 @@ Hauptschleife auf dem Pico), der Leitstelle (`test/native/test_operator_view/`) 
 | TF-33 | 3 | Usability-Test mit einer fremden Person («Bezahle das Parken für das Auto ZH 98765.») – manuell, mit dem PC-Simulator möglich |
 | TF-34 | 3 | 45 min exploratives Testen – manuell, mit dem PC-Simulator möglich |
 
-## Bekannter Fehler
+## Gefundene Fehler
 
 | Klasse | Beschreibung | Status |
 |---|---|---|
-| 2 | Antwortet Pico 1 bei einer Einfahrt erst nach dem Timeout (1000 ms), wird der Parkvorgang trotzdem eröffnet, die Schranke bleibt aber zu; der zweite Versuch meldet «Parkvorgang bereits offen». Gefunden im PC-Simulator mit angehaltenem Kasse-Container. | offen |
+| 2 | Antwortet Pico 1 bei einer Einfahrt erst nach dem Timeout (1000 ms), wird der Parkvorgang trotzdem eröffnet, die Schranke bleibt aber zu; der zweite Versuch meldete «Parkvorgang bereits offen». Gefunden im PC-Simulator mit angehaltenem Kasse-Container. | behoben (23.10.2026): eine Wiederholung innert 30 s für einen offenen, unbezahlten Parkvorgang gilt als dieselbe Einfahrt und öffnet. Tests `test_late_kasse_answer_then_retry_opens`, `test_repeated_entry_*`; im Simulator nachgestellt. |
 
 ## Nicht geprüft (nur mit Hardware möglich)
 
