@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdint.h>
 #include <string>
 
 #include "registration.h"
@@ -30,6 +31,8 @@ struct GateResult
     std::string plate;    // normalized input
     std::string message;  // German terminal text
     bool unreachable = false; // Pico 1 didn't answer (logged as a fault)
+    bool unpaid = false;      // exit refused because of an unpaid fee (payment offered at the terminal)
+    uint32_t feeRappen = 0;   // the unpaid fee
 };
 
 // Entry: valid + registered plate -> POST /api/entry. entryTimeInput empty = now (Pico 1 stamps it),

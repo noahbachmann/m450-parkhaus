@@ -80,6 +80,10 @@ namespace
         {
             appendNotice(html, "err", l.fault);
         }
+        if (!l.call.empty())
+        {
+            appendNotice(html, "info", l.call);
+        }
         html += "<table>";
         appendRow(html, "Schranke", l.barrier);
         appendRow(html, "Letztes Kennzeichen", l.lastPlate.empty() ? "–" : l.lastPlate);
@@ -103,9 +107,11 @@ namespace
         bool filtered = eventTypeFromName(filter, wanted);
         html += "<h2>Ereignisprotokoll</h2><form method=\"get\" action=\"/betrieb\"><label>Ereignis "
                 "<select name=\"filter\"><option value=\"\">alle</option>";
-        for (EventType t : {EventType::SafetyStop, EventType::LoopFault, EventType::RemoteOpening,
-                            EventType::KasseUnreachable, EventType::CallButton})
+        size_t typeCount = 0;
+        const EventType* types = allEventTypes(typeCount);
+        for (size_t i = 0; i < typeCount; ++i)
         {
+            EventType t = types[i];
             html += "<option value=\"";
             html += eventTypeName(t);
             html += filtered && t == wanted ? "\" selected>" : "\">";

@@ -164,6 +164,8 @@ void test_exit_unpaid_and_errors_tf24_tf26_tf30()
     GateResult unpaid = exitRequest("ZH98765", fake);
     TEST_ASSERT_FALSE(unpaid.open);
     TEST_ASSERT_EQUAL_STRING("Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen", unpaid.message.c_str());
+    TEST_ASSERT_TRUE(unpaid.unpaid);
+    TEST_ASSERT_EQUAL_UINT32(600, unpaid.feeRappen);
     fake.reply = {404, "{\"error\":\"no_session\"}"};
     TEST_ASSERT_EQUAL_STRING("Kein Parkvorgang gefunden – bitte Ruftaste drücken",
                              exitRequest("SZ555", fake).message.c_str());

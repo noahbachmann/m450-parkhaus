@@ -20,7 +20,8 @@ enum class EventType
     LoopFault,        // «Störung Sicherungsschleife»
     RemoteOpening,    // «Fernöffnung»
     KasseUnreachable, // «Kasse nicht erreichbar»
-    CallButton,       // «Ruftaste» (7c)
+    CallButton,       // «Ruftaste»
+    PaymentAlert,     // «Zahlung 5× abgelehnt»
 };
 
 struct Event
@@ -50,7 +51,10 @@ private:
 // «Einfahrt», «Ausfahrt», "" for None.
 const char* gateLaneLabel(GateLane lane);
 const char* eventTypeLabel(EventType type);
-// File/form names: "safety_stop", "loop_fault", "remote_opening", "kasse_unreachable", "call_button".
+// File/form names: "safety_stop", "loop_fault", "remote_opening", "kasse_unreachable", "call_button",
+// "payment_alert".
+// All types in display order (filter list).
+const EventType* allEventTypes(size_t& count);
 const char* eventTypeName(EventType type);
 bool eventTypeFromName(const std::string& name, EventType& type);
 const char* gateLaneName(GateLane lane); // "", "entry", "exit"

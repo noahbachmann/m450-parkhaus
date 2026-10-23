@@ -18,6 +18,7 @@
 #include "secrets.h"
 #include "status_led.h"
 #include "storage.h"
+#include "terminal.h"
 #include "testdata.h"
 
 #ifndef OPERATOR_PASSWORD
@@ -118,6 +119,7 @@ struct Lane
     Lane(GateLane laneId, uint8_t servo, uint8_t loop)
         : id(laneId), name(gateLaneLabel(laneId)), servoPin(servo), loopPin(loop)
     {
+        terminal.lane = laneId;
     }
 
     GateLane id;
@@ -141,7 +143,7 @@ struct Lane
 
     // core 0 only
     LaneView view;
-    std::string lastPlate;
+    LaneTerminal terminal;
 };
 
 WebServer server(80);
@@ -256,13 +258,13 @@ void openBarrier(Lane& lane)
     lane.openRequests.store(lane.openRequests.load() + 1);
 }
 
-void applyGate(Lane& lane, const GateResult& r)
+// Shows a terminal result (gate decision, payment, call, abort) and opens the barrier if it says so.
+void showOnTerminal(Lane& lane, const GateResult& r)
 {
     if (r.open)
     {
         openBarrier(lane);
     }
-    lane.lastPlate = r.plate;
     if (logGateResult(eventLog, lane.id, r, nowUtc()))
     {
         saveEvents();
@@ -275,6 +277,47 @@ void applyGate(Lane& lane, const GateResult& r)
     Serial.print(r.plate.c_str());
     Serial.print(": ");
     Serial.println(r.message.c_str());
+}
+
+void applyGate(Lane& lane, const GateResult& r)
+{
+    recordGate(lane.terminal, r);
+    showOnTerminal(lane, r);
+}
+
+Lane* laneArg()
+{
+    GateLane id = GateLane::None;
+    gateLaneFromName(argOf("lane"), id);
+    return id == GateLane::Entry ? &entryLane : id == GateLane::Exit ? &exitLane : nullptr;
+}
+
+void onCallButton()
+{
+    Lane* lane = laneArg();
+    if (lane != nullptr)
+    {
+        showOnTerminal(*lane, pressCallButton(lane->terminal, nowUtc(), eventLog));
+        saveEvents();
+    }
+    redirect("/kamera");
+}
+
+void onAbort()
+{
+    showOnTerminal(exitLane, abortAtTerminal(exitLane.terminal));
+    redirect("/kamera");
+}
+
+void onTerminalPay()
+{
+    size_t eventsBefore = eventLog.all().size();
+    showOnTerminal(exitLane, payAtTerminal(exitLane.terminal, argOf("method"), nowUtc(), kasse, eventLog));
+    if (eventLog.all().size() != eventsBefore)
+    {
+        saveEvents();
+    }
+    redirect("/kamera");
 }
 
 void onEntry()
@@ -301,6 +344,8 @@ void refreshView(Lane& lane)
 {
     lane.view.barrier = barrierStateLabel(static_cast<BarrierState>(lane.state.load()));
     lane.view.fault = lane.fault.load() ? loopFaultMessage(lane.name) : "";
+    lane.view.payPlate = lane.terminal.payPlate;
+    lane.view.payFee = lane.terminal.payPlate.empty() ? "" : formatChf(lane.terminal.payFeeRappen);
 }
 
 void showCamera()
@@ -348,9 +393,10 @@ OperatorLane operatorLane(Lane& lane)
     OperatorLane o;
     o.lane = lane.id;
     o.barrier = barrierStateLabel(static_cast<BarrierState>(lane.state.load()));
-    o.lastPlate = lane.lastPlate;
-    o.status = laneStatus(kasse, lane.lastPlate);
+    o.lastPlate = lane.terminal.lastPlate;
+    o.status = laneStatus(kasse, lane.terminal.lastPlate);
     o.fault = lane.fault.load() ? loopFaultMessage(lane.name) : "";
+    o.call = callLabel(lane.terminal);
     return o;
 }
 
@@ -376,7 +422,9 @@ void onRemoteOpen()
     RemoteOpenResult r = remoteOpen(id, argOf("kz"), argOf("reason"), nowUtc(), kasse, eventLog);
     if (r.open)
     {
-        openBarrier(id == GateLane::Entry ? entryLane : exitLane);
+        Lane& lane = id == GateLane::Entry ? entryLane : exitLane;
+        openBarrier(lane);
+        recordRemoteOpening(lane.terminal);
     }
     if (r.logged)
     {
@@ -421,6 +469,9 @@ void setupRoutes()
     server.on("/kamera", HTTP_GET, showCamera);
     server.on("/kamera/einfahrt", HTTP_POST, onEntry);
     server.on("/kamera/ausfahrt", HTTP_POST, onExit);
+    server.on("/kamera/ruftaste", HTTP_POST, onCallButton);
+    server.on("/kamera/abbrechen", HTTP_POST, onAbort);
+    server.on("/kamera/bezahlen", HTTP_POST, onTerminalPay);
     server.on("/registrierung", HTTP_GET, showRegistration);
     server.on("/registrierung/add", HTTP_POST,
               []() { finishRegistrationForm(handleRegistrationForm(registrations, argOf("name"), argOf("kz"))); });

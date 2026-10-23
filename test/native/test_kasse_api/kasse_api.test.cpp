@@ -137,6 +137,29 @@ void test_exit_override_tf31()
     TEST_ASSERT_TRUE(SessionStatus::Open == store.findActive("UR1")->status);
 }
 
+void test_pay_at_exit_terminal_tf28()
+{
+    SessionStore store = testData();
+    assertResponse(402, "{\"error\":\"declined\"}",
+                   handlePay(store, "{\"kz\":\"ZH98765\",\"method\":\"card_declined\"}", NOW, true));
+    TEST_ASSERT_TRUE(SessionStatus::Open == store.findActive("ZH98765")->status);
+    assertResponse(200, "{\"kz\":\"ZH98765\",\"status\":\"bezahlt\",\"amount\":600,\"method\":\"twint\",\"tx\":\"TX-000002\"}",
+                   handlePay(store, "{\"kz\":\"zh 98765\",\"method\":\"twint\"}", NOW, true));
+    assertResponse(409, "{\"error\":\"already_paid\"}",
+                   handlePay(store, "{\"kz\":\"ZH98765\",\"method\":\"card_ok\"}", NOW, true));
+    assertResponse(409, "{\"error\":\"nothing_to_pay\"}",
+                   handlePay(store, "{\"kz\":\"AG1\",\"method\":\"card_ok\"}", NOW, true));
+    assertResponse(404, "{\"error\":\"no_session\"}",
+                   handlePay(store, "{\"kz\":\"SZ555\",\"method\":\"card_ok\"}", NOW, true));
+    assertResponse(400, "{\"error\":\"bad_request\"}",
+                   handlePay(store, "{\"kz\":\"SZ555\",\"method\":\"cash\"}", NOW, true));
+    assertResponse(400, "{\"error\":\"bad_request\"}", handlePay(store, "{\"kz\":\"SZ555\"}", NOW, true));
+    assertResponse(400, "{\"error\":\"invalid_plate\"}",
+                   handlePay(store, "{\"kz\":\"L1\",\"method\":\"twint\"}", NOW, true));
+    assertResponse(503, "{\"error\":\"time_not_synced\"}",
+                   handlePay(store, "{\"kz\":\"AG1\",\"method\":\"twint\"}", NOW, false));
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -149,5 +172,6 @@ int main()
     RUN_TEST(test_exit);
     RUN_TEST(test_exit_errors);
     RUN_TEST(test_exit_override_tf31);
+    RUN_TEST(test_pay_at_exit_terminal_tf28);
     return UNITY_END();
 }

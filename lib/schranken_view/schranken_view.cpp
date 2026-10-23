@@ -8,6 +8,22 @@ const char* const SCHRANKEN_NAV = "<a href=\"/kamera\">Kamerasimulation</a>"
 namespace
 {
 
+    void appendExitTerminal(std::string& html, const LaneView& lane)
+    {
+        if (!lane.payPlate.empty())
+        {
+            html += "<form method=\"post\" action=\"/kamera/bezahlen\" class=\"methods\"><p><strong>Gebühr " +
+                    htmlEscape(lane.payFee) + " für " + htmlEscape(lane.payPlate) +
+                    " – hier bezahlen</strong></p>"
+                    "<label><input type=\"radio\" name=\"method\" value=\"card_ok\" checked> Karte OK</label>"
+                    "<label><input type=\"radio\" name=\"method\" value=\"card_declined\"> Karte abgelehnt</label>"
+                    "<label><input type=\"radio\" name=\"method\" value=\"twint\"> TWINT</label>"
+                    "<button type=\"submit\">Bezahlen</button></form>";
+        }
+        html += "<form method=\"post\" action=\"/kamera/abbrechen\" class=\"inline\">"
+                "<button type=\"submit\">Fahrzeug wendet</button></form> ";
+    }
+
     void appendLane(std::string& html, const char* title, const char* action, bool withEntryTime, const LaneView& lane)
     {
         html += "<div class=\"card\"><h2>";
@@ -29,7 +45,15 @@ namespace
             html += "<p><label>Einfahrtszeit (leer = jetzt) <input type=\"datetime-local\" name=\"entry\" step=\"1\">"
                     "</label></p>";
         }
-        html += "<button type=\"submit\">Erfassen</button></form></div>";
+        html += "<button type=\"submit\">Erfassen</button></form>";
+        if (!withEntryTime)
+        {
+            appendExitTerminal(html, lane);
+        }
+        html += "<form method=\"post\" action=\"/kamera/ruftaste\" class=\"inline\"><input type=\"hidden\" "
+                "name=\"lane\" value=\"";
+        html += withEntryTime ? "entry" : "exit";
+        html += "\"><button type=\"submit\">Ruftaste</button></form></div>";
     }
 }
 

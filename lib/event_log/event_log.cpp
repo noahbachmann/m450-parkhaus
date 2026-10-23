@@ -15,7 +15,11 @@ namespace
         {EventType::RemoteOpening, "remote_opening", "Fernöffnung"},
         {EventType::KasseUnreachable, "kasse_unreachable", "Kasse nicht erreichbar"},
         {EventType::CallButton, "call_button", "Ruftaste"},
+        {EventType::PaymentAlert, "payment_alert", "Zahlung 5× abgelehnt"},
     };
+
+    const EventType ORDER[] = {EventType::SafetyStop,       EventType::LoopFault,  EventType::RemoteOpening,
+                               EventType::KasseUnreachable, EventType::CallButton, EventType::PaymentAlert};
 
     const TypeInfo& infoOf(EventType type)
     {
@@ -70,6 +74,12 @@ const char* gateLaneLabel(GateLane lane)
         break;
     }
     return "";
+}
+
+const EventType* allEventTypes(size_t& count)
+{
+    count = sizeof(ORDER) / sizeof(ORDER[0]);
+    return ORDER;
 }
 
 const char* eventTypeLabel(EventType type)

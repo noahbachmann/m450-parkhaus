@@ -92,6 +92,15 @@ HttpResponse route(const HttpRequest& req)
         }
         return api(r);
     }
+    if (post && req.path == "/api/pay")
+    {
+        ApiResponse r = handlePay(sessions, req.body, nowUtc(), true);
+        if (r.status == 200)
+        {
+            saveSessions();
+        }
+        return api(r);
+    }
     if (get && req.path == "/")
     {
         return redirect("/kasse");

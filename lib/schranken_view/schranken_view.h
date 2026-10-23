@@ -26,6 +26,8 @@ struct LaneView
     const char* cls = "";                // class of the last terminal text: "ok", "err" or empty
     std::string terminal;                // last text shown on the lane's terminal
     std::string fault;                   // loop fault message; empty if none
+    std::string payPlate;                // exit: plate with an unpaid fee -> payment form; empty = none
+    std::string payFee;                  // "CHF 6.00"
 };
 
 std::string renderCameraPage(const LaneView& entry, const LaneView& exit);

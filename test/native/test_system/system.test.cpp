@@ -13,6 +13,7 @@
 #include "registration.h"
 #include "schranken_view.h"
 #include "session.h"
+#include "terminal.h"
 #include "testdata.h"
 
 // Phase-1 system test (test-concept.md, P1 cases) without hardware: Pico 2 logic (registrations, gate,
@@ -47,6 +48,8 @@ namespace
         EventLog log;
         std::string lastEntryPlate;
         std::string lastExitPlate;
+        LaneTerminal entryTerminal;
+        LaneTerminal exitTerminal;
         int64_t now = START;
         uint32_t nowMs = 1000;
         bool kasseOn = true;
@@ -55,6 +58,8 @@ namespace
         {
             loadDefaultRegistrations(registrations);
             loadDefaultSessions(sessions);
+            entryTerminal.lane = GateLane::Entry;
+            exitTerminal.lane = GateLane::Exit;
         }
 
         HttpReply postJson(const char* path, const std::string& body) override
@@ -66,6 +71,7 @@ namespace
             std::string p = path;
             ApiResponse r = p == "/api/entry"  ? handleEntry(sessions, body, now, true)
                             : p == "/api/exit" ? handleExit(sessions, body, now, true)
+                            : p == "/api/pay"  ? handlePay(sessions, body, now, true)
                                                : ApiResponse{404, "{\"error\":\"not_found\"}"};
             return {r.status, r.body};
         }
@@ -88,6 +94,7 @@ namespace
                 entryBarrier.open(nowMs);
             }
             lastEntryPlate = r.plate;
+            recordGate(entryTerminal, r);
             logGateResult(log, GateLane::Entry, r, now);
             return r;
         }
@@ -106,6 +113,7 @@ namespace
                 exitBarrier.open(nowMs);
             }
             lastExitPlate = r.plate;
+            recordGate(exitTerminal, r);
             logGateResult(log, GateLane::Exit, r, now);
             return r;
         }
@@ -144,8 +152,28 @@ namespace
             if (r.open)
             {
                 (lane == GateLane::Entry ? entryBarrier : exitBarrier).open(nowMs);
+                recordRemoteOpening(lane == GateLane::Entry ? entryTerminal : exitTerminal);
             }
             return r;
+        }
+
+        // Exit terminal: pay, «Fahrzeug wendet», «Ruftaste».
+        GateResult payAtExit(const char* method)
+        {
+            GateResult r = payAtTerminal(exitTerminal, method, now, *this, log);
+            if (r.open)
+            {
+                exitBarrier.open(nowMs);
+            }
+            logGateResult(log, GateLane::Exit, r, now);
+            return r;
+        }
+
+        OperatorLane operatorLane(GateLane lane)
+        {
+            LaneTerminal& t = lane == GateLane::Entry ? entryTerminal : exitTerminal;
+            Barrier& b = lane == GateLane::Entry ? entryBarrier : exitBarrier;
+            return {lane, barrierStateLabel(b.state()), t.lastPlate, laneStatus(*this, t.lastPlate), "", callLabel(t)};
         }
 
         // Advances time in 100 ms steps (closing takes 2 s, so a loop can hit it mid-sweep).
@@ -644,6 +672,83 @@ void test_tf31_remote_opening_at_exit_without_payment()
     TEST_ASSERT_TRUE(contains(sys.page(Page::Kasse, "ZH98765"), "<td>ohne Zahlung ausgefahren</td>"));
 }
 
+void test_tf05_terminal_feedback_at_entry()
+{
+    System sys;
+    GateResult welcome = sys.entry("LU123456");
+    TEST_ASSERT_EQUAL_STRING("LU123456 – Willkommen, Einfahrt frei", welcome.message.c_str());
+    TEST_ASSERT_TRUE(welcome.open); // text and opening come from the same decision
+    sys.wait(10);
+    assertClosed(sys.entry("BE4711"), "BE4711 – nicht registriert, bitte Ruftaste drücken");
+}
+
+void test_tf26_exit_without_session()
+{
+    System sys;
+    assertClosed(sys.exit("SZ555"), "Kein Parkvorgang gefunden – bitte Ruftaste drücken");
+    TEST_ASSERT_EQUAL(BarrierState::Closed, sys.exitBarrier.state());
+}
+
+void test_tf27_car_turns_around()
+{
+    System sys;
+    assertOpen(sys.entryAgo("ZH98765", 58 * MIN));
+    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 2.00 nicht bezahlt – bitte am Automaten bezahlen");
+    GateResult r = abortAtTerminal(sys.exitTerminal);
+    TEST_ASSERT_EQUAL_STRING("Vorgang abgebrochen – Fahrzeug wendet", r.message.c_str());
+    const ParkingSession* s = sys.sessions.findActive("ZH98765");
+    TEST_ASSERT_EQUAL(SessionStatus::Open, s->status);
+    TEST_ASSERT_EQUAL_INT64(0, s->exit);
+    TEST_ASSERT_TRUE(contains(sys.page(Page::Kasse, "ZH98765"), "<td>CHF 2.00</td>"));
+    sys.wait(3 * MIN);
+    std::string html = sys.page(Page::Kasse, "ZH98765");
+    TEST_ASSERT_TRUE(contains(html, "<td>CHF 4.00</td>"));
+    TEST_ASSERT_TRUE(contains(html, "<td>offen</td>"));
+    TEST_ASSERT_FALSE(contains(html, "<th>Ausfahrt</th><td>"));
+}
+
+void test_tf28_payment_at_exit_terminal()
+{
+    System sys;
+    assertOpen(sys.entryAgo("LU123456", 80 * MIN));
+    assertOpen(sys.entryAgo("ZH98765", 2 * HOUR + 30 * MIN));
+
+    sys.exit("LU123456");
+    assertClosed(sys.payAtExit("card_declined"), "Zahlung abgelehnt – anderes Zahlungsmittel wählen");
+    TEST_ASSERT_EQUAL(BarrierState::Closed, sys.exitBarrier.state());
+    assertOpen(sys.payAtExit("twint"));
+    TEST_ASSERT_EQUAL(BarrierState::Open, sys.exitBarrier.state());
+    TEST_ASSERT_EQUAL(SessionStatus::Closed, sys.sessions.findLatest("LU123456")->status);
+    sys.wait(10);
+
+    sys.exit("ZH98765");
+    for (int i = 0; i < 4; ++i)
+    {
+        assertClosed(sys.payAtExit("card_declined"), "Zahlung abgelehnt – anderes Zahlungsmittel wählen");
+    }
+    assertClosed(sys.payAtExit("card_declined"), "Zahlung abgelehnt – Leitstelle wurde benachrichtigt");
+    TEST_ASSERT_EQUAL(BarrierState::Closed, sys.exitBarrier.state());
+    TEST_ASSERT_EQUAL_UINT(1, sys.eventCount(EventType::PaymentAlert));
+    OperatorLane lane = sys.operatorLane(GateLane::Exit);
+    TEST_ASSERT_EQUAL_STRING("ZH98765", lane.lastPlate.c_str());
+    TEST_ASSERT_TRUE(contains(lane.call, "Zahlung 5× abgelehnt – ZH98765"));
+    std::string html = renderOperatorPage(sys.operatorLane(GateLane::Entry), lane, sys.log, "", Notice{});
+    TEST_ASSERT_TRUE(contains(html, "<td>Zahlung 5× abgelehnt</td><td>Ausfahrt</td><td>ZH98765</td>"));
+}
+
+void test_call_button_reaches_operator()
+{
+    System sys;
+    sys.entry("BE4711");
+    pressCallButton(sys.entryTerminal, sys.now, sys.log);
+    OperatorLane lane = sys.operatorLane(GateLane::Entry);
+    TEST_ASSERT_EQUAL_STRING("Ruftaste gedrückt – BE4711 (15.10.2025 14:06:40)", lane.call.c_str());
+    TEST_ASSERT_EQUAL_STRING("kein Parkvorgang", lane.status.c_str());
+    TEST_ASSERT_EQUAL_UINT(1, sys.eventCount(EventType::CallButton));
+    sys.remote(GateLane::Entry, "BE4711", "Kennzeichen nicht erkannt");
+    TEST_ASSERT_EQUAL_STRING("", sys.operatorLane(GateLane::Entry).call.c_str());
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -675,5 +780,10 @@ int main()
     RUN_TEST(test_tf30_fault_logged);
     RUN_TEST(test_tf31_remote_opening_at_exit_without_payment);
     RUN_TEST(test_remote_opening_with_kasse_off_stays_closed);
+    RUN_TEST(test_tf05_terminal_feedback_at_entry);
+    RUN_TEST(test_tf26_exit_without_session);
+    RUN_TEST(test_tf27_car_turns_around);
+    RUN_TEST(test_tf28_payment_at_exit_terminal);
+    RUN_TEST(test_call_button_reaches_operator);
     return UNITY_END();
 }

@@ -27,11 +27,11 @@ Unit- und Systemtests auf dem PC geprüft (siehe [docs/testprotokoll.md](docs/te
 | ID | Anforderung | Status |
 |---|---|---|
 | US-01 | Registrierung der Kennzeichen über die Weboberfläche (AK2, AK4: Name + Kennzeichen, keine Duplikate) | umgesetzt |
-| US-06 | Einfahrtsschranke öffnet bei registriertem Kennzeichen (AK1, AK2, Normalisierung statt AK3) | umgesetzt |
+| US-06 | Einfahrtsschranke öffnet bei registriertem Kennzeichen (AK1, AK2, Normalisierung statt AK3), Terminal zeigt das erkannte Kennzeichen (AK4) | umgesetzt |
 | US-07 | Parkuhr startet automatisch bei der Einfahrt, ein offener Parkvorgang pro Kennzeichen (AK1, 2, 4, 5) | umgesetzt |
-| US-13 | Erkennung bei der Ausfahrt, Parkvorgang wird beendet (AK1, AK2) | umgesetzt |
+| US-13 | Erkennung bei der Ausfahrt, Parkvorgang wird beendet (AK1, AK2); ohne Parkvorgang bleibt die Schranke zu (AK3); «Fahrzeug wendet» lässt den Parkvorgang offen (AK4) | umgesetzt |
 | US-14 | Parkdauer und Gebühr an Kasse und Automat, angefangene Stunden und Freiminuten (AK1, AK2) | umgesetzt |
-| US-16 | Ausfahrt nur bei bezahlter Gebühr oder CHF 0.00 (AK1); jede Öffnung ohne Zahlung wird mit Grund und Benutzer protokolliert (AK5) | umgesetzt |
+| US-16 | Ausfahrt nur bei bezahlter Gebühr oder CHF 0.00 (AK1); abgelehnte Zahlung mit Grund (AK2), Bezahlen direkt am Ausfahrtsterminal (AK3), nach 5 Ablehnungen wird die Leitstelle benachrichtigt (AK4); jede Öffnung ohne Zahlung wird mit Grund und Benutzer protokolliert (AK5) | umgesetzt |
 | US-17 | Bezahlen am Automaten über das Kennzeichen: Karte, TWINT, Bargeld mit Rückgeld (AK1, AK2) | umgesetzt |
 | US-08 | Hilfe bei nicht erkanntem Kennzeichen: Leitstelle sieht Spur, Kennzeichen, Zahlungsstatus; Fernöffnung nur mit Grund, eröffnet bei der Einfahrt einen Parkvorgang, wird protokolliert (AK2–5) | umgesetzt (Phase 2) |
 | US-09 | Sichere Schrankenbewegung: schliesst nur bei freier Schleife, Stopp und Öffnen beim Schliessen, Störmeldung nach 5 min (AK1–3) | umgesetzt (Phase 2) |
@@ -45,7 +45,7 @@ Unit- und Systemtests auf dem PC geprüft (siehe [docs/testprotokoll.md](docs/te
 |---|---|---|
 | Pico 1 | `/kasse`, `/automat` | Kennzeichen suchen, Dauer und Gebühr, bezahlen; Kasse mit Liste aller Parkvorgänge |
 | Pico 1 | `/api/status`, `/api/entry`, `/api/exit` | JSON-Schnittstelle für Pico 2 |
-| Pico 2 | `/kamera` | Kamerasimulation: Kennzeichen bei Ein- und Ausfahrt eingeben, optional rückdatierte Einfahrtszeit |
+| Pico 2 | `/kamera` | Kamerasimulation: Kennzeichen bei Ein- und Ausfahrt eingeben, optional rückdatierte Einfahrtszeit; Ruftaste, «Fahrzeug wendet», Bezahlen am Ausfahrtsterminal |
 | Pico 2 | `/registrierung` | Kennzeichen registrieren, löschen, Testdaten zurücksetzen |
 | Pico 2 | `/betrieb` | Leitstelle (Benutzer «betrieb»): Spuren, Fernöffnung mit Grund, Ereignisprotokoll mit Filter |
 

@@ -116,6 +116,16 @@ void onApiExit()
     sendApi(r);
 }
 
+void onApiPay()
+{
+    ApiResponse r = handlePay(sessions, argOf("plain"), nowUtc(), timeReady());
+    if (r.status == 200)
+    {
+        saveSessions();
+    }
+    sendApi(r);
+}
+
 void showPage(Page page)
 {
     Notice notice;
@@ -162,6 +172,7 @@ void setupRoutes()
     server.on("/api/status", HTTP_GET, onApiStatus);
     server.on("/api/entry", HTTP_POST, onApiEntry);
     server.on("/api/exit", HTTP_POST, onApiExit);
+    server.on("/api/pay", HTTP_POST, onApiPay);
     server.on("/", HTTP_GET, []() {
         server.sendHeader("Location", "/kasse");
         server.send(303);

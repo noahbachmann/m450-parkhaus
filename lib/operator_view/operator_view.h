@@ -46,6 +46,7 @@ struct OperatorLane
     std::string lastPlate;               // last plate typed at this lane's terminal
     std::string status;                  // laneStatus()
     std::string fault;                   // loop fault message; empty if none
+    std::string call;                    // open call (callLabel); empty if none
 };
 
 // filter: event type name (see eventTypeName) or empty for all.

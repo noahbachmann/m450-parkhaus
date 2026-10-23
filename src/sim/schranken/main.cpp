@@ -13,6 +13,7 @@
 #include "registration.h"
 #include "schranken_view.h"
 #include "sim_common.h"
+#include "terminal.h"
 #include "testdata.h"
 
 // Simulated Pico 2 "Schranken": registration and camera pages, barriers, real HTTP calls to the Kasse
@@ -51,14 +52,14 @@ struct Lane
     Barrier barrier;
     bool loopOccupied = false;
     LaneView view;
-    std::string lastPlate;
+    LaneTerminal terminal;
 };
 
 HttpKasseLink kasse;
 RegistrationList registrations;
 EventLog eventLog;
-Lane entryLane{GateLane::Entry, "Einfahrt", {}, false, {}, ""};
-Lane exitLane{GateLane::Exit, "Ausfahrt", {}, false, {}, ""};
+Lane entryLane{GateLane::Entry, "Einfahrt", {}, false, {}, {}};
+Lane exitLane{GateLane::Exit, "Ausfahrt", {}, false, {}, {}};
 
 // Result of the last registration / operator POST, shown once after the redirect.
 uint32_t noticeId = 0;
@@ -86,13 +87,13 @@ void saveRegistrations()
     writeDataFile("registrations", registrationsToJson(registrations));
 }
 
-void applyGate(Lane& lane, const GateResult& r)
+// Shows a terminal result (gate decision, payment, call, abort) and opens the barrier if it says so.
+void showOnTerminal(Lane& lane, const GateResult& r)
 {
     if (r.open)
     {
         lane.barrier.open(nowMs());
     }
-    lane.lastPlate = r.plate;
     if (logGateResult(eventLog, lane.id, r, nowUtc()))
     {
         saveEvents();
@@ -102,10 +103,18 @@ void applyGate(Lane& lane, const GateResult& r)
     std::printf("[gate] %s %s: %s\n", lane.name, r.plate.c_str(), r.message.c_str());
 }
 
+void applyGate(Lane& lane, const GateResult& r)
+{
+    recordGate(lane.terminal, r);
+    showOnTerminal(lane, r);
+}
+
 void refreshView(Lane& lane)
 {
     lane.view.barrier = barrierStateLabel(lane.barrier.state());
     lane.view.fault = lane.barrier.loopFault() ? loopFaultMessage(lane.name) : "";
+    lane.view.payPlate = lane.terminal.payPlate;
+    lane.view.payFee = lane.terminal.payPlate.empty() ? "" : formatChf(lane.terminal.payFeeRappen);
 }
 
 HttpResponse finishRegistrationForm(const FormResult& r)
@@ -123,8 +132,9 @@ OperatorLane operatorLane(Lane& lane)
     OperatorLane o;
     o.lane = lane.id;
     o.barrier = barrierStateLabel(lane.barrier.state());
-    o.lastPlate = lane.lastPlate;
-    o.status = laneStatus(kasse, lane.lastPlate);
+    o.lastPlate = lane.terminal.lastPlate;
+    o.status = laneStatus(kasse, lane.terminal.lastPlate);
+    o.call = callLabel(lane.terminal);
     o.fault = lane.barrier.loopFault() ? loopFaultMessage(lane.name) : "";
     return o;
 }
@@ -146,7 +156,9 @@ HttpResponse operatorRoute(const HttpRequest& req)
     RemoteOpenResult r = remoteOpen(id, req.arg("kz"), req.arg("reason"), nowUtc(), kasse, eventLog);
     if (r.open)
     {
-        (id == GateLane::Entry ? entryLane : exitLane).barrier.open(nowMs());
+        Lane& lane = id == GateLane::Entry ? entryLane : exitLane;
+        lane.barrier.open(nowMs());
+        recordRemoteOpening(lane.terminal);
     }
     if (r.logged)
     {
@@ -211,6 +223,28 @@ HttpResponse route(const HttpRequest& req)
     if (post && req.path == "/kamera/ausfahrt")
     {
         applyGate(exitLane, exitRequest(req.arg("kz"), kasse));
+        return redirect("/kamera");
+    }
+    if (post && req.path == "/kamera/ruftaste")
+    {
+        Lane& lane = req.arg("lane") == "exit" ? exitLane : entryLane;
+        showOnTerminal(lane, pressCallButton(lane.terminal, nowUtc(), eventLog));
+        saveEvents();
+        return redirect("/kamera");
+    }
+    if (post && req.path == "/kamera/abbrechen")
+    {
+        showOnTerminal(exitLane, abortAtTerminal(exitLane.terminal));
+        return redirect("/kamera");
+    }
+    if (post && req.path == "/kamera/bezahlen")
+    {
+        size_t eventsBefore = eventLog.all().size();
+        showOnTerminal(exitLane, payAtTerminal(exitLane.terminal, req.arg("method"), nowUtc(), kasse, eventLog));
+        if (eventLog.all().size() != eventsBefore)
+        {
+            saveEvents();
+        }
         return redirect("/kamera");
     }
     if (get && req.path == "/registrierung")
@@ -311,6 +345,8 @@ int main()
 {
     kasseUrl = envOr("KASSE_URL", "http://localhost:8081");
     operatorPassword = envOr("OPERATOR_PASSWORD", "parkhaus");
+    entryLane.terminal.lane = GateLane::Entry;
+    exitLane.terminal.lane = GateLane::Exit;
     loadRegistrations();
     loadEvents();
     std::string host = listenHost();

@@ -108,6 +108,12 @@ Pico 2 client timeout: **1000 ms** (keeps the entry ≤ 2 s). Timeout or connect
 - 409 `already_open` · 400 `invalid_plate` · 400 `entry_in_future` · 503 `time_not_synced` ·
   503 `store_full` (50 sessions, none closed to drop)
 
+**`POST /api/pay`** — payment at the exit terminal (step 7c), card or TWINT only (no cash at the barrier)
+- body `{"kz":"LU123456","method":"card_ok"|"card_declined"|"twint"}`
+- 200 `{"kz":"LU123456","status":"bezahlt","amount":400,"method":"card"|"twint","tx":"TX-000001"}`
+- 402 `declined` · 409 `already_paid` / `nothing_to_pay` · 404 `no_session` · 400 `invalid_plate` /
+  `bad_request` (unknown method) · 503 `time_not_synced`
+
 **`POST /api/exit`** — try to close the session; Pico 2 opens the barrier only on 200
 - body `{"kz":"LU123456"}`; operator remote opening: `{"kz":"LU123456","override":true}` (non-bool → 400)
 - 200 `{"kz":"LU123456","status":"closed"|"closed_free","exit":1760533600,"fee":400}`; with `override` an
@@ -180,6 +186,19 @@ needed). Later phases may add JSON endpoints for them if the pages use fetch().
 - Firmware: core 1 hands barrier events to core 0 through a per-lane single-producer/single-consumer
   queue; core 0 timestamps, logs and writes them (core 1 never touches LittleFS).
 
+**Exit terminal (step 7c, decided 2026-10-23):** `lib/terminal`, one `LaneTerminal` per lane in RAM.
+- Camera page per lane: «Ruftaste» (`POST /kamera/ruftaste`, `lane`) → «Leitstelle wurde gerufen – bitte
+  warten», event «Ruftaste» (lane, last plate), open call shown in the operator view until the barrier
+  opens (gate or remote opening).
+- Exit lane: «Fahrzeug wendet» (`POST /kamera/abbrechen`) → «Vorgang abgebrochen – Fahrzeug wendet»;
+  Pico 1 is not called, the session stays open and the fee keeps growing (TF-27).
+- After an unpaid exit attempt the exit card offers payment for that plate (`POST /kamera/bezahlen`,
+  `method` = `card_ok|card_declined|twint`) → `/api/pay`. Declined → «Zahlung abgelehnt – anderes
+  Zahlungsmittel wählen»; the 5th decline in a row for the plate → «Zahlung abgelehnt – Leitstelle wurde
+  benachrichtigt», event «Zahlung 5× abgelehnt», call in the operator view (TF-28). Paid (or already paid /
+  nothing to pay) → exit retried automatically, opens on success («Bezahlt – CHF x.xx, TWINT – …»).
+  A new plate or an opening resets the decline counter.
+
 ## Domain rules (decided 2026-10-19, step 2)
 
 - **Fee 0 (free time):** payment is refused («nothing to pay»), the session stays `open`; exit closes
@@ -199,7 +218,7 @@ Libraries: `lib/registration`, `lib/session` (store, state machine, payment), `l
 page texts, CHF input parsing, pay-form handling, page HTML), `lib/html` (shared page building blocks),
 `lib/barrier` (barrier state machine), `lib/gate` (entry/exit decisions on Pico 2), `lib/schranken_view`
 (registration and camera pages), `lib/event_log` (event log), `lib/operator_view` (operator view, remote
-opening, logging helpers).
+opening, logging helpers), `lib/terminal` (call button, exit abort, payment at the exit terminal).
 
 File formats (LittleFS):
 - `/registrations.json`: `{"registrations":[{"name":"Test Kunde A","kz":"LU123456"}]}`
@@ -208,7 +227,7 @@ File formats (LittleFS):
   status `open|paid|closed|closed_free|closed_unpaid`). An invalid file is rejected as a whole.
 - `/events.json`: `{"events":[{"t":1760530000,"type":"remote_opening","lane":"entry","kz":"BE4711",
   "user":"betrieb","reason":"Kennzeichen nicht erkannt","note":"Parkvorgang eröffnet"}]}` (type
-  `safety_stop|loop_fault|remote_opening|kasse_unreachable|call_button`, lane `entry|exit|""`).
+  `safety_stop|loop_fault|remote_opening|kasse_unreachable|call_button|payment_alert`, lane `entry|exit|""`).
 
 ## PC simulator (decided 2026-10-23)
 

@@ -218,8 +218,9 @@ void test_operator_page_filter_tf14()
     LocalKasse kasse;
     remoteOpen(GateLane::Entry, "BE4711", "Kennzeichen nicht erkannt", NOW + 10, kasse, log);
 
-    OperatorLane entry{GateLane::Entry, "offen", "BE4711", "kein Parkvorgang", ""};
-    OperatorLane exit{GateLane::Exit, "geschlossen", "", "", "Sicherungsschleife Ausfahrt länger als 5 min belegt"};
+    OperatorLane entry{GateLane::Entry, "offen", "BE4711", "kein Parkvorgang", "",
+                       "Ruftaste gedrückt – BE4711 (15.10.2025 14:06:40)"};
+    OperatorLane exit{GateLane::Exit, "geschlossen", "", "", "Sicherungsschleife Ausfahrt länger als 5 min belegt", ""};
     std::string all = renderOperatorPage(entry, exit, log, "", Notice{});
     TEST_ASSERT_TRUE(contains(all, "7 Einträge"));
     TEST_ASSERT_TRUE(contains(all, "<td>BE4711</td>"));
@@ -229,6 +230,8 @@ void test_operator_page_filter_tf14()
     TEST_ASSERT_TRUE(contains(all, "Bestätigen"));
     TEST_ASSERT_TRUE(contains(all, "notice err\">Sicherungsschleife Ausfahrt länger als 5 min belegt"));
     TEST_ASSERT_TRUE(contains(all, "Fernöffnung"));
+    TEST_ASSERT_TRUE(contains(all, "notice info\">Ruftaste gedrückt – BE4711 (15.10.2025 14:06:40)"));
+    TEST_ASSERT_TRUE(contains(all, "value=\"payment_alert\">Zahlung 5× abgelehnt"));
 
     std::string stops = renderOperatorPage(entry, exit, log, "safety_stop", Notice{});
     TEST_ASSERT_TRUE(contains(stops, "6 Einträge"));

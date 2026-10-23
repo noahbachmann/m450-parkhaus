@@ -66,6 +66,11 @@ Hauptschleife auf dem Pico), der Leitstelle (`test/native/test_operator_view/`) 
 | TF-17 | 2 | `test_tf17_remote_opening_needs_reason`, `test_remote_open_without_reason_tf17` | Ohne Grund: bleibt zu, «Bitte Grund auswählen», nichts protokolliert | bestanden |
 | TF-30 (Protokoll) | 1 | `test_tf30_fault_logged` | «Kasse nicht erreichbar» wird mit Spur und Kennzeichen protokolliert | bestanden |
 | Fernöffnung ohne Kasse | – | `test_remote_open_with_kasse_off_stays_closed`, `test_remote_opening_with_kasse_off_stays_closed` | Kasse antwortet nicht: Schranke bleibt zu, «Kasse nicht erreichbar» mit Benutzer und Grund protokolliert, keine Fernöffnung | bestanden |
+| TF-05 | 2 | `test_tf05_terminal_feedback_at_entry` | «LU123456 – Willkommen, Einfahrt frei»; «BE4711 – nicht registriert, bitte Ruftaste drücken»; Text kommt aus demselben Entscheid wie das Öffnen | bestanden |
+| TF-26 | 2 | `test_tf26_exit_without_session` | Bleibt zu, «Kein Parkvorgang gefunden – bitte Ruftaste drücken» | bestanden |
+| TF-27 | 2 | `test_tf27_car_turns_around`, `test_tf27_abort_keeps_session_open` | «Fahrzeug wendet»: Parkvorgang bleibt «offen», keine Ausfahrtszeit; Gebühr nach 60 min von CHF 2.00 auf CHF 4.00 | bestanden |
+| TF-28 | 2 | `test_tf28_payment_at_exit_terminal`, `test_tf28_*` in `test_terminal` | KZ-01: «Zahlung abgelehnt – anderes Zahlungsmittel wählen», zu; nach TWINT offen. KZ-02 nach dem 5. Mal «Leitstelle wurde benachrichtigt» + Eintrag in der Leitstelle (Spur, Kennzeichen), bleibt zu | bestanden |
+| Ruftaste | 2 | `test_call_button_reaches_operator`, `test_call_button` | Ruf wird protokolliert und in der Leitstelle angezeigt, bis die Schranke öffnet | bestanden |
 | TF-31 | 2 | `test_tf31_remote_opening_at_exit_without_payment`, `test_remote_open_exit_unpaid_tf31` | Öffnet; Protokoll mit Zeit, «betrieb», «Ausfahrt», Kennzeichen, «Kulanz», «ohne Zahlung»; Parkvorgang «ohne Zahlung ausgefahren» | bestanden |
 
 ## Nicht geprüft (nur mit Hardware möglich)

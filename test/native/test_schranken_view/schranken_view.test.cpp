@@ -86,8 +86,8 @@ void test_registration_page_escapes_names()
 
 void test_camera_page()
 {
-    LaneView entry{"offen", "ok", "LU123456 – Willkommen, Einfahrt frei", ""};
-    LaneView exit{"geschlossen", "err", "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen", ""};
+    LaneView entry{"offen", "ok", "LU123456 – Willkommen, Einfahrt frei", "", "", ""};
+    LaneView exit{"geschlossen", "err", "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen", "", "", ""};
     std::string html = renderCameraPage(entry, exit);
     TEST_ASSERT_TRUE(contains(html, "action=\"/kamera/einfahrt\""));
     TEST_ASSERT_TRUE(contains(html, "action=\"/kamera/ausfahrt\""));
@@ -97,11 +97,27 @@ void test_camera_page()
     TEST_ASSERT_TRUE(contains(html, "Schranke: <strong>offen</strong>"));
     TEST_ASSERT_TRUE(contains(html, "Schranke: <strong>geschlossen</strong>"));
     TEST_ASSERT_FALSE(contains(html, "min belegt"));
+    TEST_ASSERT_TRUE(contains(html, "name=\"lane\" value=\"entry\"><button type=\"submit\">Ruftaste</button>"));
+    TEST_ASSERT_TRUE(contains(html, "name=\"lane\" value=\"exit\"><button type=\"submit\">Ruftaste</button>"));
+    TEST_ASSERT_TRUE(contains(html, "Fahrzeug wendet"));
+    TEST_ASSERT_FALSE(contains(html, "/kamera/bezahlen"));
+}
+
+void test_exit_terminal_payment_form_tf28()
+{
+    LaneView exit{"geschlossen", "err", "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen", "", "ZH98765",
+                  "CHF 6.00"};
+    std::string html = renderCameraPage(LaneView{}, exit);
+    TEST_ASSERT_TRUE(contains(html, "action=\"/kamera/bezahlen\""));
+    TEST_ASSERT_TRUE(contains(html, "Gebühr CHF 6.00 für ZH98765 – hier bezahlen"));
+    TEST_ASSERT_TRUE(contains(html, "value=\"card_declined\""));
+    TEST_ASSERT_TRUE(contains(html, "value=\"twint\""));
+    TEST_ASSERT_FALSE(contains(html, "value=\"cash\""));
 }
 
 void test_camera_page_shows_loop_fault_tf15()
 {
-    LaneView entry{"offen", "", "", "Sicherungsschleife Einfahrt länger als 5 min belegt"};
+    LaneView entry{"offen", "", "", "Sicherungsschleife Einfahrt länger als 5 min belegt", "", ""};
     std::string html = renderCameraPage(entry, LaneView{});
     TEST_ASSERT_TRUE(contains(html, "notice err\">Sicherungsschleife Einfahrt länger als 5 min belegt"));
 }
@@ -117,5 +133,6 @@ int main()
     RUN_TEST(test_registration_page_escapes_names);
     RUN_TEST(test_camera_page);
     RUN_TEST(test_camera_page_shows_loop_fault_tf15);
+    RUN_TEST(test_exit_terminal_payment_form_tf28);
     return UNITY_END();
 }

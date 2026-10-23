@@ -22,9 +22,9 @@ verified. No `test/board/` suites and no `v1.0` tag.
 | 5 | Pico 2 "Schranken" firmware | done (verified by user 2026-10-23, native + build) |
 | 6 | Integration + phase-1 system test | done (verified by user 2026-10-23, native + build) |
 | 7a | Phase 2: barrier safety | done (verified by user 2026-10-23, native + build) |
-| S | PC simulator (Docker / `sim_kasse` + `sim_schranken`) | awaiting user verification |
-| 7b | Phase 2: event log + operator view | awaiting user verification (fail-safe change after first check) |
-| 7c | Phase 2: exit terminal | open |
+| S | PC simulator (Docker / `sim_kasse` + `sim_schranken`) | done (verified by user 2026-10-23, Docker) |
+| 7b | Phase 2: event log + operator view | done (verified by user 2026-10-23, native + build) |
+| 7c | Phase 2: exit terminal | awaiting user verification |
 | 7d | Phase 2: tariff page + wrap-up | open |
 
 ## 1 — Foundation
@@ -153,8 +153,14 @@ Hardware test suites under `test/board/` and the `v1.0` tag are dropped (no hard
 
 ### 7c — Exit terminal
 
-- Call button, exit abort («Fahrzeug wendet»), payment at the exit terminal incl. 5 declined attempts
-  (TF-26, 27, 28).
+- `lib/terminal` (`LaneTerminal`: last plate, payment offer, decline counter, open call), Pico 1
+  `POST /api/pay` (`handlePay`), event type «Zahlung 5× abgelehnt», `GateResult.unpaid/feeRappen`.
+- Camera page: «Ruftaste» on both lanes, «Fahrzeug wendet» + payment form on the exit lane; operator lane
+  shows the open call. Firmware + simulator routes `/kamera/ruftaste`, `/kamera/abbrechen`,
+  `/kamera/bezahlen`, `/api/pay`.
+- Tests: TF-05, 26, 27, 28 + call button in the system test; `test_terminal`; `/api/pay` in `kasse_api`.
+- **User verifies:** `pio test -e native` → 17 suites, 171 cases passed; `pio run` → both `SUCCESS`;
+  `docker compose up --build` → exit terminal on `/kamera`, call shown on `/betrieb`.
 
 ### 7d — Tariff page + wrap-up
 

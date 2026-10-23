@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 
 #include "codec.h"
+#include "payment.h"
 #include "plate.h"
 
 namespace
@@ -142,4 +143,70 @@ ApiResponse handleExit(SessionStore& store, const std::string& body, int64_t now
         break;
     }
     return error(400, "invalid_plate");
+}
+
+ApiResponse handlePay(SessionStore& store, const std::string& body, int64_t now, bool timeSynced)
+{
+    JsonDocument req;
+    std::string plate;
+    if (!parseBody(body, req, plate) || !req["method"].is<const char*>())
+    {
+        return error(400, "bad_request");
+    }
+    std::string name = req["method"].as<std::string>();
+    PayMethod method;
+    if (name == "card_ok")
+    {
+        method = PayMethod::CardOk;
+    }
+    else if (name == "card_declined")
+    {
+        method = PayMethod::CardDeclined;
+    }
+    else if (name == "twint")
+    {
+        method = PayMethod::Twint;
+    }
+    else
+    {
+        return error(400, "bad_request");
+    }
+    if (!isValidPlate(plate))
+    {
+        return error(400, "invalid_plate");
+    }
+    if (!timeSynced)
+    {
+        return error(503, "time_not_synced");
+    }
+    PaymentResult r = pay(store, plate, method, now);
+    switch (r.kind)
+    {
+    case PaymentResult::Kind::Paid:
+    {
+        JsonDocument doc;
+        doc["kz"] = plate;
+        doc["status"] = "bezahlt";
+        doc["amount"] = r.amountRappen;
+        doc["method"] = r.method == PaymentMethod::Twint ? "twint" : "card";
+        doc["tx"] = r.txRef;
+        return respond(200, doc);
+    }
+    case PaymentResult::Kind::Declined:
+        return error(402, "declined");
+    case PaymentResult::Kind::AlreadyPaid:
+        return error(409, "already_paid");
+    case PaymentResult::Kind::NothingToPay:
+        return error(409, "nothing_to_pay");
+    case PaymentResult::Kind::NoSession:
+        return error(404, "no_session");
+    case PaymentResult::Kind::TimeError:
+        return error(503, "time_not_synced");
+    case PaymentResult::Kind::InvalidPlate:
+        return error(400, "invalid_plate");
+    case PaymentResult::Kind::PartialCash:
+    case PaymentResult::Kind::InvalidAmount:
+        break;
+    }
+    return error(400, "bad_request");
 }
