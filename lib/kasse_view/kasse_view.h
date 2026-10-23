@@ -29,6 +29,11 @@ SessionView describeSession(const ParkingSession& session, int64_t now);
 // "2 angefangene Stunden à CHF 2.00 ab Einfahrt (15 Freiminuten überschritten)".
 std::string tariffNote(int64_t durationSeconds, uint32_t feeRappen);
 
+// The valid tariff in one sentence (tariff.md, German wording): «15 Freiminuten; wird die Freizeit
+// überschritten, kostet jede angefangene Stunde ab Einfahrt CHF 2.00; Tagesmaximum CHF 20.00 pro angefangene
+// 24 Stunden.»
+std::string tariffSummary();
+
 // Feedback after a payment attempt, e.g. «Bezahlt – CHF 4.00, Karte – Transaktion TX-000001».
 std::string paymentMessage(const PaymentResult& result, const std::string& plate);
 // True if the result is a successful booking or progress (paid, partial cash).

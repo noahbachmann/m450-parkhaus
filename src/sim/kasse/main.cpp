@@ -113,6 +113,10 @@ HttpResponse route(const HttpRequest& req)
     {
         return showPage(Page::Automat, req);
     }
+    if (get && req.path == "/tarif")
+    {
+        return simPage(renderTariffPage());
+    }
     if (post && req.path == "/kasse/pay")
     {
         return onPay(Page::Kasse, req);

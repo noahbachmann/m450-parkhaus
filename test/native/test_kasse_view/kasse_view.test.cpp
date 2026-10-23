@@ -281,6 +281,43 @@ void test_page_without_time_offers_no_payment()
     TEST_ASSERT_FALSE(contains(html, "/automat/pay"));
 }
 
+void test_tariff_summary_matches_tariff_md()
+{
+    TEST_ASSERT_EQUAL_STRING("15 Freiminuten; wird die Freizeit überschritten, kostet jede angefangene Stunde ab "
+                             "Einfahrt CHF 2.00; Tagesmaximum CHF 20.00 pro angefangene 24 Stunden.",
+                             tariffSummary().c_str());
+}
+
+void test_tariff_page_us14_tf19()
+{
+    std::string html = renderTariffPage();
+    TEST_ASSERT_TRUE(contains(html, "15 Freiminuten; wird die Freizeit überschritten"));
+    // reference values from tariff.md
+    TEST_ASSERT_TRUE(contains(html, "<td>0 h 15 min</td><td>CHF 0.00</td>"));        // R-02
+    TEST_ASSERT_TRUE(contains(html, "<td>0 h 15 min 1 s</td><td>CHF 2.00</td>"));    // R-03
+    TEST_ASSERT_TRUE(contains(html, "<td>1 h 0 min</td><td>CHF 2.00</td>"));         // R-04
+    TEST_ASSERT_TRUE(contains(html, "<td>1 h 0 min 1 s</td><td>CHF 4.00</td>"));     // R-05
+    TEST_ASSERT_TRUE(contains(html, "<td>1 h 20 min</td><td>CHF 4.00</td>"));        // TF-19
+    TEST_ASSERT_TRUE(contains(html, "<td>2 h 30 min</td><td>CHF 6.00</td>"));        // R-06
+    TEST_ASSERT_TRUE(contains(html, "<td>10 h 0 min</td><td>CHF 20.00</td>"));       // R-07
+    TEST_ASSERT_TRUE(contains(html, "<td>10 h 0 min 1 s</td><td>CHF 20.00</td>"));   // R-08
+    TEST_ASSERT_TRUE(contains(html, "<td>24 h 0 min</td><td>CHF 20.00</td>"));       // R-09
+    TEST_ASSERT_TRUE(contains(html, "<td>24 h 0 min 1 s</td><td>CHF 22.00</td>"));   // R-10
+    TEST_ASSERT_TRUE(contains(html, "<td>48 h 0 min</td><td>CHF 40.00</td>"));       // R-11
+}
+
+void test_tariff_linked_from_kasse_and_automat_tf19()
+{
+    SessionStore store;
+    store.openEntry("LU123456", NOW - 80 * MIN);
+    for (Page p : {Page::Kasse, Page::Automat})
+    {
+        std::string html = renderPage(p, store, "LU123456", Notice{}, NOW, true);
+        TEST_ASSERT_TRUE(contains(html, "<a href=\"/tarif\">Tarif</a>"));
+        TEST_ASSERT_TRUE(contains(html, "<a href=\"/tarif\">Tarif anzeigen</a>"));
+    }
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -302,5 +339,8 @@ int main()
     RUN_TEST(test_automat_ignores_closed_kasse_shows_it);
     RUN_TEST(test_page_escapes_query_and_flags_invalid_plate);
     RUN_TEST(test_page_without_time_offers_no_payment);
+    RUN_TEST(test_tariff_summary_matches_tariff_md);
+    RUN_TEST(test_tariff_page_us14_tf19);
+    RUN_TEST(test_tariff_linked_from_kasse_and_automat_tf19);
     return UNITY_END();
 }

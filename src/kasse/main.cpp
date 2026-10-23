@@ -179,6 +179,10 @@ void setupRoutes()
     });
     server.on("/kasse", HTTP_GET, []() { showPage(Page::Kasse); });
     server.on("/automat", HTTP_GET, []() { showPage(Page::Automat); });
+    server.on("/tarif", HTTP_GET, []() {
+        server.send(200, "text/html; charset=utf-8", String(renderTariffPage().c_str()));
+        logRequest(200);
+    });
     server.on("/kasse/pay", HTTP_POST, []() { onPay(Page::Kasse); });
     server.on("/automat/pay", HTTP_POST, []() { onPay(Page::Automat); });
     server.on("/reset", HTTP_POST, onReset);

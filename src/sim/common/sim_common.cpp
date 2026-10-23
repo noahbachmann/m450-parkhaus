@@ -138,7 +138,7 @@ HttpResponse simPage(const std::string& html)
     };
     std::string banner = "<div style=\"background:#1d232b;color:#fff;padding:8px 12px;border-radius:6px;"
                          "margin-bottom:12px;font-size:.9rem\"><strong>PC-Simulator</strong> · " +
-                         link(KASSE_PORT, "/kasse", "Kasse") + " · " + link(KASSE_PORT, "/automat", "Automat") +
+                         link(KASSE_PORT, "/kasse", "Kasse") + " · " + link(KASSE_PORT, "/automat", "Automat") + " · " + link(KASSE_PORT, "/tarif", "Tarif") +
                          " · " + link(SCHRANKEN_PORT, "/kamera", "Kamera") + " · " +
                          link(SCHRANKEN_PORT, "/registrierung", "Registrierung") + " · " +
                          link(SCHRANKEN_PORT, "/betrieb", "Betrieb") + " · " +

@@ -21,8 +21,11 @@ Bei der Ausfahrt fragt Pico 2 bei Pico 1 nach, ob die Gebühr bezahlt wurde. Nur
 
 ## Umgesetzte User Stories / Anforderungen
 
-Phase 1 = Minimalumfang des Auftrags plus Registrierung. «umgesetzt» heisst: implementiert und mit den
-Unit- und Systemtests auf dem PC geprüft (siehe [docs/testprotokoll.md](docs/testprotokoll.md)).
+Phase 1 = Minimalumfang des Auftrags plus Registrierung; Phase 2 = übriger Umfang des Testkonzepts.
+«umgesetzt» heisst: implementiert und mit den Unit- und Systemtests auf dem PC geprüft (siehe
+[docs/testprotokoll.md](docs/testprotokoll.md)), zusätzlich im PC-Simulator von Hand durchgespielt.
+User Stories, die mit dem Pico-Aufbau nicht umsetzbar sind (App, E-Mail, Sensoren, Zahlungsanbieter usw.),
+sind nicht aufgeführt.
 
 | ID | Anforderung | Status |
 |---|---|---|
@@ -30,7 +33,7 @@ Unit- und Systemtests auf dem PC geprüft (siehe [docs/testprotokoll.md](docs/te
 | US-06 | Einfahrtsschranke öffnet bei registriertem Kennzeichen (AK1, AK2, Normalisierung statt AK3), Terminal zeigt das erkannte Kennzeichen (AK4) | umgesetzt |
 | US-07 | Parkuhr startet automatisch bei der Einfahrt, ein offener Parkvorgang pro Kennzeichen (AK1, 2, 4, 5) | umgesetzt |
 | US-13 | Erkennung bei der Ausfahrt, Parkvorgang wird beendet (AK1, AK2); ohne Parkvorgang bleibt die Schranke zu (AK3); «Fahrzeug wendet» lässt den Parkvorgang offen (AK4) | umgesetzt |
-| US-14 | Parkdauer und Gebühr an Kasse und Automat, angefangene Stunden und Freiminuten (AK1, AK2) | umgesetzt |
+| US-14 | Parkdauer und Gebühr an Kasse und Automat, angefangene Stunden und Freiminuten (AK1, AK2); gültiger Tarif an Kasse und Automat einsehbar (AK3) | umgesetzt |
 | US-16 | Ausfahrt nur bei bezahlter Gebühr oder CHF 0.00 (AK1); abgelehnte Zahlung mit Grund (AK2), Bezahlen direkt am Ausfahrtsterminal (AK3), nach 5 Ablehnungen wird die Leitstelle benachrichtigt (AK4); jede Öffnung ohne Zahlung wird mit Grund und Benutzer protokolliert (AK5) | umgesetzt |
 | US-17 | Bezahlen am Automaten über das Kennzeichen: Karte, TWINT, Bargeld mit Rückgeld (AK1, AK2) | umgesetzt |
 | US-08 | Hilfe bei nicht erkanntem Kennzeichen: Leitstelle sieht Spur, Kennzeichen, Zahlungsstatus; Fernöffnung nur mit Grund, eröffnet bei der Einfahrt einen Parkvorgang, wird protokolliert (AK2–5) | umgesetzt (Phase 2) |
@@ -44,7 +47,8 @@ Unit- und Systemtests auf dem PC geprüft (siehe [docs/testprotokoll.md](docs/te
 | Pico | Adresse | Inhalt |
 |---|---|---|
 | Pico 1 | `/kasse`, `/automat` | Kennzeichen suchen, Dauer und Gebühr, bezahlen; Kasse mit Liste aller Parkvorgänge |
-| Pico 1 | `/api/status`, `/api/entry`, `/api/exit` | JSON-Schnittstelle für Pico 2 |
+| Pico 1 | `/tarif` | Gültiger Tarif mit Beispielen |
+| Pico 1 | `/api/status`, `/api/entry`, `/api/exit`, `/api/pay` | JSON-Schnittstelle für Pico 2 |
 | Pico 2 | `/kamera` | Kamerasimulation: Kennzeichen bei Ein- und Ausfahrt eingeben, optional rückdatierte Einfahrtszeit; Ruftaste, «Fahrzeug wendet», Bezahlen am Ausfahrtsterminal |
 | Pico 2 | `/registrierung` | Kennzeichen registrieren, löschen, Testdaten zurücksetzen |
 | Pico 2 | `/betrieb` | Leitstelle (Benutzer «betrieb»): Spuren, Fernöffnung mit Grund, Ereignisprotokoll mit Filter |
@@ -83,7 +87,7 @@ Danach im Browser:
 
 | Adresse | Inhalt |
 |---|---|
-| `http://localhost:8081/kasse`, `/automat` | Pico 1: Kasse und Automat |
+| `http://localhost:8081/kasse`, `/automat`, `/tarif` | Pico 1: Kasse, Automat, Tarif |
 | `http://localhost:8081/api/status?kz=LU123456` | Pico 1: JSON-Schnittstelle (auch `POST /api/entry`, `/api/exit`) |
 | `http://localhost:8082/kamera`, `/registrierung` | Pico 2: Kamerasimulation und Registrierung |
 | `http://localhost:8082/betrieb` | Pico 2: Leitstelle, Anmeldung «betrieb» / «parkhaus» |
@@ -102,8 +106,15 @@ Danach im Browser:
 
 - **Unit-Tests** pro Modul in `test/native/test_<modul>/` (Tarif, Kennzeichen, Parkvorgänge, Zahlung,
   Schnittstelle, Seiten, Schranke, Ein-/Ausfahrtsentscheid).
-- **Systemtest** `test/native/test_system/`: die Phase-1-Testfälle des Testkonzepts (TF-01 bis TF-32) mit
-  der Logik beider Picos in einem Programm.
+- **Systemtest** `test/native/test_system/`: die Testfälle TF-01 bis TF-32 des Testkonzepts mit der Logik
+  beider Picos in einem Programm.
 - Die Tests auf der Hardware (Servos, Zeitmessungen, WLAN, Stromunterbruch) konnten nicht durchgeführt
-  werden, weil die Picos ab Schritt 4 nicht mehr zur Verfügung standen. Details:
-  [docs/testprotokoll.md](docs/testprotokoll.md).
+  werden, weil die Picos ab Schritt 4 nicht mehr zur Verfügung standen. TF-33 (Usability mit einer
+  fremden Person) und TF-34 (exploratives Testen) sind manuelle Tests und lassen sich mit dem
+  PC-Simulator durchführen. Details: [docs/testprotokoll.md](docs/testprotokoll.md).
+
+## Bekannte Einschränkungen
+
+- Firmware nur gebaut, nie auf den Picos gelaufen (ab Schritt 4 keine Hardware mehr).
+- Antwortet Pico 1 bei einer Einfahrt erst nach dem Timeout von 1000 ms, ist der Parkvorgang eröffnet,
+  obwohl die Schranke zu blieb; der zweite Versuch meldet «Parkvorgang bereits offen». Nicht behoben.

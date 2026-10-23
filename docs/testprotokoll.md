@@ -1,6 +1,6 @@
-# Testprotokoll Phase 1
+# Testprotokoll
 
-Stand: 23.10.2026. Testumgebung **TU-1** (PC, `pio test -e native`), weil ab Roadmap-Schritt 4 keine Picos
+Stand: 23.10.2026, alle Testfälle TF-01 bis TF-32. Testumgebung **TU-1** (PC, `pio test -e native`), weil ab Roadmap-Schritt 4 keine Picos
 mehr zur Verfügung standen. Die Systemtests TU-2/TU-3 auf der Hardware konnten deshalb nicht durchgeführt
 werden.
 
@@ -37,7 +37,7 @@ Ergebnis = Ausgabe von `pio test -e native`, Suite `test_system` (dazu die Unit-
 | TF-10 | 2 | `test_tf10_second_entry_rejected` | «Parkvorgang bereits offen – bitte Ruftaste drücken», eine Sitzung, Zeit unverändert | bestanden |
 | TF-11 | 2 | `test_tf11_kasse_off_at_entry` | Ohne Pico 1: zu, «Kasse nicht erreichbar …», keine Sitzung; danach Zeit des 2. Versuchs | bestanden |
 | TF-18 | 1 | `test_tf18_reference_fees_via_backdated_entry` | R-01..R-11 über rückdatierte Einfahrt an der Kasse exakt; R-12 abgelehnt | bestanden |
-| TF-19 | 2 | `test_tf19_duration_and_fee_at_kasse_and_automat` | «1 h 20 min», «CHF 4.00», Tarifhinweis an Kasse und Automat (Tarifseite: Phase 2) | bestanden |
+| TF-19 | 2 | `test_tf19_duration_and_fee_at_kasse_and_automat`, `test_tariff_page_us14_tf19`, `test_tariff_linked_from_kasse_and_automat_tf19` | «1 h 20 min», «CHF 4.00», Hinweis 2 angefangene Stunden + 15 Freiminuten an Kasse und Automat; Tarifseite von beiden aus erreichbar, Werte gleich wie tariff.md (R-02..R-11) | bestanden |
 | TF-20 | 1 | `test_tf20_card_payment_once` | «Bezahlt – CHF 4.00, Karte» + Transaktionsnummer; 2. Versuch «bereits bezahlt» | bestanden |
 | TF-21 | 1 | `test_tf21_automat_cash_and_twint` | Rückgeld CHF 4.00; TWINT; «Restbetrag CHF 1.00», dann bezahlt, Rückgeld CHF 0.00 | bestanden |
 | TF-22 | 2 | `test_tf22_automat_without_session` | «Kein offener Parkvorgang für SZ555», kein Zahlformular, keine Buchung | bestanden |
@@ -72,6 +72,19 @@ Hauptschleife auf dem Pico), der Leitstelle (`test/native/test_operator_view/`) 
 | TF-28 | 2 | `test_tf28_payment_at_exit_terminal`, `test_tf28_*` in `test_terminal` | KZ-01: «Zahlung abgelehnt – anderes Zahlungsmittel wählen», zu; nach TWINT offen. KZ-02 nach dem 5. Mal «Leitstelle wurde benachrichtigt» + Eintrag in der Leitstelle (Spur, Kennzeichen), bleibt zu | bestanden |
 | Ruftaste | 2 | `test_call_button_reaches_operator`, `test_call_button` | Ruf wird protokolliert und in der Leitstelle angezeigt, bis die Schranke öffnet | bestanden |
 | TF-31 | 2 | `test_tf31_remote_opening_at_exit_without_payment`, `test_remote_open_exit_unpaid_tf31` | Öffnet; Protokoll mit Zeit, «betrieb», «Ausfahrt», Kennzeichen, «Kulanz», «ohne Zahlung»; Parkvorgang «ohne Zahlung ausgefahren» | bestanden |
+
+## Nicht durchgeführt
+
+| TF | Prio | Grund |
+|---|---|---|
+| TF-33 | 3 | Usability-Test mit einer fremden Person («Bezahle das Parken für das Auto ZH 98765.») – manuell, mit dem PC-Simulator möglich |
+| TF-34 | 3 | 45 min exploratives Testen – manuell, mit dem PC-Simulator möglich |
+
+## Bekannter Fehler
+
+| Klasse | Beschreibung | Status |
+|---|---|---|
+| 2 | Antwortet Pico 1 bei einer Einfahrt erst nach dem Timeout (1000 ms), wird der Parkvorgang trotzdem eröffnet, die Schranke bleibt aber zu; der zweite Versuch meldet «Parkvorgang bereits offen». Gefunden im PC-Simulator mit angehaltenem Kasse-Container. | offen |
 
 ## Nicht geprüft (nur mit Hardware möglich)
 

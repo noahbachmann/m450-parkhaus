@@ -137,6 +137,8 @@ needed). Later phases may add JSON endpoints for them if the pages use fetch().
   `<page>?kz=<PLATE>&m=<id>`, so a reload doesn't pay twice. The pay form stays visible on a paid session so
   a second attempt shows «bereits bezahlt» (TF-20).
 - `POST /reset` — test-data reset (no sessions, tx counter 1), 303 to `/kasse`.
+- `GET /tarif` (step 7d) — tariff summary sentence and example fees, generated from `lib/tariff`; linked in
+  the navigation and below every session card on Kasse and Automat.
 - Sessions are written to flash after every successful entry, exit and payment (incl. partial cash).
 - The JSON API reads the request body from WebServer's `plain` argument, which is only set for a
   non-form content type: clients must send `Content-Type: application/json`.

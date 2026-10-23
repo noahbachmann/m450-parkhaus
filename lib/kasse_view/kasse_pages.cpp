@@ -3,6 +3,9 @@
 #include "format.h"
 #include "kasse_view.h"
 #include "plate.h"
+#include "tariff.h"
+
+const char* const KASSE_NAV = "<a href=\"/kasse\">Kasse</a><a href=\"/automat\">Automat</a><a href=\"/tarif\">Tarif</a>";
 
 namespace
 {
@@ -68,6 +71,58 @@ void appendResetForm(std::string& html)
 }
 }
 
+namespace
+{
+// "1 h 0 min 1 s": like formatDuration, plus seconds where they matter for the boundary.
+std::string exampleDuration(int64_t seconds)
+{
+    std::string text = formatDuration(seconds);
+    if (seconds % 60 != 0)
+    {
+        text += " " + std::to_string(seconds % 60) + " s";
+    }
+    return text;
+}
+}
+
+std::string renderTariffPage()
+{
+    const int64_t MIN = 60;
+    const int64_t HOUR = 3600;
+    const int64_t examples[] = {
+        FREE_MINUTES * MIN,
+        FREE_MINUTES * MIN + 1,
+        HOUR,
+        HOUR + 1,
+        HOUR + 20 * MIN,
+        2 * HOUR + 30 * MIN,
+        10 * HOUR,
+        10 * HOUR + 1,
+        DAY_BLOCK_HOURS * HOUR,
+        DAY_BLOCK_HOURS * HOUR + 1,
+        2 * DAY_BLOCK_HOURS * HOUR,
+    };
+    std::string html;
+    html.reserve(4096);
+    appendPageStart(html, "Tarif", KASSE_NAV, "Tarif");
+    html += "<div class=\"card\"><p><strong>" + htmlEscape(tariffSummary()) + "</strong></p><table>";
+    appendRow(html, "Freizeit", "bis und mit " + std::to_string(FREE_MINUTES) + " min: " + formatChf(0));
+    appendRow(html, "Preis", formatChf(PRICE_PER_UNIT_RAPPEN) + " pro angefangene " + std::to_string(UNIT_MINUTES) +
+                                 " min, ab Einfahrt gerechnet");
+    appendRow(html, "Tagesmaximum",
+              formatChf(DAILY_MAX_RAPPEN) + " pro angefangene " + std::to_string(DAY_BLOCK_HOURS) + " h ab Einfahrt");
+    html += "</table></div><h2>Beispiele</h2><div class=\"scroll\"><table><tr><th>Parkdauer</th><th>Gebühr</th></tr>";
+    for (int64_t d : examples)
+    {
+        uint32_t fee = 0;
+        calculateFee(0, d, fee);
+        html += "<tr><td>" + exampleDuration(d) + "</td><td>" + formatChf(fee) + "</td></tr>";
+    }
+    html += "</table></div>";
+    appendPageEnd(html);
+    return html;
+}
+
 const char* pagePath(Page page)
 {
     return page == Page::Kasse ? "/kasse" : "/automat";
@@ -79,7 +134,7 @@ std::string renderPage(Page page, const SessionStore& store, const std::string& 
     bool kasse = page == Page::Kasse;
     std::string html;
     html.reserve(4096);
-    appendPageStart(html, kasse ? "Kasse" : "Automat", "<a href=\"/kasse\">Kasse</a><a href=\"/automat\">Automat</a>",
+    appendPageStart(html, kasse ? "Kasse" : "Automat", KASSE_NAV,
                     kasse ? "Kasse" : "Automat – Parkgebühr bezahlen");
 
     if (!timeOk)
@@ -121,6 +176,7 @@ std::string renderPage(Page page, const SessionStore& store, const std::string& 
         {
             SessionView v = describeSession(*s, now);
             appendSession(html, v);
+            html += "<p class=\"muted\"><a href=\"/tarif\">Tarif anzeigen</a></p>";
             // Also offered when paid, so a second attempt answers «bereits bezahlt» (TF-20).
             if (timeOk && (v.payable || s->status == SessionStatus::Paid))
             {

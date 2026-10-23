@@ -24,8 +24,8 @@ verified. No `test/board/` suites and no `v1.0` tag.
 | 7a | Phase 2: barrier safety | done (verified by user 2026-10-23, native + build) |
 | S | PC simulator (Docker / `sim_kasse` + `sim_schranken`) | done (verified by user 2026-10-23, Docker) |
 | 7b | Phase 2: event log + operator view | done (verified by user 2026-10-23, native + build) |
-| 7c | Phase 2: exit terminal | awaiting user verification |
-| 7d | Phase 2: tariff page + wrap-up | open |
+| 7c | Phase 2: exit terminal | done (verified by user 2026-10-23, native + build + Docker) |
+| 7d | Phase 2: tariff page + wrap-up | awaiting user verification |
 
 ## 1 — Foundation
 
@@ -164,4 +164,16 @@ Hardware test suites under `test/board/` and the `v1.0` tag are dropped (no hard
 
 ### 7d — Tariff page + wrap-up
 
-- Tariff page in Kasse and Automat (TF-19 rest); README, test protocol, roadmap final.
+- `GET /tarif` on Pico 1 (firmware + simulator): `tariffSummary()` (tariff.md wording) and example fees
+  computed by `calculateFee`, linked from Kasse and Automat (US-14 AK3, rest of TF-19).
+- README (user stories incl. phase 2, pages, known limitations), test protocol (TF-01..32, not run:
+  TF-33/34, known defect), architecture.
+- **User verifies:** `pio test -e native` → 17 suites, 174 cases passed; `pio run` → both `SUCCESS`;
+  `docker compose up --build` → `http://localhost:8081/tarif`.
+
+## Open after step 7
+
+- Late entry reply (Pico 1 answers after Pico 2's 1000 ms timeout → session opened, barrier closed):
+  needs a decision, see step S. Listed as a known defect (class 2) in `docs/testprotokoll.md`.
+- TF-33 / TF-34 are manual tests; they can be run with the PC simulator.
+- Firmware has never run on hardware (built only).

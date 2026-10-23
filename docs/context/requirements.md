@@ -4,6 +4,9 @@ Source: `Anforderungen_UserStories.pdf` (Bachmann/Willimann, 07.09.2026). Writte
 with cameras, app, sensors and payment provider. The prototype implements only part of it.
 Value = Nutzen (H/M/L), SP = story points (Fibonacci). Total 126 SP.
 
+**Implementation status (2026-10-23):** all `P1` and `TK` items are implemented (roadmap steps 1–7), verified
+natively and in the PC simulator; not on hardware.
+
 **Status legend:** `P1` = phase 1 (build now) · `TK` = in Testkonzept scope, build later ·
 `OUT` = not testable/buildable with the Pico setup (reason given).
 

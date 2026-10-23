@@ -86,6 +86,14 @@ std::string tariffNote(int64_t durationSeconds, uint32_t feeRappen)
     return note;
 }
 
+std::string tariffSummary()
+{
+    std::string unit = UNIT_MINUTES == 60 ? "Stunde" : std::to_string(UNIT_MINUTES) + " Minuten";
+    return std::to_string(FREE_MINUTES) + " Freiminuten; wird die Freizeit überschritten, kostet jede angefangene " +
+           unit + " ab Einfahrt " + formatChf(PRICE_PER_UNIT_RAPPEN) + "; Tagesmaximum " +
+           formatChf(DAILY_MAX_RAPPEN) + " pro angefangene " + std::to_string(DAY_BLOCK_HOURS) + " Stunden.";
+}
+
 std::string paymentMessage(const PaymentResult& result, const std::string& plate)
 {
     using Kind = PaymentResult::Kind;
