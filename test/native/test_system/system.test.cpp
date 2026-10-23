@@ -611,6 +611,20 @@ void test_tf30_fault_logged()
     TEST_ASSERT_EQUAL(GateLane::Exit, sys.log.all()[0].lane);
 }
 
+void test_remote_opening_with_kasse_off_stays_closed()
+{
+    System sys;
+    assertOpen(sys.entryAgo("ZH98765", 2 * HOUR + 30 * MIN));
+    sys.kasseOn = false;
+    RemoteOpenResult r = sys.remote(GateLane::Exit, "ZH98765", "Kulanz");
+    TEST_ASSERT_FALSE(r.open);
+    TEST_ASSERT_EQUAL(BarrierState::Closed, sys.exitBarrier.state());
+    TEST_ASSERT_EQUAL_UINT(0, sys.eventCount(EventType::RemoteOpening));
+    TEST_ASSERT_EQUAL_UINT(1, sys.eventCount(EventType::KasseUnreachable));
+    sys.kasseOn = true;
+    TEST_ASSERT_EQUAL(SessionStatus::Open, sys.sessions.findActive("ZH98765")->status);
+}
+
 void test_tf31_remote_opening_at_exit_without_payment()
 {
     System sys;
@@ -660,5 +674,6 @@ int main()
     RUN_TEST(test_tf17_remote_opening_needs_reason);
     RUN_TEST(test_tf30_fault_logged);
     RUN_TEST(test_tf31_remote_opening_at_exit_without_payment);
+    RUN_TEST(test_remote_opening_with_kasse_off_stays_closed);
     return UNITY_END();
 }

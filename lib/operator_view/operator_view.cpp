@@ -10,51 +10,52 @@ const char* const OPERATOR_USER = "betrieb";
 
 namespace
 {
-    // Status of the closed session in an override exit reply, as a log note.
-    std::string exitNote(const HttpReply& reply)
+    struct KasseOutcome
     {
-        if (reply.status <= 0)
+        bool confirmed = false; // Pico 1 answered as expected: the barrier may open
+        std::string note;       // log note / notice text
+    };
+
+    KasseOutcome entryOutcome(const HttpReply& reply)
+    {
+        if (reply.status == 201)
         {
-            return "Kasse nicht erreichbar – Parkvorgang nicht abgeschlossen";
+            return {true, "Parkvorgang eröffnet"};
         }
-        JsonDocument doc;
-        bool parsed = deserializeJson(doc, reply.body) == DeserializationError::Ok && doc.is<JsonObject>();
-        if (reply.status == 404)
+        if (reply.status == 409)
         {
-            return "kein Parkvorgang";
+            return {true, "Parkvorgang bereits offen"};
         }
-        std::string status = parsed && doc["status"].is<const char*>() ? doc["status"].as<std::string>() : "";
-        if (reply.status == 200 && status == "closed_unpaid")
-        {
-            return "ohne Zahlung";
-        }
-        if (reply.status == 200 && status == "closed")
-        {
-            return "bezahlt";
-        }
-        if (reply.status == 200 && status == "closed_free")
-        {
-            return "Freizeit";
-        }
-        return "Parkvorgang nicht abgeschlossen (Antwort " + std::to_string(reply.status) + ")";
+        return {false, ""};
     }
 
-    std::string entryNote(const HttpReply& reply)
+    // Override exit reply: which way the session was closed.
+    KasseOutcome exitOutcome(const HttpReply& reply)
     {
-        switch (reply.status)
+        if (reply.status == 404)
         {
-        case 201:
-            return "Parkvorgang eröffnet";
-        case 409:
-            return "Parkvorgang bereits offen";
-        default:
-            break;
+            return {true, "kein Parkvorgang"};
         }
-        if (reply.status <= 0)
+        JsonDocument doc;
+        if (reply.status != 200 || deserializeJson(doc, reply.body) != DeserializationError::Ok ||
+            !doc["status"].is<const char*>())
         {
-            return "Kasse nicht erreichbar – kein Parkvorgang";
+            return {false, ""};
         }
-        return "kein Parkvorgang (Antwort " + std::to_string(reply.status) + ")";
+        std::string status = doc["status"].as<std::string>();
+        if (status == "closed_unpaid")
+        {
+            return {true, "ohne Zahlung"};
+        }
+        if (status == "closed")
+        {
+            return {true, "bezahlt"};
+        }
+        if (status == "closed_free")
+        {
+            return {true, "Freizeit"};
+        }
+        return {false, ""};
     }
 
     std::string kzBody(const std::string& plate, bool override)
@@ -194,19 +195,34 @@ RemoteOpenResult remoteOpen(GateLane lane, const std::string& rawPlate, const st
     }
 
     std::string plate = normalizePlate(rawPlate);
-    std::string note;
     if (!isValidPlate(plate))
     {
-        plate = "";
-        note = "ohne Kennzeichen – kein Parkvorgang";
+        r.notice = {"err", "Bitte gültiges Kennzeichen eingeben"};
+        return r;
     }
-    else if (lane == GateLane::Entry)
+
+    HttpReply reply = lane == GateLane::Entry ? kasse.postJson("/api/entry", kzBody(plate, false))
+                                              : kasse.postJson("/api/exit", kzBody(plate, true));
+    if (reply.status <= 0)
     {
-        note = entryNote(kasse.postJson("/api/entry", kzBody(plate, false)));
+        Event e;
+        e.time = now;
+        e.type = EventType::KasseUnreachable;
+        e.lane = lane;
+        e.plate = plate;
+        e.user = OPERATOR_USER;
+        e.reason = reason;
+        e.note = "Fernöffnung abgebrochen, Schranke bleibt zu";
+        log.add(e);
+        r.logged = true;
+        r.notice = {"err", "Kasse nicht erreichbar – Schranke bleibt zu"};
+        return r;
     }
-    else
+    KasseOutcome outcome = lane == GateLane::Entry ? entryOutcome(reply) : exitOutcome(reply);
+    if (!outcome.confirmed)
     {
-        note = exitNote(kasse.postJson("/api/exit", kzBody(plate, true)));
+        r.notice = {"err", "Unerwartete Antwort der Kasse (" + std::to_string(reply.status) + ") – Schranke bleibt zu"};
+        return r;
     }
 
     Event e;
@@ -216,12 +232,12 @@ RemoteOpenResult remoteOpen(GateLane lane, const std::string& rawPlate, const st
     e.plate = plate;
     e.user = OPERATOR_USER;
     e.reason = reason;
-    e.note = note;
+    e.note = outcome.note;
     log.add(e);
 
     r.open = true;
     r.logged = true;
-    r.notice = {"ok", std::string("Schranke ") + gateLaneLabel(lane) + " geöffnet – " + note};
+    r.notice = {"ok", std::string("Schranke ") + gateLaneLabel(lane) + " geöffnet – " + outcome.note};
     return r;
 }
 

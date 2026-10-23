@@ -130,20 +130,62 @@ void test_remote_open_exit_paid_and_without_session()
     TEST_ASSERT_EQUAL(SessionStatus::Closed, kasse.store.findLatest("LU123456")->status);
     TEST_ASSERT_EQUAL_STRING("Schranke Ausfahrt geöffnet – kein Parkvorgang",
                              remoteOpen(GateLane::Exit, "SZ555", "Kulanz", NOW, kasse, log).notice.text.c_str());
-    TEST_ASSERT_EQUAL_STRING("Schranke Einfahrt geöffnet – ohne Kennzeichen – kein Parkvorgang",
-                             remoteOpen(GateLane::Entry, "", "Kennzeichen nicht erkannt", NOW, kasse, log)
-                                 .notice.text.c_str());
-    TEST_ASSERT_EQUAL_UINT(3, log.all().size());
+    TEST_ASSERT_EQUAL_UINT(2, log.all().size());
 }
 
-void test_remote_open_with_kasse_off_still_opens()
+void test_remote_open_with_kasse_off_stays_closed()
 {
     LocalKasse kasse;
     kasse.online = false;
     EventLog log;
-    RemoteOpenResult r = remoteOpen(GateLane::Entry, "BE4711", "Kennzeichen nicht erkannt", NOW, kasse, log);
-    TEST_ASSERT_TRUE(r.open);
-    TEST_ASSERT_EQUAL_STRING("Kasse nicht erreichbar – kein Parkvorgang", log.all()[0].note.c_str());
+    for (GateLane lane : {GateLane::Entry, GateLane::Exit})
+    {
+        RemoteOpenResult r = remoteOpen(lane, "BE4711", "Kennzeichen nicht erkannt", NOW, kasse, log);
+        TEST_ASSERT_FALSE(r.open);
+        TEST_ASSERT_TRUE(r.logged);
+        TEST_ASSERT_EQUAL_STRING("Kasse nicht erreichbar – Schranke bleibt zu", r.notice.text.c_str());
+    }
+    TEST_ASSERT_EQUAL_UINT(2, log.all().size());
+    const Event& e = log.all()[0];
+    TEST_ASSERT_EQUAL(EventType::KasseUnreachable, e.type);
+    TEST_ASSERT_EQUAL_STRING("betrieb", e.user.c_str());
+    TEST_ASSERT_EQUAL_STRING("Kennzeichen nicht erkannt", e.reason.c_str());
+    TEST_ASSERT_EQUAL_STRING("Fernöffnung abgebrochen, Schranke bleibt zu", e.note.c_str());
+}
+
+void test_remote_open_needs_valid_plate()
+{
+    LocalKasse kasse;
+    EventLog log;
+    for (const char* kz : {"", "LU-12#45"})
+    {
+        RemoteOpenResult r = remoteOpen(GateLane::Entry, kz, "Kennzeichen nicht erkannt", NOW, kasse, log);
+        TEST_ASSERT_FALSE(r.open);
+        TEST_ASSERT_FALSE(r.logged);
+        TEST_ASSERT_EQUAL_STRING("Bitte gültiges Kennzeichen eingeben", r.notice.text.c_str());
+    }
+    TEST_ASSERT_EQUAL_UINT(0, log.all().size());
+}
+
+void test_remote_open_unexpected_reply_stays_closed()
+{
+    class BrokenKasse : public KasseLink
+    {
+    public:
+        HttpReply postJson(const char*, const std::string&) override
+        {
+            return {503, "{\"error\":\"time_not_synced\"}"};
+        }
+        HttpReply getJson(const std::string&) override
+        {
+            return {};
+        }
+    } kasse;
+    EventLog log;
+    RemoteOpenResult r = remoteOpen(GateLane::Exit, "ZH98765", "Kulanz", NOW, kasse, log);
+    TEST_ASSERT_FALSE(r.open);
+    TEST_ASSERT_FALSE(r.logged);
+    TEST_ASSERT_EQUAL_STRING("Unerwartete Antwort der Kasse (503) – Schranke bleibt zu", r.notice.text.c_str());
 }
 
 void test_log_helpers_tf14_tf15_tf30()
@@ -203,7 +245,9 @@ int main()
     RUN_TEST(test_remote_open_without_reason_tf17);
     RUN_TEST(test_remote_open_exit_unpaid_tf31);
     RUN_TEST(test_remote_open_exit_paid_and_without_session);
-    RUN_TEST(test_remote_open_with_kasse_off_still_opens);
+    RUN_TEST(test_remote_open_with_kasse_off_stays_closed);
+    RUN_TEST(test_remote_open_needs_valid_plate);
+    RUN_TEST(test_remote_open_unexpected_reply_stays_closed);
     RUN_TEST(test_log_helpers_tf14_tf15_tf30);
     RUN_TEST(test_operator_page_filter_tf14);
     return UNITY_END();

@@ -21,9 +21,9 @@ verified. No `test/board/` suites and no `v1.0` tag.
 | 4 | Pico 1 "Kasse" firmware | done (verified by user 2026-10-23, native + build) |
 | 5 | Pico 2 "Schranken" firmware | done (verified by user 2026-10-23, native + build) |
 | 6 | Integration + phase-1 system test | done (verified by user 2026-10-23, native + build) |
-| 7a | Phase 2: barrier safety | awaiting user verification |
+| 7a | Phase 2: barrier safety | done (verified by user 2026-10-23, native + build) |
 | S | PC simulator (Docker / `sim_kasse` + `sim_schranken`) | awaiting user verification |
-| 7b | Phase 2: event log + operator view | awaiting user verification |
+| 7b | Phase 2: event log + operator view | awaiting user verification (fail-safe change after first check) |
 | 7c | Phase 2: exit terminal | open |
 | 7d | Phase 2: tariff page + wrap-up | open |
 
@@ -146,8 +146,9 @@ Hardware test suites under `test/board/` and the `v1.0` tag are dropped (no hard
   `OPERATOR_PASSWORD` added to `secrets.example.h`.
 - Tests: TF-14, 15 (log), 16, 17, 30 (fault logged), 31 in the system test; unit suites `event_log`,
   `operator_view`; `forceExit`, `override`, `closed_unpaid` codec.
-- **User verifies:** `pio test -e native` → 16 suites, 153 cases passed; `pio run` → both `SUCCESS`
-  (a `#warning` about `OPERATOR_PASSWORD` is expected until it's added to your `secrets.h`);
+- First check by the user passed (2026-10-23). Then, at the user's request: remote opening stays closed
+  unless Pico 1 confirms (Kasse down → logged fault), valid plate required.
+- **User verifies:** `pio test -e native` → 16 suites, 156 cases passed; `pio run` → both `SUCCESS`;
   `docker compose up --build` → `http://localhost:8082/betrieb` (betrieb / parkhaus).
 
 ### 7c — Exit terminal

@@ -65,6 +65,7 @@ Hauptschleife auf dem Pico), der Leitstelle (`test/native/test_operator_view/`) 
 | TF-16 | 2 | `test_tf16_remote_opening_at_entry`, `test_remote_open_entry_opens_session_tf16` | Leitstelle sieht «Einfahrt», «BE4711», «kein Parkvorgang»; Öffnen mit «Kennzeichen nicht erkannt» öffnet, eröffnet Parkvorgang, Protokoll mit Benutzer, Zeit, Spur, Grund | bestanden |
 | TF-17 | 2 | `test_tf17_remote_opening_needs_reason`, `test_remote_open_without_reason_tf17` | Ohne Grund: bleibt zu, «Bitte Grund auswählen», nichts protokolliert | bestanden |
 | TF-30 (Protokoll) | 1 | `test_tf30_fault_logged` | «Kasse nicht erreichbar» wird mit Spur und Kennzeichen protokolliert | bestanden |
+| Fernöffnung ohne Kasse | – | `test_remote_open_with_kasse_off_stays_closed`, `test_remote_opening_with_kasse_off_stays_closed` | Kasse antwortet nicht: Schranke bleibt zu, «Kasse nicht erreichbar» mit Benutzer und Grund protokolliert, keine Fernöffnung | bestanden |
 | TF-31 | 2 | `test_tf31_remote_opening_at_exit_without_payment`, `test_remote_open_exit_unpaid_tf31` | Öffnet; Protokoll mit Zeit, «betrieb», «Ausfahrt», Kennzeichen, «Kulanz», «ohne Zahlung»; Parkvorgang «ohne Zahlung ausgefahren» | bestanden |
 
 ## Nicht geprüft (nur mit Hardware möglich)

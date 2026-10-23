@@ -171,9 +171,12 @@ needed). Later phases may add JSON endpoints for them if the pages use fetch().
   erreichbar»), loop fault; «Schranke öffnen» (`<details>`) → plate + reason → «Bestätigen»; event log
   with a type filter (`?filter=safety_stop`).
 - `POST /betrieb/oeffnen` (`lane`, `kz`, `reason`): reason must be one of «Kennzeichen nicht erkannt»,
-  «Kulanz», «Technische Störung», else «Bitte Grund auswählen» and nothing happens. Entry: `/api/entry`
-  for a valid plate (session opened). Exit: `/api/exit` with `override` (unpaid → `closed_unpaid`, note
-  «ohne Zahlung»). The barrier opens even if Pico 1 doesn't answer; the note records the session outcome.
+  «Kulanz», «Technische Störung», else «Bitte Grund auswählen» and nothing happens; the plate must be
+  valid («Bitte gültiges Kennzeichen eingeben»). Entry: `/api/entry` (201 or 409 already open). Exit:
+  `/api/exit` with `override` (unpaid → `closed_unpaid`, note «ohne Zahlung»; 404 = no session, opens).
+- **Fail-safe (decided by the user 2026-10-23):** the barrier opens only when Pico 1 confirms the session
+  outcome. Pico 1 not answering → stays closed, «Kasse nicht erreichbar – Schranke bleibt zu», logged as
+  «Kasse nicht erreichbar» with user and reason. Any other reply → stays closed, not logged.
 - Firmware: core 1 hands barrier events to core 0 through a per-lane single-producer/single-consumer
   queue; core 0 timestamps, logs and writes them (core 1 never touches LittleFS).
 

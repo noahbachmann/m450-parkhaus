@@ -27,10 +27,10 @@ struct RemoteOpenResult
     bool logged = false; // an event was added: save the log
 };
 
-// «Schranke öffnen». Without a reason from the list nothing happens («Bitte Grund auswählen»).
-// Entry: opens a session for a valid plate (US-08 AK4). Exit: closes the session; unpaid ->
-// «ohne Zahlung ausgefahren». The barrier opens even if Pico 1 doesn't answer; the note in the log says
-// what happened to the session.
+// «Schranke öffnen». Needs a reason from the list («Bitte Grund auswählen») and a valid plate.
+// Opens only when Pico 1 confirms the session outcome (fail-safe): entry opens a session (or one is already
+// open, US-08 AK4); exit closes it, unpaid -> «ohne Zahlung ausgefahren», or Pico 1 has none.
+// Pico 1 not answering: stays closed, logged as «Kasse nicht erreichbar»; other replies: stays closed.
 RemoteOpenResult remoteOpen(GateLane lane, const std::string& rawPlate, const std::string& reason, int64_t now,
                             KasseLink& kasse, EventLog& log);
 
