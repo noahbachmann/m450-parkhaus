@@ -142,7 +142,8 @@ void refreshView(Lane& lane)
     {
         showOnTerminal(lane, closedAfterPass(lane.terminal));
     }
-    lane.view.canPass = lane.barrier.state() == BarrierState::Open && !lane.terminal.passing;
+    lane.view.canPass = lane.barrier.state() == BarrierState::Open && !lane.terminal.passing && !lane.loopHeld;
+    lane.view.canHold = lane.barrier.state() != BarrierState::Closed && !lane.loopHeld;
     lane.view.loopHeld = lane.loopHeld;
     lane.view.barrier = barrierStateLabel(lane.barrier.state());
     lane.view.fault = lane.barrier.loopFault() ? loopFaultMessage(lane.name) : "";
@@ -329,11 +330,12 @@ HttpResponse route(const HttpRequest& req)
         Lane* lane = laneOf(req);
         if (lane != nullptr)
         {
-            lane->loopHeld = req.arg("held") == "1";
+            bool up = lane->barrier.state() != BarrierState::Closed;
+            lane->loopHeld = req.arg("held") == "1" && up; // no car on the loop under a closed barrier
             std::printf("[loop] %s: %s\n", lane->name, lane->loopHeld ? "belegt" : "frei");
             if (!lane->loopHeld)
             {
-                GateResult r = leftLoop(lane->terminal, lane->barrier.state() != BarrierState::Closed);
+                GateResult r = leftLoop(lane->terminal, up);
                 if (!r.message.empty())
                 {
                     showOnTerminal(*lane, r);

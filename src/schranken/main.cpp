@@ -336,11 +336,12 @@ void onLoop()
     Lane* lane = laneArg();
     if (lane != nullptr)
     {
-        bool held = argOf("held") == "1";
+        bool up = barrierState(*lane) != BarrierState::Closed;
+        bool held = argOf("held") == "1" && up; // no car on the loop under a closed barrier
         lane->loopHeld.store(held);
         if (!held)
         {
-            GateResult r = leftLoop(lane->terminal, barrierState(*lane) != BarrierState::Closed);
+            GateResult r = leftLoop(lane->terminal, up);
             if (!r.message.empty())
             {
                 showOnTerminal(*lane, r);
@@ -394,8 +395,10 @@ void refreshView(Lane& lane)
     {
         showOnTerminal(lane, closedAfterPass(lane.terminal));
     }
-    lane.view.canPass = state == BarrierState::Open && !lane.terminal.passing;
-    lane.view.loopHeld = lane.loopHeld.load();
+    bool held = lane.loopHeld.load();
+    lane.view.canPass = state == BarrierState::Open && !lane.terminal.passing && !held;
+    lane.view.canHold = state != BarrierState::Closed && !held;
+    lane.view.loopHeld = held;
     lane.view.barrier = barrierStateLabel(state);
     lane.view.fault = lane.fault.load() ? loopFaultMessage(lane.name) : "";
     lane.view.payPlate = lane.terminal.payPlate;
