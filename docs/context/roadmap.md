@@ -197,4 +197,4 @@ Hardware test suites under `test/board/` and the `v1.0` tag are dropped (no hard
 ## Open after step 7
 
 - TF-33 / TF-34 are manual tests; the user runs them later with the PC simulator.
-- Firmware has never run on hardware (built only).
+- Firmware han't run on Picos since step 4.
