@@ -125,6 +125,20 @@ void test_drive_through_button_only_while_open()
     TEST_ASSERT_FALSE(contains(html, "value=\"exit\"><button type=\"submit\"><strong>Durchfahren"));
 }
 
+void test_loop_toggle_tf13()
+{
+    LaneView exit{"schliesst", "ok", "Fahrzeug durchgefahren – Schranke schliesst", "", "", ""};
+    exit.loopHeld = true;
+    std::string html = camera(LaneView{}, exit);
+    TEST_ASSERT_TRUE(contains(html, "action=\"/kamera/schleife\" class=\"inline\"><input type=\"hidden\" name=\"lane\" "
+                                    "value=\"entry\"><input type=\"hidden\" name=\"held\" value=\"1\"><button "
+                                    "type=\"submit\">Fahrzeug bleibt stehen</button>"));
+    TEST_ASSERT_TRUE(contains(html, "value=\"exit\"><input type=\"hidden\" name=\"held\" value=\"0\"><button "
+                                    "type=\"submit\">Fahrzeug fährt weiter</button>"));
+    TEST_ASSERT_TRUE(contains(html, "Schranke: <strong>schliesst</strong> – Sicherungsschleife: <strong>belegt</strong>"));
+    TEST_ASSERT_TRUE(contains(html, "Schranke: <strong>geschlossen</strong></p>"));
+}
+
 void test_nav_public_hides_admin_pages()
 {
     std::string html = camera(LaneView{}, LaneView{});
@@ -214,6 +228,7 @@ int main()
     RUN_TEST(test_camera_page_shows_loop_fault_tf15);
     RUN_TEST(test_exit_terminal_payment_form_tf28);
     RUN_TEST(test_drive_through_button_only_while_open);
+    RUN_TEST(test_loop_toggle_tf13);
     RUN_TEST(test_nav_public_hides_admin_pages);
     RUN_TEST(test_nav_admin_shows_badge_and_admin_pages);
     RUN_TEST(test_camera_lists_sessions_active_first_and_suggests_plates);

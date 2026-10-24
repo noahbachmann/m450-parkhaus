@@ -227,6 +227,18 @@ void test_drive_through_without_open_barrier()
     TEST_ASSERT_EQUAL_STRING("Fahrzeug durchgefahren – Schranke schliesst", driveThrough(t, true).message.c_str());
 }
 
+void test_left_loop_counts_as_pass()
+{
+    LaneTerminal t = exitTerminal();
+    TEST_ASSERT_EQUAL_STRING("", leftLoop(t, false).message.c_str()); // barrier closed: nothing to show
+    TEST_ASSERT_FALSE(t.passing);
+    GateResult r = leftLoop(t, true);
+    TEST_ASSERT_EQUAL_STRING("ok", r.cls);
+    TEST_ASSERT_EQUAL_STRING("Fahrzeug durchgefahren – Schranke schliesst", r.message.c_str());
+    TEST_ASSERT_TRUE(t.passing);
+    TEST_ASSERT_EQUAL_STRING("", leftLoop(t, true).message.c_str()); // «Durchfahren» already shown
+}
+
 void test_new_opening_clears_pass()
 {
     LaneTerminal t = exitTerminal();
@@ -254,6 +266,7 @@ int main()
     RUN_TEST(test_paid_elsewhere_meanwhile_just_exits);
     RUN_TEST(test_drive_through_then_closed_message);
     RUN_TEST(test_drive_through_without_open_barrier);
+    RUN_TEST(test_left_loop_counts_as_pass);
     RUN_TEST(test_new_opening_clears_pass);
     return UNITY_END();
 }

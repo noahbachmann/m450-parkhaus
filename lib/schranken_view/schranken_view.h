@@ -31,6 +31,7 @@ struct LaneView
     std::string payPlate;                // exit: plate with an unpaid fee -> payment form; empty = none
     std::string payFee;                  // "CHF 6.00"
     bool canPass = false;                // barrier up: «Durchfahren» offered
+    bool loopHeld = false;               // «Fahrzeug bleibt stehen»: loop occupied from the web page
 };
 
 // Lanes on top, below the sessions from Pico 1 (active first) as a testing aid. The plate fields suggest

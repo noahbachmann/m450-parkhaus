@@ -23,7 +23,8 @@
 
 // Simulated Pico 2 "Schranken": all pages (camera, Tarif; after login Kasse, registration, Betrieb), barriers,
 // real HTTP calls to the Kasse at KASSE_URL (default http://localhost:8081). Same routes as
-// src/schranken/main.cpp. No safety loops: «Durchfahren» on the camera page stands in for them.
+// src/schranken/main.cpp. No safety loops: «Durchfahren» and «Fahrzeug bleibt stehen» on the camera page
+// stand in for them.
 // Pico 1 off = stop the Kasse program or container. Login: user «betrieb», password OPERATOR_PASSWORD
 // (default "parkhaus").
 
@@ -58,6 +59,7 @@ struct Lane
     Barrier barrier;
     LaneView view;
     LaneTerminal terminal;
+    bool loopHeld = false; // «Fahrzeug bleibt stehen»
 };
 
 HttpKasseLink kasse;
@@ -141,6 +143,7 @@ void refreshView(Lane& lane)
         showOnTerminal(lane, closedAfterPass(lane.terminal));
     }
     lane.view.canPass = lane.barrier.state() == BarrierState::Open && !lane.terminal.passing;
+    lane.view.loopHeld = lane.loopHeld;
     lane.view.barrier = barrierStateLabel(lane.barrier.state());
     lane.view.fault = lane.barrier.loopFault() ? loopFaultMessage(lane.name) : "";
     lane.view.payPlate = lane.terminal.payPlate;
@@ -321,6 +324,24 @@ HttpResponse route(const HttpRequest& req)
         }
         return redirect("/kamera");
     }
+    if (post && req.path == "/kamera/schleife")
+    {
+        Lane* lane = laneOf(req);
+        if (lane != nullptr)
+        {
+            lane->loopHeld = req.arg("held") == "1";
+            std::printf("[loop] %s: %s\n", lane->name, lane->loopHeld ? "belegt" : "frei");
+            if (!lane->loopHeld)
+            {
+                GateResult r = leftLoop(lane->terminal, lane->barrier.state() != BarrierState::Closed);
+                if (!r.message.empty())
+                {
+                    showOnTerminal(*lane, r);
+                }
+            }
+        }
+        return redirect("/kamera");
+    }
     if (post && req.path == "/kamera/ruftaste")
     {
         Lane* lane = laneOf(req);
@@ -384,7 +405,7 @@ HttpResponse route(const HttpRequest& req)
 void updateLane(Lane& lane, uint32_t ms)
 {
     BarrierState before = lane.barrier.state();
-    BarrierEvent event = lane.barrier.update(ms, false);
+    BarrierEvent event = lane.barrier.update(ms, lane.loopHeld);
     if (logBarrierEvent(eventLog, lane.id, event, nowUtc()))
     {
         saveEvents();

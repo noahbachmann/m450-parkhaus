@@ -35,7 +35,12 @@ namespace
         }
         html += "<p>Schranke: <strong>";
         html += lane.barrier;
-        html += "</strong></p><div class=\"terminal ";
+        html += "</strong>";
+        if (lane.loopHeld)
+        {
+            html += " – Sicherungsschleife: <strong>belegt</strong>";
+        }
+        html += "</p><div class=\"terminal ";
         html += lane.cls;
         html += "\">" + htmlEscape(lane.terminal) + "</div><form method=\"post\" action=\"";
         html += action;
@@ -55,6 +60,13 @@ namespace
             html += laneName;
             html += "\"><button type=\"submit\"><strong>Durchfahren</strong></button></form> ";
         }
+        html += "<form method=\"post\" action=\"/kamera/schleife\" class=\"inline\"><input type=\"hidden\" "
+                "name=\"lane\" value=\"";
+        html += laneName;
+        html += lane.loopHeld ? "\"><input type=\"hidden\" name=\"held\" value=\"0\"><button type=\"submit\">"
+                                "Fahrzeug fährt weiter</button></form> "
+                              : "\"><input type=\"hidden\" name=\"held\" value=\"1\"><button type=\"submit\">"
+                                "Fahrzeug bleibt stehen</button></form> ";
         if (!withEntryTime)
         {
             appendExitTerminal(html, lane);
@@ -232,7 +244,9 @@ std::string renderCameraPage(const LaneView& entry, const LaneView& exit, const 
     appendLane(html, "Einfahrt", "/kamera/einfahrt", true, entry);
     appendLane(html, "Ausfahrt", "/kamera/ausfahrt", false, exit);
     html += "</div><p class=\"muted\"><a href=\"/kamera\">Aktualisieren</a> – die Schranke schliesst, sobald das "
-            "Fahrzeug durchgefahren ist («Durchfahren»), frühestens 5 s nach dem Öffnen.</p>";
+            "Fahrzeug durchgefahren ist («Durchfahren»), frühestens 5 s nach dem Öffnen. «Fahrzeug bleibt stehen» "
+            "belegt die Sicherungsschleife: die Schranke bleibt offen bzw. stoppt beim Schliessen und öffnet "
+            "wieder.</p>";
     appendSessions(html, kasse);
     appendPageEnd(html);
     return html;

@@ -99,6 +99,15 @@ GateResult driveThrough(LaneTerminal& t, bool barrierUp)
     return message(t.lastPlate, "ok", who + " durchgefahren – Schranke schliesst");
 }
 
+GateResult leftLoop(LaneTerminal& t, bool barrierUp)
+{
+    if (!barrierUp || t.passing)
+    {
+        return message(t.lastPlate, "", "");
+    }
+    return driveThrough(t, true);
+}
+
 GateResult closedAfterPass(LaneTerminal& t)
 {
     if (!t.passing)

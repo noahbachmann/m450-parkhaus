@@ -134,6 +134,7 @@ struct Lane
     // core 0 -> core 1: incremented for every open command / «Durchfahren»
     std::atomic<uint32_t> openRequests{0};
     std::atomic<uint32_t> passRequests{0};
+    std::atomic<bool> loopHeld{false}; // «Fahrzeug bleibt stehen», ORed with the loop pin
     // core 1 -> core 0
     std::atomic<int> state{static_cast<int>(BarrierState::Closed)};
     std::atomic<bool> fault{false};
@@ -330,6 +331,25 @@ void onDriveThrough()
     redirect("/kamera");
 }
 
+void onLoop()
+{
+    Lane* lane = laneArg();
+    if (lane != nullptr)
+    {
+        bool held = argOf("held") == "1";
+        lane->loopHeld.store(held);
+        if (!held)
+        {
+            GateResult r = leftLoop(lane->terminal, barrierState(*lane) != BarrierState::Closed);
+            if (!r.message.empty())
+            {
+                showOnTerminal(*lane, r);
+            }
+        }
+    }
+    redirect("/kamera");
+}
+
 void onAbort()
 {
     showOnTerminal(exitLane, abortAtTerminal(exitLane.terminal));
@@ -375,6 +395,7 @@ void refreshView(Lane& lane)
         showOnTerminal(lane, closedAfterPass(lane.terminal));
     }
     lane.view.canPass = state == BarrierState::Open && !lane.terminal.passing;
+    lane.view.loopHeld = lane.loopHeld.load();
     lane.view.barrier = barrierStateLabel(state);
     lane.view.fault = lane.fault.load() ? loopFaultMessage(lane.name) : "";
     lane.view.payPlate = lane.terminal.payPlate;
@@ -599,6 +620,7 @@ void setupRoutes()
     server.on("/kamera/ausfahrt", HTTP_POST, onExit);
     server.on("/kamera/ruftaste", HTTP_POST, onCallButton);
     server.on("/kamera/durchfahren", HTTP_POST, onDriveThrough);
+    server.on("/kamera/schleife", HTTP_POST, onLoop);
     server.on("/kamera/abbrechen", HTTP_POST, onAbort);
     server.on("/kamera/bezahlen", HTTP_POST, onTerminalPay);
     server.on("/tarif", HTTP_GET, showTariff);
@@ -649,7 +671,7 @@ void updateLane(Lane& lane, uint32_t nowMs)
         lane.seenPassRequests = passes;
         lane.barrier.vehiclePassed();
     }
-    bool occupied = digitalRead(lane.loopPin) == LOW;
+    bool occupied = digitalRead(lane.loopPin) == LOW || lane.loopHeld.load();
     BarrierEvent event = lane.barrier.update(nowMs, occupied);
     driveServo(lane);
     if (event != BarrierEvent::None)

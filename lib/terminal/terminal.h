@@ -34,6 +34,9 @@ void recordRemoteOpening(LaneTerminal& t, const std::string& plate);
 // «Durchfahren»: the vehicle passed the open barrier (stands in for the safety loop). barrierUp = the
 // barrier accepted it (Barrier::vehiclePassed()).
 GateResult driveThrough(LaneTerminal& t, bool barrierUp);
+// «Fahrzeug fährt weiter» after «Fahrzeug bleibt stehen»: freeing the loop counts as the pass, so an open
+// barrier gets the «Durchfahren» message unless that was already pressed; otherwise an empty message.
+GateResult leftLoop(LaneTerminal& t, bool barrierUp);
 // Call when the barrier is closed: after «Durchfahren» returns «… durchgefahren – Schranke geschlossen»
 // once; otherwise an empty message (nothing to show).
 GateResult closedAfterPass(LaneTerminal& t);
