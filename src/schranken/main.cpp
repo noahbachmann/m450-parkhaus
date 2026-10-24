@@ -649,8 +649,7 @@ void setupRoutes()
     server.on("/betrieb", HTTP_GET, showOperator);
     server.on("/betrieb/oeffnen", HTTP_POST, onRemoteOpen);
     server.onNotFound(onNotFound);
-    const char* headers[] = {"Cookie"};
-    server.collectHeaders(headers, 1);
+    server.collectHeaders("Cookie");
 }
 
 void beginLane(Lane& lane)
