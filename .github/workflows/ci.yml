@@ -13,11 +13,11 @@ jobs:
     name: Tests (pio test -e native)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.platformio
           key: pio-native-${{ hashFiles('platformio.ini') }}
@@ -28,11 +28,11 @@ jobs:
     name: Firmware (kasse, schranken, hwtest)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.platformio
           key: pio-rp2040-${{ hashFiles('platformio.ini') }}
@@ -45,5 +45,5 @@ jobs:
     name: Simulator (docker build)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker build .
