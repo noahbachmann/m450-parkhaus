@@ -6,6 +6,7 @@
 constexpr uint32_t BARRIER_MIN_OPEN_MS = 5000;
 constexpr uint32_t BARRIER_CLOSE_MS = 2000;       // closing sweep, slow enough to stop in time
 constexpr uint32_t LOOP_FAULT_MS = 5 * 60 * 1000; // loop occupied this long -> fault message
+constexpr uint32_t LOOP_DEBOUNCE_MS = 50;          // loop input must be stable this long (well below TF-13's 0.5 s)
 constexpr int BARRIER_CLOSED_ANGLE = 0;
 constexpr int BARRIER_OPEN_ANGLE = 90;
 
@@ -31,6 +32,9 @@ enum class BarrierEvent
 class Barrier
 {
 public:
+    // Start-up state. A loop occupied at boot means a car may be under the arm: start open instead of closing
+    // onto it; it closes normally once the car has left.
+    void begin(uint32_t nowMs, bool loopOccupied);
     // Opens (or keeps open) for a new vehicle and restarts the minimum open time.
     void open(uint32_t nowMs);
     // The vehicle drove through. False if the barrier is closed.
@@ -62,6 +66,7 @@ private:
 class BarrierDriver
 {
 public:
+    void begin(uint32_t nowMs, bool loopOccupied);
     BarrierEvent update(uint32_t nowMs, uint32_t openRequests, uint32_t passRequests, bool loopOccupied);
     const Barrier& barrier() const;
     // passRequests value applied last, and whether the barrier accepted that pass (Barrier::vehiclePassed()).
@@ -73,6 +78,20 @@ private:
     uint32_t seenOpen = 0;
     uint32_t seenPass = 0;
     bool passAccepted = false;
+};
+
+// Loop input that counts only after it has been stable for LOOP_DEBOUNCE_MS, so a bouncing button or a noisy
+// IR sensor neither stops the barrier nor counts as a passed vehicle.
+class Debouncer
+{
+public:
+    explicit Debouncer(bool initial = false);
+    bool update(uint32_t nowMs, bool raw);
+
+private:
+    bool stable;
+    bool last;
+    uint32_t changedAtMs = 0;
 };
 
 // «offen», «schliesst», «geschlossen»

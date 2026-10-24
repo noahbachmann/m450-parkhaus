@@ -49,6 +49,7 @@ struct KasseRouteResult
 };
 
 // All Pico 1 routes (board and simulator): the API above (JSON body in req.body) and GET / with a link to the
-// pages on Pico 2 at uiUrl. Anything else -> 404.
+// pages on Pico 2 at uiUrl. Anything else -> 404. fromPico2 = false (another device in the WLAN): the POST routes,
+// which change sessions, answer 403 forbidden; reading (e.g. curl on /api/status for TF-29) stays open.
 KasseRouteResult routeKasse(const WebRequest& req, SessionStore& store, int64_t now, bool timeSynced,
-                            const std::string& uiUrl);
+                            const std::string& uiUrl, bool fromPico2);

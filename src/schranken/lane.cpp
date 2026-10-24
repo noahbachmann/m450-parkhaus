@@ -59,13 +59,18 @@ uint32_t CoreLane::droppedEvents() const
 void CoreLane::begin()
 {
     pinMode(loopPin, INPUT_PULLUP);
+    bool occupied = digitalRead(loopPin) == LOW;
+    loop = Debouncer(occupied);
+    driver.begin(millis(), occupied); // a car under the arm at boot: stay open
+    writtenAngle = driver.barrier().angle();
     servo.attach(servoPin);
+    servo.write(writtenAngle);
     update(millis());
 }
 
 void CoreLane::update(uint32_t nowMs)
 {
-    bool occupied = digitalRead(loopPin) == LOW || held.load();
+    bool occupied = loop.update(nowMs, digitalRead(loopPin) == LOW) || held.load();
     BarrierEvent event = driver.update(nowMs, openRequests.load(), passRequests.load(), occupied);
     const Barrier& barrier = driver.barrier();
     if (barrier.angle() != writtenAngle)

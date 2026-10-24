@@ -3,6 +3,7 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include <string>
+#include <vector>
 
 #include "format.h"
 #include "gate.h"
@@ -18,8 +19,7 @@
 // Pico 2 "Schranken": lib/schranken_app (all pages and routes) on core 0, the two barriers on core 1 (lane.h).
 
 #ifndef OPERATOR_PASSWORD
-#warning "OPERATOR_PASSWORD missing in include/secrets.h, using the example password"
-#define OPERATOR_PASSWORD "parkhaus"
+#error "OPERATOR_PASSWORD missing in include/secrets.h (see include/secrets.example.h)"
 #endif
 
 namespace
@@ -123,10 +123,15 @@ void handleRequest()
 // Core 0: logs what core 1 reported, with the NTP time.
 void drainLane(CoreLane& lane, BarrierState& lastState)
 {
+    std::vector<BarrierEvent> events;
     BarrierEvent event;
     while (lane.popEvent(event))
     {
-        app.onBarrierEvent(lane.id, event, nowUtc());
+        events.push_back(event);
+    }
+    if (!events.empty())
+    {
+        app.onBarrierEvents(lane.id, events, nowUtc());
     }
     BarrierState state = lane.state();
     if (state != lastState)

@@ -236,7 +236,7 @@ ApiResponse handleReset(SessionStore& store)
 }
 
 KasseRouteResult routeKasse(const WebRequest& req, SessionStore& store, int64_t now, bool timeSynced,
-                            const std::string& uiUrl)
+                            const std::string& uiUrl, bool fromPico2)
 {
     struct Route
     {
@@ -257,6 +257,11 @@ KasseRouteResult routeKasse(const WebRequest& req, SessionStore& store, int64_t 
         if (req.method != r.method || req.path != r.path)
         {
             continue;
+        }
+        if (r.changedStatus != 0 && !fromPico2)
+        {
+            ApiResponse forbidden = error(403, "forbidden");
+            return {jsonReply(forbidden.status, forbidden.body)};
         }
         std::string path = r.path;
         ApiResponse api = path == "/api/status"     ? handleStatus(store, req.arg("kz"), now)

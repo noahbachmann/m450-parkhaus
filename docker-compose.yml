@@ -12,15 +12,15 @@ services:
       - ./sim-data/kasse:/data
 
   schranken:
-    build: .
-    image: parkhaus-sim
+    image: parkhaus-sim # built by the kasse service
     command: sim_schranken
     init: true
     environment:
       KASSE_URL: http://kasse:8081
+      OPERATOR_PASSWORD: ${OPERATOR_PASSWORD:-parkhaus}
     ports:
       - "127.0.0.1:8082:8082"
     volumes:
       - ./sim-data/schranken:/data
     depends_on:
-      - kasse
+      - kasse # also makes compose build the image (kasse) before starting schranken

@@ -1,5 +1,16 @@
 #include "barrier.h"
 
+void Barrier::begin(uint32_t nowMs, bool loopOccupied)
+{
+    *this = Barrier();
+    occupied = loopOccupied;
+    occupiedSinceMs = nowMs;
+    if (loopOccupied)
+    {
+        reopen(nowMs);
+    }
+}
+
 void Barrier::open(uint32_t nowMs)
 {
     reopen(nowMs);
@@ -95,6 +106,11 @@ bool Barrier::loopFault() const
     return fault;
 }
 
+void BarrierDriver::begin(uint32_t nowMs, bool loopOccupied)
+{
+    current.begin(nowMs, loopOccupied);
+}
+
 BarrierEvent BarrierDriver::update(uint32_t nowMs, uint32_t openRequests, uint32_t passRequests, bool loopOccupied)
 {
     if (openRequests != seenOpen)
@@ -123,6 +139,24 @@ uint32_t BarrierDriver::passesHandled() const
 bool BarrierDriver::lastPassAccepted() const
 {
     return passAccepted;
+}
+
+Debouncer::Debouncer(bool initial) : stable(initial), last(initial)
+{
+}
+
+bool Debouncer::update(uint32_t nowMs, bool raw)
+{
+    if (raw != last)
+    {
+        last = raw;
+        changedAtMs = nowMs;
+    }
+    else if (raw != stable && nowMs - changedAtMs >= LOOP_DEBOUNCE_MS)
+    {
+        stable = raw;
+    }
+    return stable;
 }
 
 const char* barrierStateLabel(BarrierState state)

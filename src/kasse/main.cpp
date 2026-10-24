@@ -51,7 +51,8 @@ void handleRequest()
 {
     unsigned long startMs = millis();
     WebRequest req = readRequest(server);
-    KasseRouteResult r = routeKasse(req, sessions, nowUtc(), timeReady(), uiUrl);
+    bool fromPico2 = server.client().remoteIP() == IPAddress(SCHRANKEN_IP);
+    KasseRouteResult r = routeKasse(req, sessions, nowUtc(), timeReady(), uiUrl, fromPico2);
     if (r.changed)
     {
         saveSessions();

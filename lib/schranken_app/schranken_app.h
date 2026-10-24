@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <string>
+#include <vector>
 
 #include "auth.h"
 #include "barrier.h"
@@ -56,7 +57,8 @@ public:
     void begin();
     // now: Unix epoch seconds (UTC).
     WebResponse handle(const WebRequest& req, int64_t now);
-    // A barrier reported a safety stop or loop fault: logged and saved. None is ignored.
+    // A barrier reported safety stops or loop faults: logged, then saved once. None is ignored.
+    void onBarrierEvents(GateLane lane, const std::vector<BarrierEvent>& events, int64_t now);
     void onBarrierEvent(GateLane lane, BarrierEvent event, int64_t now);
 
     const RegistrationList& registrations() const;

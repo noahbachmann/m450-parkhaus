@@ -126,7 +126,7 @@ namespace
             {
                 return {};
             }
-            WebResponse r = routeKasse(req, store, now, true, "http://ui").response;
+            WebResponse r = routeKasse(req, store, now, true, "http://ui", true).response;
             return {r.status, r.body};
         }
     };
@@ -397,6 +397,8 @@ void test_saves_only_what_changed()
     TEST_ASSERT_EQUAL_INT(3, rig.platform.writes["events"]);
     rig.app.onBarrierEvent(GateLane::Exit, BarrierEvent::SafetyStop, NOW);
     TEST_ASSERT_EQUAL_INT(4, rig.platform.writes["events"]);
+    rig.app.onBarrierEvents(GateLane::Exit, {BarrierEvent::SafetyStop, BarrierEvent::LoopFault}, NOW);
+    TEST_ASSERT_EQUAL_INT(5, rig.platform.writes["events"]); // one write for the burst
 }
 
 void test_payment_alert_saved_with_full_log()

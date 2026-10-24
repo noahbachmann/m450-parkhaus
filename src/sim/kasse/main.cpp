@@ -23,8 +23,8 @@ void saveSessions()
 
 WebResponse route(const WebRequest& req)
 {
-    // The PC clock is always set, so the simulated Kasse is always synced.
-    KasseRouteResult r = routeKasse(req, sessions, nowUtc(), true, uiUrl);
+    // The PC clock is always set, so the simulated Kasse is always synced. No client check in the simulator.
+    KasseRouteResult r = routeKasse(req, sessions, nowUtc(), true, uiUrl, true);
     if (r.changed)
     {
         saveSessions();

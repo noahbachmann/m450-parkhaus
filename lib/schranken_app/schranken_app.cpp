@@ -90,15 +90,23 @@ WebResponse SchrankenApp::handle(const WebRequest& req, int64_t now)
     return notFound();
 }
 
-void SchrankenApp::onBarrierEvent(GateLane laneId, BarrierEvent event, int64_t now)
+void SchrankenApp::onBarrierEvents(GateLane laneId, const std::vector<BarrierEvent>& events, int64_t now)
 {
     uint32_t eventsBefore = eventLog.revision();
-    if (logBarrierEvent(eventLog, laneId, event, now))
+    for (BarrierEvent event : events)
     {
-        platform.log(std::string("[safety] ") + eventTypeLabel(eventLog.all().back().type) + " " +
-                     gateLaneLabel(laneId));
+        if (logBarrierEvent(eventLog, laneId, event, now))
+        {
+            platform.log(std::string("[safety] ") + eventTypeLabel(eventLog.all().back().type) + " " +
+                         gateLaneLabel(laneId));
+        }
     }
     saveIfChanged(registrationList.revision(), eventsBefore);
+}
+
+void SchrankenApp::onBarrierEvent(GateLane laneId, BarrierEvent event, int64_t now)
+{
+    onBarrierEvents(laneId, {event}, now);
 }
 
 const RegistrationList& SchrankenApp::registrations() const

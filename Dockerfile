@@ -1,6 +1,7 @@
 # PC simulator of both Picos (see README, "PC-Simulator"). Builds src/sim/ + lib/ with g++; no PlatformIO needed.
 FROM gcc:13-bookworm AS build
 ADD https://github.com/bblanchon/ArduinoJson/releases/download/v7.4.3/ArduinoJson-v7.4.3.h /deps/ArduinoJson.h
+RUN echo "ab5fbb8268b846b5f4bc5a5fee11bb2c96f7b8b846f5bef6540afb6a9cc76a5b  /deps/ArduinoJson.h" | sha256sum -c -
 WORKDIR /build
 COPY lib lib
 COPY src/sim src/sim

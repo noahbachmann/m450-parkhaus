@@ -268,6 +268,39 @@ void test_event_queue_order_and_overflow()
     TEST_ASSERT_EQUAL_INT(BarrierEventQueue::SIZE - 2, left);
 }
 
+void test_boot_with_occupied_loop_starts_open()
+{
+    Barrier b;
+    b.begin(1000, true);
+    TEST_ASSERT_TRUE(BarrierState::Open == b.state());
+    TEST_ASSERT_EQUAL_INT(BARRIER_OPEN_ANGLE, b.angle());
+    TEST_ASSERT_TRUE(BarrierEvent::None == b.update(2000, true));
+    TEST_ASSERT_TRUE(BarrierState::Open == b.state());
+    b.update(3000, false); // car left: counts as passed
+    b.update(1000 + BARRIER_MIN_OPEN_MS, false);
+    TEST_ASSERT_TRUE(BarrierState::Closing == b.state());
+
+    Barrier free;
+    free.begin(1000, false);
+    TEST_ASSERT_TRUE(BarrierState::Closed == free.state());
+    TEST_ASSERT_EQUAL_INT(BARRIER_CLOSED_ANGLE, free.angle());
+}
+
+void test_debouncer_needs_stable_input()
+{
+    Debouncer d;
+    TEST_ASSERT_FALSE(d.update(0, false));
+    TEST_ASSERT_FALSE(d.update(10, true));
+    TEST_ASSERT_FALSE(d.update(30, false)); // bounce
+    TEST_ASSERT_FALSE(d.update(40, true));
+    TEST_ASSERT_FALSE(d.update(40 + LOOP_DEBOUNCE_MS - 1, true));
+    TEST_ASSERT_TRUE(d.update(40 + LOOP_DEBOUNCE_MS, true));
+    TEST_ASSERT_TRUE(d.update(200, false));
+    TEST_ASSERT_FALSE(d.update(200 + LOOP_DEBOUNCE_MS, false));
+    Debouncer start(true);
+    TEST_ASSERT_TRUE(start.update(0, true));
+}
+
 void test_labels()
 {
     TEST_ASSERT_EQUAL_STRING("offen", barrierStateLabel(BarrierState::Open));
@@ -296,6 +329,8 @@ int main()
     RUN_TEST(test_driver_applies_each_request_once);
     RUN_TEST(test_driver_opens_before_pass_in_one_update);
     RUN_TEST(test_event_queue_order_and_overflow);
+    RUN_TEST(test_boot_with_occupied_loop_starts_open);
+    RUN_TEST(test_debouncer_needs_stable_input);
     RUN_TEST(test_labels);
     return UNITY_END();
 }
