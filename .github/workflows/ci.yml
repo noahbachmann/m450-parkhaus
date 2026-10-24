@@ -1,0 +1,49 @@
+# Native unit + system tests, firmware build of both Picos and the Docker simulator on every push to main.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Tests (pio test -e native)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-native-${{ hashFiles('platformio.ini') }}
+      - run: pip install platformio
+      - run: pio test -e native
+
+  firmware:
+    name: Firmware (kasse, schranken, hwtest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-rp2040-${{ hashFiles('platformio.ini') }}
+      - run: pip install platformio
+      # secrets.h is gitignored; the board build stops without it
+      - run: cp include/secrets.example.h include/secrets.h
+      - run: pio run -e kasse -e schranken -e hwtest
+
+  simulator:
+    name: Simulator (docker build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build .
