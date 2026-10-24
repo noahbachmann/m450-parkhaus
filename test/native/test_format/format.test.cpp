@@ -101,6 +101,14 @@ void test_parse_local_date_time_rejects()
     TEST_ASSERT_EQUAL_INT64(7, e);
 }
 
+void test_trim_and_utf8_length()
+{
+    TEST_ASSERT_EQUAL_STRING("Test Kunde", trim(" \tTest Kunde\r\n").c_str());
+    TEST_ASSERT_EQUAL_STRING("", trim(" \t ").c_str());
+    TEST_ASSERT_EQUAL_UINT(6, utf8Length("Müller"));
+    TEST_ASSERT_EQUAL_UINT(0, utf8Length(""));
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -112,5 +120,6 @@ int main()
     RUN_TEST(test_parse_local_date_time);
     RUN_TEST(test_parse_local_date_time_at_dst_switch);
     RUN_TEST(test_parse_local_date_time_rejects);
+    RUN_TEST(test_trim_and_utf8_length);
     return UNITY_END();
 }

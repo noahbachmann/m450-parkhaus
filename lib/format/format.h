@@ -1,7 +1,14 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 #include <string>
+
+// Without leading and trailing whitespace (space, tab, CR, LF, ...).
+std::string trim(const std::string& text);
+
+// Number of characters (UTF-8 code points), e.g. "Müller" -> 6.
+size_t utf8Length(const std::string& text);
 
 // 400 -> "CHF 4.00"
 std::string formatChf(uint32_t rappen);

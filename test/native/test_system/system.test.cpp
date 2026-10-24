@@ -131,7 +131,7 @@ namespace
         std::string page(const std::string& kz)
         {
             KasseSnapshot snap = fetchSessions(*this);
-            return renderKassePage(snap.sessions, kz, Notice{}, snap.now, snap.synced, snap.reachable);
+            return renderKassePage(snap.sessions, kz, Notice{}, snap.now, snap.synced, snap.error);
         }
 
         // «Durchfahren» on the camera page.

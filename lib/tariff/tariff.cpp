@@ -2,37 +2,47 @@
 
 namespace
 {
-    constexpr int64_t FREE_SECONDS = FREE_MINUTES * 60;
-    constexpr int64_t UNIT_SECONDS = UNIT_MINUTES * 60;
-    constexpr int64_t DAY_BLOCK_SECONDS = DAY_BLOCK_HOURS * 3600;
-
-    uint32_t blockFee(int64_t blockSeconds)
+    uint32_t unitsFee(int64_t units)
     {
-        int64_t units = (blockSeconds + UNIT_SECONDS - 1) / UNIT_SECONDS;
         int64_t fee = units * PRICE_PER_UNIT_RAPPEN;
         return fee < DAILY_MAX_RAPPEN ? static_cast<uint32_t>(fee) : DAILY_MAX_RAPPEN;
     }
+
+    int64_t startedUnits(int64_t seconds)
+    {
+        return (seconds + UNIT_SECONDS - 1) / UNIT_SECONDS;
+    }
+}
+
+bool feeBreakdown(int64_t durationSeconds, FeeBreakdown& out)
+{
+    if (durationSeconds < 0)
+    {
+        return false;
+    }
+    FeeBreakdown b;
+    if (durationSeconds <= FREE_SECONDS)
+    {
+        b.free = true;
+        out = b;
+        return true;
+    }
+    b.fullDays = durationSeconds / DAY_BLOCK_SECONDS;
+    b.dayFeeRappen = unitsFee(startedUnits(DAY_BLOCK_SECONDS));
+    b.restUnits = startedUnits(durationSeconds % DAY_BLOCK_SECONDS);
+    b.restCapped = b.restUnits * PRICE_PER_UNIT_RAPPEN > DAILY_MAX_RAPPEN;
+    b.feeRappen = static_cast<uint32_t>(b.fullDays) * b.dayFeeRappen + unitsFee(b.restUnits);
+    out = b;
+    return true;
 }
 
 bool calculateFee(int64_t entryEpoch, int64_t endEpoch, uint32_t& feeRappen)
 {
-    int64_t duration = endEpoch - entryEpoch;
-    if (duration < 0)
+    FeeBreakdown b;
+    if (!feeBreakdown(endEpoch - entryEpoch, b))
     {
         return false;
     }
-    if (duration <= FREE_SECONDS)
-    {
-        feeRappen = 0;
-        return true;
-    }
-    int64_t fullBlocks = duration / DAY_BLOCK_SECONDS;
-    int64_t rest = duration % DAY_BLOCK_SECONDS;
-    uint32_t fee = static_cast<uint32_t>(fullBlocks) * blockFee(DAY_BLOCK_SECONDS);
-    if (rest > 0)
-    {
-        fee += blockFee(rest);
-    }
-    feeRappen = fee;
+    feeRappen = b.feeRappen;
     return true;
 }

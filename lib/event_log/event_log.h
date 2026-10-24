@@ -51,10 +51,10 @@ private:
 // «Einfahrt», «Ausfahrt», "" for None.
 const char* gateLaneLabel(GateLane lane);
 const char* eventTypeLabel(EventType type);
-// File/form names: "safety_stop", "loop_fault", "remote_opening", "kasse_unreachable", "call_button",
-// "payment_alert".
 // All types in display order (filter list).
 const EventType* allEventTypes(size_t& count);
+// File/form names: "safety_stop", "loop_fault", "remote_opening", "kasse_unreachable", "call_button",
+// "payment_alert".
 const char* eventTypeName(EventType type);
 bool eventTypeFromName(const std::string& name, EventType& type);
 const char* gateLaneName(GateLane lane); // "", "entry", "exit"

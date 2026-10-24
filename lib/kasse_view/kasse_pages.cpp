@@ -26,12 +26,9 @@ void appendSession(std::string& html, const SessionView& v)
 void appendPayForm(std::string& html, const std::string& plate)
 {
     html += "<form method=\"post\" action=\"/kasse/pay\" class=\"card methods\"><input type=\"hidden\" name=\"kz\" value=\"" + htmlEscape(plate) + "\">"
-            "<strong>Zahlungsmittel</strong>"
-            "<label><input type=\"radio\" name=\"method\" value=\"card_ok\" checked> Karte OK</label>"
-            "<label><input type=\"radio\" name=\"method\" value=\"card_declined\"> Karte abgelehnt</label>"
-            "<label><input type=\"radio\" name=\"method\" value=\"twint\"> TWINT</label>"
-            "<label><input type=\"radio\" name=\"method\" value=\"cash\"> Bargeld</label>"
-            "<label>Eingeworfener Betrag in CHF (nur Bargeld): "
+            "<strong>Zahlungsmittel</strong>";
+    appendPaymentMethods(html, true);
+    html += "<label>Eingeworfener Betrag in CHF (nur Bargeld): "
             "<input name=\"amount\" inputmode=\"decimal\" placeholder=\"10.00\" size=\"8\"></label>"
             "<button type=\"submit\">Bezahlen</button></form>";
 }
@@ -44,18 +41,45 @@ void appendSessionList(std::string& html, const SessionStore& store, int64_t now
         html += "<p class=\"muted\">Keine Parkvorgänge gespeichert.</p>";
         return;
     }
+    appendSessionTable(html, store, now, true);
+}
+}
+
+void appendPaymentMethods(std::string& html, bool withCash)
+{
+    html += "<label><input type=\"radio\" name=\"method\" value=\"card_ok\" checked> Karte OK</label>"
+            "<label><input type=\"radio\" name=\"method\" value=\"card_declined\"> Karte abgelehnt</label>"
+            "<label><input type=\"radio\" name=\"method\" value=\"twint\"> TWINT</label>";
+    if (withCash)
+    {
+        html += "<label><input type=\"radio\" name=\"method\" value=\"cash\"> Bargeld</label>";
+    }
+}
+
+void appendSessionTable(std::string& html, const SessionStore& store, int64_t now, bool kasseLinks)
+{
     html += "<div class=\"scroll\"><table><tr><th>Kennzeichen</th><th>Einfahrt</th><th>Ausfahrt</th><th>Dauer</th>"
-            "<th>Gebühr</th><th>Status</th><th>Zahlung</th></tr>";
+            "<th>Gebühr</th><th>Status</th>";
+    html += kasseLinks ? "<th>Zahlung</th></tr>" : "</tr>";
     for (const ParkingSession* s : sessionsForList(store))
     {
         SessionView v = describeSession(*s, now);
-        html += "<tr><td><a href=\"/kasse?kz=" + htmlEscape(v.plate) + "\">" + htmlEscape(v.plate) + "</a></td><td>" +
-                htmlEscape(v.entry) + "</td><td>" + htmlEscape(v.exit) + "</td><td>" + htmlEscape(v.duration) +
-                "</td><td>" + htmlEscape(v.fee) + "</td><td>" + htmlEscape(v.status) + "</td><td>" +
-                htmlEscape(v.payment) + "</td></tr>";
+        std::string plate = htmlEscape(v.plate);
+        std::string status = v.status;
+        if (kasseLinks)
+        {
+            plate = "<a href=\"/kasse?kz=" + plate + "\">" + plate + "</a>";
+        }
+        else if (s->status == SessionStatus::Open)
+        {
+            status += " (unbezahlt)";
+        }
+        html += "<tr><td>" + plate + "</td><td>" + htmlEscape(v.entry) + "</td><td>" + htmlEscape(v.exit) +
+                "</td><td>" + htmlEscape(v.duration) + "</td><td>" + htmlEscape(v.fee) + "</td><td>" +
+                htmlEscape(status) + "</td>";
+        html += kasseLinks ? "<td>" + htmlEscape(v.payment) + "</td></tr>" : "</tr>";
     }
     html += "</table></div>";
-}
 }
 
 namespace
@@ -111,15 +135,15 @@ std::string renderTariffPage(Role role)
 }
 
 std::string renderKassePage(const SessionStore& store, const std::string& query, const Notice& notice, int64_t now,
-                            bool timeOk, bool reachable)
+                            bool timeOk, const std::string& kasseError)
 {
     std::string html;
     html.reserve(4096);
     appendPageStart(html, "Kasse", Role::Admin, "Kasse");
 
-    if (!reachable)
+    if (!kasseError.empty())
     {
-        appendNotice(html, "err", "Kasse nicht erreichbar – Parkvorgänge können nicht angezeigt werden");
+        appendNotice(html, "err", kasseError + " – Parkvorgänge können nicht angezeigt werden");
     }
     else if (!timeOk)
     {
@@ -134,7 +158,7 @@ std::string renderKassePage(const SessionStore& store, const std::string& query,
             htmlEscape(query) +
             "\" placeholder=\"LU 123456\" autocomplete=\"off\" autofocus></label> "
             "<button type=\"submit\">Suchen</button></form>";
-    if (!reachable)
+    if (!kasseError.empty())
     {
         appendPageEnd(html);
         return html;
@@ -150,7 +174,7 @@ std::string renderKassePage(const SessionStore& store, const std::string& query,
         }
         if (!isValidPlate(plate))
         {
-            appendNotice(html, "err", "Ungültiges Kennzeichen – erwartet 2 Buchstaben und 1–6 Ziffern");
+            appendNotice(html, "err", INVALID_PLATE_TEXT);
         }
         else if (s == nullptr)
         {

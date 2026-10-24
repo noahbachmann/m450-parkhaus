@@ -2,23 +2,22 @@
 
 #include <set>
 
+#include "barrier.h"
+#include "kasse_pages.h"
 #include "kasse_view.h"
 #include "plate.h"
 
 namespace
 {
-
     void appendExitTerminal(std::string& html, const LaneView& lane)
     {
         if (!lane.payPlate.empty())
         {
             html += "<form method=\"post\" action=\"/kamera/bezahlen\" class=\"methods\"><p><strong>Gebühr " +
                     htmlEscape(lane.payFee) + " für " + htmlEscape(lane.payPlate) +
-                    " – hier bezahlen</strong></p>"
-                    "<label><input type=\"radio\" name=\"method\" value=\"card_ok\" checked> Karte OK</label>"
-                    "<label><input type=\"radio\" name=\"method\" value=\"card_declined\"> Karte abgelehnt</label>"
-                    "<label><input type=\"radio\" name=\"method\" value=\"twint\"> TWINT</label>"
-                    "<button type=\"submit\">Bezahlen</button></form>";
+                    " – hier bezahlen</strong></p>";
+            appendPaymentMethods(html, false); // no cash at the barrier
+            html += "<button type=\"submit\">Bezahlen</button></form>";
         }
         html += "<form method=\"post\" action=\"/kamera/abbrechen\" class=\"inline\">"
                 "<button type=\"submit\">Fahrzeug wendet</button></form> ";
@@ -105,9 +104,9 @@ namespace
     void appendSessions(std::string& html, const KasseSnapshot& kasse)
     {
         html += "<h2>Parkvorgänge (Kasse)</h2>";
-        if (!kasse.reachable)
+        if (!kasse.reachable())
         {
-            html += "<p class=\"muted\">Kasse nicht erreichbar – Parkvorgänge können nicht angezeigt werden.</p>";
+            html += "<p class=\"muted\">" + htmlEscape(kasse.error) + " – Parkvorgänge können nicht angezeigt werden.</p>";
             return;
         }
         if (kasse.sessions.all().empty())
@@ -115,22 +114,8 @@ namespace
             html += "<p class=\"muted\">Keine Parkvorgänge.</p>";
             return;
         }
-        html += "<p class=\"muted\">Offene zuerst, dann abgeschlossene – zum Testen.</p><div class=\"scroll\"><table>"
-                "<tr><th>Kennzeichen</th><th>Einfahrt</th><th>Ausfahrt</th><th>Dauer</th><th>Gebühr</th>"
-                "<th>Status</th></tr>";
-        for (const ParkingSession* s : sessionsForList(kasse.sessions))
-        {
-            SessionView v = describeSession(*s, kasse.now);
-            std::string status = v.status;
-            if (s->status == SessionStatus::Open)
-            {
-                status += " (unbezahlt)";
-            }
-            html += "<tr><td>" + htmlEscape(v.plate) + "</td><td>" + htmlEscape(v.entry) + "</td><td>" +
-                    htmlEscape(v.exit) + "</td><td>" + htmlEscape(v.duration) + "</td><td>" + htmlEscape(v.fee) +
-                    "</td><td>" + htmlEscape(status) + "</td></tr>";
-        }
-        html += "</table></div>";
+        html += "<p class=\"muted\">Offene zuerst, dann abgeschlossene – zum Testen.</p>";
+        appendSessionTable(html, kasse.sessions, kasse.now, false);
     }
 }
 
@@ -143,9 +128,9 @@ std::string registrationMessage(RegistrationResult result)
     case RegistrationResult::Duplicate:
         return "Kennzeichen bereits registriert";
     case RegistrationResult::InvalidPlate:
-        return "Ungültiges Kennzeichen – erwartet 2 Buchstaben und 1–6 Ziffern";
+        return INVALID_PLATE_TEXT;
     case RegistrationResult::InvalidName:
-        return "Bitte Namen eingeben (1–" + std::to_string(MAX_NAME_BYTES) + " Zeichen)";
+        return "Bitte Namen eingeben (1–" + std::to_string(MAX_NAME_CHARS) + " Zeichen)";
     case RegistrationResult::Full:
         return "Maximal " + std::to_string(MAX_REGISTRATIONS) + " Registrierungen – bitte zuerst eine löschen";
     }
@@ -191,7 +176,9 @@ std::string renderRegistrationPage(const RegistrationList& list, const Notice& n
         appendNotice(html, notice.cls, notice.text);
     }
     html += "<form method=\"post\" action=\"/registrierung/add\" class=\"card\">"
-            "<p><label>Name <input name=\"name\" maxlength=\"40\" autocomplete=\"off\"></label></p>"
+            "<p><label>Name <input name=\"name\" maxlength=\"" +
+            std::to_string(MAX_NAME_CHARS) +
+            "\" autocomplete=\"off\"></label></p>"
             "<p><label>Kennzeichen <input name=\"kz\" placeholder=\"LU 123456\" autocomplete=\"off\"></label></p>"
             "<button type=\"submit\">Registrieren</button></form>";
 
@@ -247,7 +234,8 @@ std::string renderCameraPage(const LaneView& entry, const LaneView& exit, const 
     appendLane(html, "Einfahrt", "/kamera/einfahrt", true, entry);
     appendLane(html, "Ausfahrt", "/kamera/ausfahrt", false, exit);
     html += "</div><p class=\"muted\"><a href=\"/kamera\">Aktualisieren</a> – die Schranke schliesst, sobald das "
-            "Fahrzeug durchgefahren ist («Durchfahren»), frühestens 5 s nach dem Öffnen. «Fahrzeug bleibt stehen» "
+            "Fahrzeug durchgefahren ist («Durchfahren»), frühestens " +
+            std::to_string(BARRIER_MIN_OPEN_MS / 1000) + " s nach dem Öffnen. «Fahrzeug bleibt stehen» "
             "belegt die Sicherungsschleife: die Schranke bleibt offen bzw. stoppt beim Schliessen und öffnet "
             "wieder.</p>";
     appendSessions(html, kasse);

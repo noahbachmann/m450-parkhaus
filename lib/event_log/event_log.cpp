@@ -18,9 +18,6 @@ namespace
         {EventType::PaymentAlert, "payment_alert", "Zahlung 5× abgelehnt"},
     };
 
-    const EventType ORDER[] = {EventType::SafetyStop,       EventType::LoopFault,  EventType::RemoteOpening,
-                               EventType::KasseUnreachable, EventType::CallButton, EventType::PaymentAlert};
-
     const TypeInfo& infoOf(EventType type)
     {
         for (const TypeInfo& t : TYPES)
@@ -78,8 +75,13 @@ const char* gateLaneLabel(GateLane lane)
 
 const EventType* allEventTypes(size_t& count)
 {
-    count = sizeof(ORDER) / sizeof(ORDER[0]);
-    return ORDER;
+    static EventType order[sizeof(TYPES) / sizeof(TYPES[0])];
+    count = sizeof(TYPES) / sizeof(TYPES[0]);
+    for (size_t i = 0; i < count; ++i)
+    {
+        order[i] = TYPES[i].type;
+    }
+    return order;
 }
 
 const char* eventTypeLabel(EventType type)

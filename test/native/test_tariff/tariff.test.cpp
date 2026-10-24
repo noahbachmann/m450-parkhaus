@@ -57,6 +57,7 @@ void test_r12_entry_in_future_is_rejected()
     uint32_t fee = 12345;
     TEST_ASSERT_FALSE(calculateFee(ENTRY + HOUR, ENTRY, fee));
     TEST_ASSERT_FALSE(calculateFee(ENTRY + 1, ENTRY, fee));
+    TEST_ASSERT_EQUAL_UINT32(12345, fee);
 }
 
 void test_other_values_from_test_concept()
@@ -80,6 +81,44 @@ void test_free_minutes_do_not_apply_in_later_day_blocks()
     checkCases(cases, sizeof(cases) / sizeof(cases[0]));
 }
 
+void test_breakdown_free_and_first_block()
+{
+    FeeBreakdown b;
+    TEST_ASSERT_TRUE(feeBreakdown(15 * MIN, b));
+    TEST_ASSERT_TRUE(b.free);
+    TEST_ASSERT_EQUAL_UINT32(0, b.feeRappen);
+
+    TEST_ASSERT_TRUE(feeBreakdown(HOUR + 20 * MIN, b));
+    TEST_ASSERT_FALSE(b.free);
+    TEST_ASSERT_EQUAL_INT64(0, b.fullDays);
+    TEST_ASSERT_EQUAL_INT64(2, b.restUnits);
+    TEST_ASSERT_FALSE(b.restCapped);
+    TEST_ASSERT_EQUAL_UINT32(400, b.feeRappen);
+
+    TEST_ASSERT_TRUE(feeBreakdown(10 * HOUR, b));
+    TEST_ASSERT_FALSE(b.restCapped);
+    TEST_ASSERT_TRUE(feeBreakdown(10 * HOUR + 1, b));
+    TEST_ASSERT_TRUE(b.restCapped);
+    TEST_ASSERT_EQUAL_UINT32(2000, b.feeRappen);
+}
+
+void test_breakdown_day_blocks()
+{
+    FeeBreakdown b;
+    TEST_ASSERT_TRUE(feeBreakdown(24 * HOUR + 1, b));
+    TEST_ASSERT_EQUAL_INT64(1, b.fullDays);
+    TEST_ASSERT_EQUAL_UINT32(2000, b.dayFeeRappen);
+    TEST_ASSERT_EQUAL_INT64(1, b.restUnits);
+    TEST_ASSERT_EQUAL_UINT32(2200, b.feeRappen);
+
+    TEST_ASSERT_TRUE(feeBreakdown(48 * HOUR, b));
+    TEST_ASSERT_EQUAL_INT64(2, b.fullDays);
+    TEST_ASSERT_EQUAL_INT64(0, b.restUnits);
+    TEST_ASSERT_EQUAL_UINT32(4000, b.feeRappen);
+
+    TEST_ASSERT_FALSE(feeBreakdown(-1, b));
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -87,5 +126,7 @@ int main()
     RUN_TEST(test_r12_entry_in_future_is_rejected);
     RUN_TEST(test_other_values_from_test_concept);
     RUN_TEST(test_free_minutes_do_not_apply_in_later_day_blocks);
+    RUN_TEST(test_breakdown_free_and_first_block);
+    RUN_TEST(test_breakdown_day_blocks);
     return UNITY_END();
 }

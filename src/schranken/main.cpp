@@ -506,7 +506,7 @@ void showKasse()
         return;
     }
     KasseSnapshot snap = fetchSessions(kasse);
-    sendHtml(renderKassePage(snap.sessions, argOf("kz"), pendingNotice(), snap.now, snap.synced, snap.reachable));
+    sendHtml(renderKassePage(snap.sessions, argOf("kz"), pendingNotice(), snap.now, snap.synced, snap.error));
 }
 
 void onKassePay()

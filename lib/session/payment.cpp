@@ -2,6 +2,33 @@
 
 #include "plate.h"
 
+const char* const PAYMENT_DECLINED_TEXT = "Zahlung abgelehnt – anderes Zahlungsmittel wählen";
+
+bool parsePayMethod(const std::string& name, PayMethod& method)
+{
+    if (name == "card_ok")
+    {
+        method = PayMethod::CardOk;
+    }
+    else if (name == "card_declined")
+    {
+        method = PayMethod::CardDeclined;
+    }
+    else if (name == "twint")
+    {
+        method = PayMethod::Twint;
+    }
+    else if (name == "cash")
+    {
+        method = PayMethod::Cash;
+    }
+    else
+    {
+        return false;
+    }
+    return true;
+}
+
 PaymentResult pay(SessionStore& store, const std::string& rawPlate, PayMethod method, int64_t now,
                   uint32_t cashInsertedRappen)
 {
@@ -31,6 +58,7 @@ PaymentResult pay(SessionStore& store, const std::string& rawPlate, PayMethod me
     }
 
     uint32_t change = 0;
+    uint32_t cashPart = 0;
     PaymentMethod paidWith = PaymentMethod::None;
     switch (method)
     {
@@ -38,9 +66,11 @@ PaymentResult pay(SessionStore& store, const std::string& rawPlate, PayMethod me
         return {Kind::Declined, fee};
     case PayMethod::CardOk:
         paidWith = PaymentMethod::Card;
+        cashPart = s->cashPaidRappen;
         break;
     case PayMethod::Twint:
         paidWith = PaymentMethod::Twint;
+        cashPart = s->cashPaidRappen;
         break;
     case PayMethod::Cash:
         if (cashInsertedRappen == 0 || cashInsertedRappen > MAX_CASH_RAPPEN)
@@ -61,5 +91,5 @@ PaymentResult pay(SessionStore& store, const std::string& rawPlate, PayMethod me
     s->amountRappen = fee;
     s->method = paidWith;
     s->txRef = store.takeTxRef();
-    return {Kind::Paid, fee, 0, change, paidWith, s->txRef};
+    return {Kind::Paid, fee, 0, change, paidWith, s->txRef, cashPart};
 }

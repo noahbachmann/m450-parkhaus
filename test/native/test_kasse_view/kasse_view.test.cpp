@@ -95,10 +95,30 @@ void test_clock_before_entry_shows_no_fee()
 void test_tariff_note_daily_max()
 {
     TEST_ASSERT_EQUAL_STRING("1 angefangene Stunde à CHF 2.00 ab Einfahrt (15 Freiminuten überschritten)",
-                             tariffNote(16 * MIN, 200).c_str());
+                             tariffNote(16 * MIN).c_str());
     TEST_ASSERT_EQUAL_STRING("11 angefangene Stunden à CHF 2.00 ab Einfahrt (15 Freiminuten überschritten), "
                              "Tagesmaximum CHF 20.00 pro angefangene 24 h",
-                             tariffNote(10 * HOUR + 1, 2000).c_str());
+                             tariffNote(10 * HOUR + 1).c_str());
+    TEST_ASSERT_EQUAL_STRING("10 angefangene Stunden à CHF 2.00 ab Einfahrt (15 Freiminuten überschritten)",
+                             tariffNote(10 * HOUR).c_str());
+}
+
+void test_tariff_note_beyond_one_day()
+{
+    TEST_ASSERT_EQUAL_STRING("1 × 24 h à CHF 20.00, danach 1 angefangene Stunde à CHF 2.00 "
+                             "(15 Freiminuten überschritten)",
+                             tariffNote(24 * HOUR + 1).c_str());
+    TEST_ASSERT_EQUAL_STRING("2 × 24 h à CHF 20.00 (15 Freiminuten überschritten)", tariffNote(48 * HOUR).c_str());
+}
+
+void test_paid_session_has_no_running_tariff_note()
+{
+    SessionStore store;
+    store.openEntry("LU123456", NOW - 90 * MIN);
+    pay(store, "LU123456", PayMethod::CardOk, NOW);
+    SessionView v = describeSession(*store.findActive("LU123456"), NOW + 90 * MIN);
+    TEST_ASSERT_EQUAL_STRING("CHF 4.00", v.fee.c_str());
+    TEST_ASSERT_EQUAL_STRING("", v.tariffNote.c_str());
 }
 
 void test_payment_messages_tf20_tf21_tf22()
@@ -122,6 +142,14 @@ void test_payment_messages_tf20_tf21_tf22()
     PaymentResult none = pay(store, "SZ 555", PayMethod::CardOk, NOW);
     TEST_ASSERT_EQUAL_STRING("Kein offener Parkvorgang für SZ555", paymentMessage(none, "SZ555").c_str());
     TEST_ASSERT_FALSE(paymentSucceeded(none));
+
+    store.openEntry("UR1", NOW - 30 * MIN);
+    pay(store, "UR1", PayMethod::Cash, NOW, 50);
+    PaymentResult mixed = pay(store, "UR1", PayMethod::Twint, NOW);
+    TEST_ASSERT_EQUAL_STRING("Bezahlt – CHF 2.00, TWINT CHF 1.50 + Bargeld CHF 0.50 – Transaktion TX-000003",
+                             paymentMessage(mixed, "UR1").c_str());
+    TEST_ASSERT_EQUAL_STRING("TWINT + Bargeld CHF 0.50, TX-000003",
+                             describeSession(*store.findActive("UR1"), NOW).payment.c_str());
 
     store.openEntry("ZH98765", NOW - 80 * MIN);
     PaymentResult declined = pay(store, "ZH98765", PayMethod::CardDeclined, NOW);
@@ -188,7 +216,7 @@ void test_kasse_page_tf19()
 {
     SessionStore store;
     store.openEntry("LU123456", NOW - 80 * MIN);
-    std::string html = renderKassePage(store, "lu 123456", Notice{}, NOW, true, true);
+    std::string html = renderKassePage(store, "lu 123456", Notice{}, NOW, true, "");
     TEST_ASSERT_TRUE(contains(html, "<td>LU123456</td>"));
     TEST_ASSERT_TRUE(contains(html, "<td>15.10.2025 12:46:40</td>"));
     TEST_ASSERT_TRUE(contains(html, "<td>1 h 20 min</td>"));
@@ -206,7 +234,7 @@ void test_kasse_list_shows_active_before_closed()
     store.openEntry("AG1", NOW - 2 * HOUR);
     store.tryExit("AG1", NOW - 2 * HOUR + MIN);
     store.openEntry("LU123456", NOW - 3 * HOUR);
-    std::string html = renderKassePage(store, "", Notice{}, NOW, true, true);
+    std::string html = renderKassePage(store, "", Notice{}, NOW, true, "");
     size_t open = html.find("kz=LU123456\">LU123456");
     size_t closed = html.find("kz=AG1\">AG1");
     TEST_ASSERT_TRUE(open != std::string::npos && closed != std::string::npos);
@@ -219,7 +247,7 @@ void test_paid_session_keeps_pay_form_tf20()
     store.openEntry("LU123456", NOW - 80 * MIN);
     pay(store, "LU123456", PayMethod::CardOk, NOW);
     Notice notice{"ok", "Bezahlt – CHF 4.00, Karte – Transaktion TX-000001"};
-    std::string html = renderKassePage(store, "LU123456", notice, NOW, true, true);
+    std::string html = renderKassePage(store, "LU123456", notice, NOW, true, "");
     TEST_ASSERT_TRUE(contains(html, "notice ok\">Bezahlt – CHF 4.00, Karte – Transaktion TX-000001"));
     TEST_ASSERT_TRUE(contains(html, "action=\"/kasse/pay\""));
 }
@@ -227,7 +255,7 @@ void test_paid_session_keeps_pay_form_tf20()
 void test_kasse_without_session_tf22()
 {
     SessionStore store;
-    std::string html = renderKassePage(store, "SZ 555", Notice{}, NOW, true, true);
+    std::string html = renderKassePage(store, "SZ 555", Notice{}, NOW, true, "");
     TEST_ASSERT_TRUE(contains(html, "Kein offener Parkvorgang für SZ555"));
     TEST_ASSERT_FALSE(contains(html, "/kasse/pay"));
 }
@@ -237,7 +265,7 @@ void test_kasse_shows_closed_session_without_payment()
     SessionStore store;
     store.openEntry("AG1", NOW - 5 * MIN);
     store.tryExit("AG1", NOW);
-    std::string html = renderKassePage(store, "AG1", Notice{}, NOW, true, true);
+    std::string html = renderKassePage(store, "AG1", Notice{}, NOW, true, "");
     TEST_ASSERT_TRUE(contains(html, "abgeschlossen (Freizeit)"));
     TEST_ASSERT_FALSE(contains(html, "/kasse/pay"));
 }
@@ -245,7 +273,7 @@ void test_kasse_shows_closed_session_without_payment()
 void test_page_escapes_query_and_flags_invalid_plate()
 {
     SessionStore store;
-    std::string html = renderKassePage(store, "<script>", Notice{}, NOW, true, true);
+    std::string html = renderKassePage(store, "<script>", Notice{}, NOW, true, "");
     TEST_ASSERT_FALSE(contains(html, "<script>"));
     TEST_ASSERT_TRUE(contains(html, "&lt;script&gt;"));
     TEST_ASSERT_TRUE(contains(html, "Ungültiges Kennzeichen"));
@@ -255,7 +283,7 @@ void test_page_without_time_offers_no_payment()
 {
     SessionStore store;
     store.openEntry("LU123456", NOW - 80 * MIN);
-    std::string html = renderKassePage(store, "LU123456", Notice{}, NOW, false, true);
+    std::string html = renderKassePage(store, "LU123456", Notice{}, NOW, false, "");
     TEST_ASSERT_TRUE(contains(html, "Uhrzeit nicht synchronisiert"));
     TEST_ASSERT_FALSE(contains(html, "/kasse/pay"));
 }
@@ -263,7 +291,7 @@ void test_page_without_time_offers_no_payment()
 void test_page_without_kasse_shows_fault_only()
 {
     SessionStore store;
-    std::string html = renderKassePage(store, "LU123456", Notice{}, 0, false, false);
+    std::string html = renderKassePage(store, "LU123456", Notice{}, 0, false, "Kasse nicht erreichbar");
     TEST_ASSERT_TRUE(contains(html, "Kasse nicht erreichbar"));
     TEST_ASSERT_FALSE(contains(html, "Uhrzeit nicht synchronisiert"));
     TEST_ASSERT_FALSE(contains(html, "<h2>Parkvorgänge</h2>"));
@@ -300,7 +328,7 @@ void test_tariff_linked_from_kasse_tf19()
 {
     SessionStore store;
     store.openEntry("LU123456", NOW - 80 * MIN);
-    std::string html = renderKassePage(store, "LU123456", Notice{}, NOW, true, true);
+    std::string html = renderKassePage(store, "LU123456", Notice{}, NOW, true, "");
     TEST_ASSERT_TRUE(contains(html, "<a href=\"/tarif\">Tarif</a>"));
     TEST_ASSERT_TRUE(contains(html, "<a href=\"/tarif\">Tarif anzeigen</a>"));
 }
@@ -321,6 +349,8 @@ int main()
     RUN_TEST(test_partial_cash_is_shown);
     RUN_TEST(test_clock_before_entry_shows_no_fee);
     RUN_TEST(test_tariff_note_daily_max);
+    RUN_TEST(test_tariff_note_beyond_one_day);
+    RUN_TEST(test_paid_session_has_no_running_tariff_note);
     RUN_TEST(test_payment_messages_tf20_tf21_tf22);
     RUN_TEST(test_parse_chf);
     RUN_TEST(test_html_escape);

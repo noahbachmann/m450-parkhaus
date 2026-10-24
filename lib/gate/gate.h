@@ -35,6 +35,9 @@ struct GateResult
     uint32_t feeRappen = 0;   // the unpaid fee
 };
 
+// "error" field of a Pico 1 error reply ({"error":"<code>"}); empty if there is none.
+std::string errorCode(const HttpReply& reply);
+
 // Entry: valid + registered plate -> POST /api/entry. entryTimeInput empty = now (Pico 1 stamps it),
 // otherwise a backdated Europe/Zurich local time (see parseLocalDateTime).
 GateResult entryRequest(const RegistrationList& registrations, const std::string& rawPlate,

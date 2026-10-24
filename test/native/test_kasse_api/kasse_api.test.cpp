@@ -177,6 +177,22 @@ void test_pay_cash_at_kasse_tf21()
     TEST_ASSERT_TRUE(SessionStatus::Paid == store.findActive("ZH98765")->status);
 }
 
+void test_pay_card_after_partial_cash_reports_cash_part()
+{
+    SessionStore store = testData();
+    handlePay(store, "{\"kz\":\"ZH98765\",\"method\":\"cash\",\"amount\":100}", NOW, true);
+    assertResponse(200,
+                   "{\"kz\":\"ZH98765\",\"status\":\"bezahlt\",\"amount\":600,\"method\":\"card\",\"tx\":\"TX-000002\","
+                   "\"cash\":100}",
+                   handlePay(store, "{\"kz\":\"ZH98765\",\"method\":\"card_ok\"}", NOW, true));
+}
+
+void test_status_with_clock_before_entry()
+{
+    SessionStore store = testData();
+    assertResponse(503, "{\"error\":\"time_not_synced\"}", handleStatus(store, "ZH98765", NOW - 100 * HOUR));
+}
+
 void test_pay_cash_invalid_amount()
 {
     SessionStore store = testData();
@@ -224,6 +240,8 @@ int main()
     RUN_TEST(test_exit_override_tf31);
     RUN_TEST(test_pay_at_exit_terminal_tf28);
     RUN_TEST(test_pay_cash_at_kasse_tf21);
+    RUN_TEST(test_pay_card_after_partial_cash_reports_cash_part);
+    RUN_TEST(test_status_with_clock_before_entry);
     RUN_TEST(test_pay_cash_invalid_amount);
     RUN_TEST(test_sessions_list);
     RUN_TEST(test_reset);

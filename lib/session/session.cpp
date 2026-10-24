@@ -45,6 +45,47 @@ const char* paymentMethodLabel(PaymentMethod method)
     return "";
 }
 
+namespace
+{
+    struct MethodName
+    {
+        PaymentMethod method;
+        const char* name;
+    };
+
+    const MethodName METHOD_NAMES[] = {
+        {PaymentMethod::None, "none"},
+        {PaymentMethod::Card, "card"},
+        {PaymentMethod::Twint, "twint"},
+        {PaymentMethod::Cash, "cash"},
+    };
+}
+
+const char* paymentMethodName(PaymentMethod method)
+{
+    for (const MethodName& m : METHOD_NAMES)
+    {
+        if (m.method == method)
+        {
+            return m.name;
+        }
+    }
+    return "";
+}
+
+bool paymentMethodFromName(const std::string& name, PaymentMethod& method)
+{
+    for (const MethodName& m : METHOD_NAMES)
+    {
+        if (name == m.name)
+        {
+            method = m.method;
+            return true;
+        }
+    }
+    return false;
+}
+
 bool currentFee(const ParkingSession& session, int64_t now, uint32_t& feeRappen)
 {
     return calculateFee(session.entry, now, feeRappen);
@@ -127,6 +168,10 @@ ExitResult SessionStore::forceExit(const std::string& rawPlate, int64_t now)
         return r;
     }
     ParkingSession* s = findActive(rawPlate);
+    if (s == nullptr)
+    {
+        return {ExitResult::Kind::NoSession};
+    }
     s->status = SessionStatus::ClosedUnpaid;
     s->exit = now;
     s->amountRappen = r.kind == ExitResult::Kind::Unpaid ? r.feeRappen : 0;

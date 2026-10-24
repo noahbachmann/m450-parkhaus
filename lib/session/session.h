@@ -47,6 +47,10 @@ bool isActive(SessionStatus status);
 const char* sessionStatusLabel(SessionStatus status);
 // «Karte», «TWINT», «Bargeld»; empty for None.
 const char* paymentMethodLabel(PaymentMethod method);
+// File and API names: "none", "card", "twint", "cash".
+const char* paymentMethodName(PaymentMethod method);
+// False for any other name.
+bool paymentMethodFromName(const std::string& name, PaymentMethod& method);
 
 enum class EntryResult
 {

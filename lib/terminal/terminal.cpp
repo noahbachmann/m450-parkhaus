@@ -3,10 +3,10 @@
 #include <ArduinoJson.h>
 
 #include "format.h"
+#include "payment.h"
 
 namespace
 {
-    const char* DECLINED = "Zahlung abgelehnt – anderes Zahlungsmittel wählen";
     const char* NOTIFIED = "Zahlung abgelehnt – Leitstelle wurde benachrichtigt";
 
     GateResult message(const std::string& plate, const char* cls, const std::string& text)
@@ -32,28 +32,19 @@ namespace
         t.callText = text;
     }
 
-    std::string errorCode(const HttpReply& reply)
-    {
-        JsonDocument doc;
-        if (deserializeJson(doc, reply.body) != DeserializationError::Ok || !doc["error"].is<const char*>())
-        {
-            return "";
-        }
-        return doc["error"].as<std::string>();
-    }
-
     // "Bezahlt – CHF 6.00, TWINT"; empty if the reply isn't a valid payment confirmation for the plate.
     std::string paidText(const HttpReply& reply, const std::string& plate)
     {
         JsonDocument doc;
+        PaymentMethod method;
         if (deserializeJson(doc, reply.body) != DeserializationError::Ok || !doc["kz"].is<const char*>() ||
             doc["kz"].as<std::string>() != plate || !doc["amount"].is<uint32_t>() ||
-            !doc["method"].is<const char*>())
+            !doc["method"].is<const char*>() || !paymentMethodFromName(doc["method"].as<std::string>(), method) ||
+            method == PaymentMethod::None)
         {
             return "";
         }
-        std::string method = doc["method"].as<std::string>() == "twint" ? "TWINT" : "Karte";
-        return "Bezahlt – " + formatChf(doc["amount"].as<uint32_t>()) + ", " + method;
+        return "Bezahlt – " + formatChf(doc["amount"].as<uint32_t>()) + ", " + paymentMethodLabel(method);
     }
 }
 
@@ -122,12 +113,7 @@ GateResult closedAfterPass(LaneTerminal& t)
 GateResult pressCallButton(LaneTerminal& t, int64_t now, EventLog& log)
 {
     call(t, now, "Ruftaste gedrückt");
-    Event e;
-    e.time = now;
-    e.type = EventType::CallButton;
-    e.lane = t.lane;
-    e.plate = t.lastPlate;
-    log.add(e);
+    log.add({now, EventType::CallButton, t.lane, t.lastPlate});
     return message(t.lastPlate, "ok", "Leitstelle wurde gerufen – bitte warten");
 }
 
@@ -144,7 +130,8 @@ GateResult payAtTerminal(LaneTerminal& t, const std::string& method, int64_t now
     {
         return message("", "err", "Kein Zahlvorgang – bitte Kennzeichen an der Ausfahrt erfassen");
     }
-    if (method != "card_ok" && method != "card_declined" && method != "twint")
+    PayMethod parsed;
+    if (!parsePayMethod(method, parsed) || parsed == PayMethod::Cash) // no cash at the barrier
     {
         return message(t.payPlate, "err", "Bitte Zahlungsmittel wählen");
     }
@@ -169,16 +156,11 @@ GateResult payAtTerminal(LaneTerminal& t, const std::string& method, int64_t now
         t.declines++;
         if (t.declines == MAX_DECLINES)
         {
-            call(t, now, "Zahlung 5× abgelehnt");
-            Event e;
-            e.time = now;
-            e.type = EventType::PaymentAlert;
-            e.lane = t.lane;
-            e.plate = plate;
-            e.note = std::to_string(MAX_DECLINES) + " Zahlungsversuche abgelehnt";
-            log.add(e);
+            call(t, now, eventTypeLabel(EventType::PaymentAlert));
+            log.add({now, EventType::PaymentAlert, t.lane, plate, "", "",
+                     std::to_string(MAX_DECLINES) + " Zahlungsversuche abgelehnt"});
         }
-        return message(plate, "err", t.declines >= MAX_DECLINES ? NOTIFIED : DECLINED);
+        return message(plate, "err", t.declines >= MAX_DECLINES ? NOTIFIED : PAYMENT_DECLINED_TEXT);
     }
     if (reply.status == 200)
     {

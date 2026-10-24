@@ -43,16 +43,6 @@ namespace
         return deserializeJson(doc, reply.body) == DeserializationError::Ok && doc.is<JsonObject>();
     }
 
-    std::string errorCode(const HttpReply& reply)
-    {
-        JsonDocument doc;
-        if (!parseReply(reply, doc) || !doc["error"].is<const char*>())
-        {
-            return "";
-        }
-        return doc["error"].as<std::string>();
-    }
-
     bool checkPlate(const std::string& plate, GateResult& rejected)
     {
         if (plate.empty())
@@ -62,11 +52,21 @@ namespace
         }
         if (!isValidPlate(plate))
         {
-            rejected = closed(plate, "Ungültiges Kennzeichen – erwartet 2 Buchstaben und 1–6 Ziffern");
+            rejected = closed(plate, INVALID_PLATE_TEXT);
             return false;
         }
         return true;
     }
+}
+
+std::string errorCode(const HttpReply& reply)
+{
+    JsonDocument doc;
+    if (!parseReply(reply, doc) || !doc["error"].is<const char*>())
+    {
+        return "";
+    }
+    return doc["error"].as<std::string>();
 }
 
 GateResult entryRequest(const RegistrationList& registrations, const std::string& rawPlate,
@@ -85,7 +85,7 @@ GateResult entryRequest(const RegistrationList& registrations, const std::string
 
     JsonDocument req;
     req["kz"] = plate;
-    if (entryTimeInput.find_first_not_of(" \t") != std::string::npos)
+    if (!trim(entryTimeInput).empty())
     {
         int64_t entry = 0;
         if (!parseLocalDateTime(entryTimeInput, entry))

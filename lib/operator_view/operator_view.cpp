@@ -5,6 +5,7 @@
 #include "format.h"
 #include "plate.h"
 #include "schranken_view.h"
+#include "testdata.h"
 
 const char* const NEW_CUSTOMER_REASON = "Neuer Kunde registrieren";
 
@@ -110,7 +111,8 @@ namespace
             html += NEW_CUSTOMER_REASON;
             html += "</option></select></label></p><p><label>Name (nur für «";
             html += NEW_CUSTOMER_REASON;
-            html += "») <input name=\"name\" maxlength=\"40\" autocomplete=\"off\"></label></p>";
+            html += "») <input name=\"name\" maxlength=\"" + std::to_string(MAX_NAME_CHARS) +
+                    "\" autocomplete=\"off\"></label></p>";
         }
         else
         {
@@ -180,6 +182,10 @@ std::string laneStatus(KasseLink& kasse, const std::string& plate)
     {
         return "Kasse nicht erreichbar";
     }
+    if (reply.status == 503 && errorCode(reply) == "time_not_synced")
+    {
+        return "Kasse: Uhrzeit nicht synchronisiert";
+    }
     JsonDocument doc;
     if (reply.status != 200 || deserializeJson(doc, reply.body) != DeserializationError::Ok ||
         !doc["status"].is<const char*>())
@@ -246,15 +252,8 @@ RemoteOpenResult remoteOpen(GateLane lane, const std::string& rawPlate, const st
                                               : kasse.postJson("/api/exit", kzBody(plate, true));
     if (reply.status <= 0)
     {
-        Event e;
-        e.time = now;
-        e.type = EventType::KasseUnreachable;
-        e.lane = lane;
-        e.plate = plate;
-        e.user = OPERATOR_USER;
-        e.reason = reason;
-        e.note = "Fernöffnung abgebrochen, Schranke bleibt zu";
-        log.add(e);
+        log.add({now, EventType::KasseUnreachable, lane, plate, OPERATOR_USER, reason,
+                 "Fernöffnung abgebrochen, Schranke bleibt zu"});
         r.logged = true;
         r.notice = {"err", registeredPrefix(r, plate) + "Kasse nicht erreichbar – Schranke bleibt zu"};
         return r;
@@ -271,15 +270,7 @@ RemoteOpenResult remoteOpen(GateLane lane, const std::string& rawPlate, const st
         outcome.note = "Neukunde registriert – " + outcome.note;
     }
 
-    Event e;
-    e.time = now;
-    e.type = EventType::RemoteOpening;
-    e.lane = lane;
-    e.plate = plate;
-    e.user = OPERATOR_USER;
-    e.reason = reason;
-    e.note = outcome.note;
-    log.add(e);
+    log.add({now, EventType::RemoteOpening, lane, plate, OPERATOR_USER, reason, outcome.note});
 
     r.open = true;
     r.plate = plate;
@@ -294,13 +285,7 @@ bool logGateResult(EventLog& log, GateLane lane, const GateResult& result, int64
     {
         return false;
     }
-    Event e;
-    e.time = now;
-    e.type = EventType::KasseUnreachable;
-    e.lane = lane;
-    e.plate = result.plate;
-    e.note = result.message;
-    log.add(e);
+    log.add({now, EventType::KasseUnreachable, lane, result.plate, "", "", result.message});
     return true;
 }
 
@@ -310,20 +295,14 @@ bool logBarrierEvent(EventLog& log, GateLane lane, BarrierEvent event, int64_t n
     {
         return false;
     }
-    Event e;
-    e.time = now;
-    e.lane = lane;
     if (event == BarrierEvent::SafetyStop)
     {
-        e.type = EventType::SafetyStop;
-        e.note = "Schliessen gestoppt, Schranke geöffnet";
+        log.add({now, EventType::SafetyStop, lane, "", "", "", "Schliessen gestoppt, Schranke geöffnet"});
     }
     else
     {
-        e.type = EventType::LoopFault;
-        e.note = loopFaultMessage(gateLaneLabel(lane));
+        log.add({now, EventType::LoopFault, lane, "", "", "", loopFaultMessage(gateLaneLabel(lane))});
     }
-    log.add(e);
     return true;
 }
 
@@ -344,8 +323,14 @@ std::string renderOperatorPage(const OperatorLane& entry, const OperatorLane& ex
     appendLog(html, log, filter);
     html += "<h2>Testdaten</h2><form method=\"post\" action=\"/reset\" "
             "onsubmit=\"return confirm('Registrierungen, Ereignisprotokoll und alle Parkvorgänge zurücksetzen?')\">"
-            "<button type=\"submit\">Testdaten zurücksetzen</button></form><p class=\"muted\">Registrierungen KZ-01, "
-            "KZ-02, KZ-08, KZ-10; Ereignisprotokoll leer; Kasse: keine Parkvorgänge, Transaktionszähler auf 1.</p>";
+            "<button type=\"submit\">Testdaten zurücksetzen</button></form><p class=\"muted\">Registrierungen ";
+    RegistrationList defaults;
+    loadDefaultRegistrations(defaults);
+    for (size_t i = 0; i < defaults.all().size(); ++i)
+    {
+        html += (i == 0 ? "" : ", ") + htmlEscape(defaults.all()[i].plate);
+    }
+    html += "; Ereignisprotokoll leer; Kasse: keine Parkvorgänge, Transaktionszähler auf 1.</p>";
     appendPageEnd(html);
     return html;
 }

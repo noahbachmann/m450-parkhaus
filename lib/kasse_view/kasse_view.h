@@ -21,7 +21,7 @@ struct SessionView
     std::string paymentStatus; // «bezahlt» / «unbezahlt»; empty once closed
     std::string payment;       // "Karte, TX-000001"; empty if not paid
     std::string cashInserted;  // "CHF 1.00" while partial cash is held; empty otherwise
-    std::string tariffNote;    // free minutes / started hours; empty once closed
+    std::string tariffNote;    // free minutes / started hours while open; empty once paid or closed
     bool payable = false;      // open with a fee > 0
 };
 
@@ -31,8 +31,10 @@ SessionView describeSession(const ParkingSession& session, int64_t now);
 // each group.
 std::vector<const ParkingSession*> sessionsForList(const SessionStore& store);
 
-// "2 angefangene Stunden à CHF 2.00 ab Einfahrt (15 Freiminuten überschritten)".
-std::string tariffNote(int64_t durationSeconds, uint32_t feeRappen);
+// How the fee for a stay of this length is made up, e.g.
+// «2 angefangene Stunden à CHF 2.00 ab Einfahrt (15 Freiminuten überschritten)» or
+// «1 × 24 h à CHF 20.00, danach 1 angefangene Stunde à CHF 2.00 (15 Freiminuten überschritten)».
+std::string tariffNote(int64_t durationSeconds);
 
 // The valid tariff in one sentence (tariff.md, German wording): «15 Freiminuten; wird die Freizeit
 // überschritten, kostet jede angefangene Stunde ab Einfahrt CHF 2.00; Tagesmaximum CHF 20.00 pro angefangene
@@ -46,9 +48,6 @@ bool paymentSucceeded(const PaymentResult& result);
 
 // «Kein offener Parkvorgang für SZ555»
 std::string noSessionMessage(const std::string& plate);
-
-// Form value -> method: "card_ok", "card_declined", "twint", "cash". False for anything else.
-bool parsePayMethod(const std::string& name, PayMethod& method);
 
 // "10", "10.5", "10.50", "10,50", "CHF 10.00" -> 1050 Rappen. False for anything else, 0 or > CHF 1000.
 bool parseChf(const std::string& text, uint32_t& rappen);

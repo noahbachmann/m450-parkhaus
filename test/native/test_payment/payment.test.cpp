@@ -99,8 +99,13 @@ void test_card_after_partial_cash_pays_the_rest()
     pay(store, "AG1", PayMethod::Cash, NOW, 50);
     PaymentResult r = pay(store, "AG1", PayMethod::CardOk, NOW);
     TEST_ASSERT_TRUE(Kind::Paid == r.kind);
-    TEST_ASSERT_EQUAL_UINT32(200, r.amountRappen);
+    TEST_ASSERT_EQUAL_UINT32(200, r.amountRappen); // whole fee booked
+    TEST_ASSERT_EQUAL_UINT32(50, r.cashRappen);    // of which cash; the card is charged CHF 1.50
     TEST_ASSERT_EQUAL_UINT32(0, r.changeRappen);
+    const ParkingSession* s = store.findActive("AG1");
+    TEST_ASSERT_EQUAL_UINT32(200, s->amountRappen);
+    TEST_ASSERT_EQUAL_UINT32(50, s->cashPaidRappen);
+    TEST_ASSERT_TRUE(PaymentMethod::Card == s->method);
 }
 
 void test_cash_zero_is_invalid()

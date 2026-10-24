@@ -1,5 +1,6 @@
 #include "format.h"
 
+#include <cctype>
 #include <cstdio>
 
 namespace
@@ -56,6 +57,34 @@ namespace
     }
 }
 
+std::string trim(const std::string& text)
+{
+    size_t begin = 0;
+    size_t end = text.size();
+    while (begin < end && std::isspace(static_cast<unsigned char>(text[begin])))
+    {
+        ++begin;
+    }
+    while (end > begin && std::isspace(static_cast<unsigned char>(text[end - 1])))
+    {
+        --end;
+    }
+    return text.substr(begin, end - begin);
+}
+
+size_t utf8Length(const std::string& text)
+{
+    size_t count = 0;
+    for (char c : text)
+    {
+        if ((static_cast<unsigned char>(c) & 0xC0) != 0x80) // not a continuation byte
+        {
+            ++count;
+        }
+    }
+    return count;
+}
+
 std::string formatChf(uint32_t rappen)
 {
     char buf[24];
@@ -98,13 +127,11 @@ std::string formatDuration(int64_t seconds)
 
 bool parseLocalDateTime(const std::string& text, int64_t& epoch)
 {
-    size_t begin = text.find_first_not_of(" \t");
-    size_t end = text.find_last_not_of(" \t");
-    if (begin == std::string::npos)
+    std::string s = trim(text);
+    if (s.empty())
     {
         return false;
     }
-    std::string s = text.substr(begin, end - begin + 1);
 
     unsigned y = 0, mo = 0, d = 0, h = 0, mi = 0, sec = 0;
     int used = 0;

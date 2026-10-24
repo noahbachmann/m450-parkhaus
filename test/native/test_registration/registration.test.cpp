@@ -40,8 +40,20 @@ void test_invalid_names_are_rejected()
     RegistrationList list;
     TEST_ASSERT_TRUE(RegistrationResult::InvalidName == list.add("", "UR 1"));
     TEST_ASSERT_TRUE(RegistrationResult::InvalidName == list.add("   ", "UR 1"));
-    TEST_ASSERT_TRUE(RegistrationResult::InvalidName == list.add(std::string(MAX_NAME_BYTES + 1, 'x'), "UR 1"));
-    TEST_ASSERT_TRUE(RegistrationResult::Ok == list.add(std::string(MAX_NAME_BYTES, 'x'), "UR 1"));
+    TEST_ASSERT_TRUE(RegistrationResult::InvalidName == list.add(std::string(MAX_NAME_CHARS + 1, 'x'), "UR 1"));
+    TEST_ASSERT_TRUE(RegistrationResult::Ok == list.add(std::string(MAX_NAME_CHARS, 'x'), "UR 1"));
+}
+
+void test_name_limit_counts_characters_not_bytes()
+{
+    RegistrationList list;
+    std::string umlauts;
+    for (size_t i = 0; i < MAX_NAME_CHARS; ++i)
+    {
+        umlauts += "ü"; // 2 bytes each
+    }
+    TEST_ASSERT_TRUE(RegistrationResult::Ok == list.add(umlauts, "UR 1"));
+    TEST_ASSERT_TRUE(RegistrationResult::InvalidName == list.add(umlauts + "x", "AG 1"));
 }
 
 void test_duplicate_plate_is_rejected()
@@ -83,6 +95,7 @@ int main()
     RUN_TEST(test_add_normalizes_plate_and_trims_name);
     RUN_TEST(test_invalid_plates_are_rejected);
     RUN_TEST(test_invalid_names_are_rejected);
+    RUN_TEST(test_name_limit_counts_characters_not_bytes);
     RUN_TEST(test_duplicate_plate_is_rejected);
     RUN_TEST(test_remove);
     RUN_TEST(test_list_is_capped);

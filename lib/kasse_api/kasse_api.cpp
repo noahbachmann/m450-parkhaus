@@ -54,7 +54,7 @@ ApiResponse handleStatus(const SessionStore& store, const std::string& kzParam, 
     uint32_t fee = s->amountRappen;
     if (s->status == SessionStatus::Open && !currentFee(*s, now, fee))
     {
-        fee = 0;
+        return error(503, "time_not_synced"); // clock before the entry: no fee can be given
     }
     doc["status"] = s->status == SessionStatus::Paid ? "bezahlt" : "unbezahlt";
     doc["fee"] = fee;
@@ -155,25 +155,9 @@ ApiResponse handlePay(SessionStore& store, const std::string& body, int64_t now,
     {
         return error(400, "bad_request");
     }
-    std::string name = req["method"].as<std::string>();
     PayMethod method;
-    if (name == "card_ok")
-    {
-        method = PayMethod::CardOk;
-    }
-    else if (name == "card_declined")
-    {
-        method = PayMethod::CardDeclined;
-    }
-    else if (name == "twint")
-    {
-        method = PayMethod::Twint;
-    }
-    else if (name == "cash" && (req["amount"].isNull() || req["amount"].is<uint32_t>()))
-    {
-        method = PayMethod::Cash;
-    }
-    else
+    if (!parsePayMethod(req["method"].as<std::string>(), method) ||
+        (method == PayMethod::Cash && !req["amount"].isNull() && !req["amount"].is<uint32_t>()))
     {
         return error(400, "bad_request");
     }
@@ -194,11 +178,15 @@ ApiResponse handlePay(SessionStore& store, const std::string& body, int64_t now,
         doc["kz"] = plate;
         doc["status"] = "bezahlt";
         doc["amount"] = r.amountRappen;
-        doc["method"] = r.method == PaymentMethod::Twint ? "twint" : r.method == PaymentMethod::Cash ? "cash" : "card";
+        doc["method"] = paymentMethodName(r.method);
         doc["tx"] = r.txRef;
         if (r.method == PaymentMethod::Cash)
         {
             doc["change"] = r.changeRappen;
+        }
+        else if (r.cashRappen > 0)
+        {
+            doc["cash"] = r.cashRappen;
         }
         return respond(200, doc);
     }
@@ -232,7 +220,7 @@ ApiResponse handlePay(SessionStore& store, const std::string& body, int64_t now,
 ApiResponse handleSessions(const SessionStore& store, int64_t now, bool timeSynced)
 {
     JsonDocument doc;
-    deserializeJson(doc, sessionsToJson(store));
+    sessionsToDoc(store, doc);
     doc["now"] = now;
     doc["synced"] = timeSynced;
     return respond(200, doc);

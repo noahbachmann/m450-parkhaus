@@ -12,10 +12,17 @@
 
 struct KasseSnapshot
 {
-    bool reachable = false; // Pico 1 answered with a valid session list
+    // Empty if Pico 1 answered with a valid session list, else «Kasse nicht erreichbar» or «Unerwartete Antwort
+    // der Kasse».
+    std::string error = "Kasse nicht erreichbar";
     bool synced = false;    // Pico 1 clock synced (fees and payments possible)
     int64_t now = 0;        // Pico 1 time, used for durations and fees
     SessionStore sessions;
+
+    bool reachable() const
+    {
+        return error.empty();
+    }
 };
 
 // GET /api/sessions.

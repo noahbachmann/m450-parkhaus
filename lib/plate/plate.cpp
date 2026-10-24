@@ -2,6 +2,8 @@
 
 #include <cctype>
 
+const char* const INVALID_PLATE_TEXT = "Ungültiges Kennzeichen – erwartet 2 Buchstaben und 1–6 Ziffern";
+
 std::string normalizePlate(const std::string& raw)
 {
     std::string result;

@@ -78,7 +78,7 @@ void test_fetch_sessions()
     pay(kasse.store, "LU123456", PayMethod::Twint, NOW);
     kasse.store.openEntry("ZH98765", NOW - 5 * MIN);
     KasseSnapshot snap = fetchSessions(kasse);
-    TEST_ASSERT_TRUE(snap.reachable);
+    TEST_ASSERT_TRUE(snap.reachable());
     TEST_ASSERT_TRUE(snap.synced);
     TEST_ASSERT_EQUAL_INT64(NOW, snap.now);
     TEST_ASSERT_EQUAL_UINT(2, snap.sessions.all().size());
@@ -93,12 +93,16 @@ void test_fetch_sessions_unreachable_or_garbage()
 {
     LocalKasse kasse;
     kasse.online = false;
-    TEST_ASSERT_FALSE(fetchSessions(kasse).reachable);
+    TEST_ASSERT_FALSE(fetchSessions(kasse).reachable());
     FixedReply garbage;
     garbage.reply = {200, "{\"sessions\":\"nope\"}"};
-    TEST_ASSERT_FALSE(fetchSessions(garbage).reachable);
+    TEST_ASSERT_FALSE(fetchSessions(garbage).reachable());
     garbage.reply = {500, "{\"nextTx\":1,\"sessions\":[],\"now\":1}"};
-    TEST_ASSERT_FALSE(fetchSessions(garbage).reachable);
+    TEST_ASSERT_FALSE(fetchSessions(garbage).reachable());
+    garbage.reply = {200, "{\"nextTx\":1,\"sessions\":[],\"now\":1,\"synced\":\"yes\"}"};
+    TEST_ASSERT_FALSE(fetchSessions(garbage).reachable());
+    TEST_ASSERT_EQUAL_STRING("Kasse nicht erreichbar", fetchSessions(kasse).error.c_str());
+    TEST_ASSERT_EQUAL_STRING("Unerwartete Antwort der Kasse", fetchSessions(garbage).error.c_str());
 }
 
 void test_pay_tf20_card_then_already_paid()
@@ -172,6 +176,9 @@ void test_pay_kasse_unreachable_or_unexpected()
     FormResult wrongPlate = payAtKasse(odd, "LU123456", "card_ok", "");
     TEST_ASSERT_FALSE(wrongPlate.changed);
     TEST_ASSERT_EQUAL_STRING("Unerwartete Antwort der Kasse (200)", wrongPlate.notice.text.c_str());
+    odd.reply = {200, "{\"kz\":\"LU123456\",\"status\":\"bezahlt\",\"amount\":600,\"method\":\"gold\",\"tx\":\"X\"}"};
+    TEST_ASSERT_EQUAL_STRING("Unerwartete Antwort der Kasse (200)",
+                             payAtKasse(odd, "LU123456", "card_ok", "").notice.text.c_str());
 }
 
 void test_reset()

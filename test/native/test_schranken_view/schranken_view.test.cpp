@@ -177,7 +177,7 @@ void test_nav_admin_shows_badge_and_admin_pages()
 void test_camera_lists_sessions_active_first_and_suggests_plates()
 {
     KasseSnapshot kasse;
-    kasse.reachable = true;
+    kasse.error.clear();
     kasse.now = NOW;
     kasse.sessions.openEntry("AG1", NOW - 60 * MIN);
     kasse.sessions.tryExit("AG1", NOW - 59 * MIN);

@@ -2,22 +2,14 @@
 
 #include <algorithm>
 
+#include "format.h"
+
 const char* const OPERATOR_USER = "betrieb";
 const char* const SESSION_COOKIE = "parkhaus_session";
 
 namespace
 {
     const char* const ADMIN_PAGES[] = {"/kasse", "/registrierung", "/betrieb"};
-
-    std::string trim(const std::string& s)
-    {
-        size_t begin = s.find_first_not_of(' ');
-        if (begin == std::string::npos)
-        {
-            return "";
-        }
-        return s.substr(begin, s.find_last_not_of(' ') - begin + 1);
-    }
 }
 
 bool credentialsOk(const std::string& user, const std::string& password, const std::string& expectedPassword)

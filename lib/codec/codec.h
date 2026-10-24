@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ArduinoJson.h>
 #include <string>
 
 #include "event_log.h"
@@ -17,10 +18,13 @@ std::string registrationsToJson(const RegistrationList& list);
 bool registrationsFromJson(const std::string& json, RegistrationList& list);
 
 std::string sessionsToJson(const SessionStore& store);
+// Same content into doc, e.g. to add fields before serializing.
+void sessionsToDoc(const SessionStore& store, JsonDocument& doc);
 bool sessionsFromJson(const std::string& json, SessionStore& store);
+bool sessionsFromDoc(const JsonDocument& doc, SessionStore& store);
 
 std::string eventsToJson(const EventLog& log);
 bool eventsFromJson(const std::string& json, EventLog& log);
 
-// Status names as used in the files and the API: "open", "paid", "closed", "closed_free".
+// Status names as used in the files and the API: "open", "paid", "closed", "closed_free", "closed_unpaid".
 const char* sessionStatusName(SessionStatus status);

@@ -120,6 +120,16 @@ void test_sessions_format()
                              sessionsToJson(store).c_str());
 }
 
+void test_next_tx_is_raised_above_stored_references()
+{
+    SessionStore loaded;
+    TEST_ASSERT_TRUE(sessionsFromJson("{\"nextTx\":1,\"sessions\":[{\"kz\":\"LU123456\",\"entry\":1,\"exit\":0,"
+                                      "\"amount\":400,\"cash\":0,\"method\":\"card\",\"tx\":\"TX-000007\","
+                                      "\"status\":\"paid\"}]}",
+                                      loaded));
+    TEST_ASSERT_EQUAL_UINT32(8, loaded.nextTxNumber());
+}
+
 void test_sessions_invalid_input_leaves_store_unchanged()
 {
     SessionStore store = sampleStore();
@@ -174,6 +184,7 @@ int main()
     RUN_TEST(test_registrations_invalid_input_leaves_list_unchanged);
     RUN_TEST(test_sessions_round_trip);
     RUN_TEST(test_sessions_format);
+    RUN_TEST(test_next_tx_is_raised_above_stored_references);
     RUN_TEST(test_sessions_invalid_input_leaves_store_unchanged);
     RUN_TEST(test_status_names);
     return UNITY_END();

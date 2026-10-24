@@ -12,11 +12,6 @@ namespace
     const char* UNREACHABLE = "Kasse nicht erreichbar – bitte später erneut versuchen";
     const char* UNEXPECTED = "Unerwartete Antwort der Kasse";
 
-    PaymentMethod methodOf(const std::string& name)
-    {
-        return name == "twint" ? PaymentMethod::Twint : name == "cash" ? PaymentMethod::Cash : PaymentMethod::Card;
-    }
-
     // Reply of POST /api/pay -> the payment result it stands for. False if the reply makes no sense.
     bool paymentFromReply(const HttpReply& reply, const std::string& plate, PaymentResult& out)
     {
@@ -39,12 +34,19 @@ namespace
                 out = {Kind::PartialCash, doc["amount"].as<uint32_t>(), doc["remaining"].as<uint32_t>()};
                 return true;
             }
-            if (status != "bezahlt" || !doc["method"].is<const char*>() || !doc["tx"].is<const char*>())
+            PaymentMethod method;
+            if (status != "bezahlt" || !doc["method"].is<const char*>() || !doc["tx"].is<const char*>() ||
+                !paymentMethodFromName(doc["method"].as<std::string>(), method) || method == PaymentMethod::None)
             {
                 return false;
             }
-            out = {Kind::Paid, doc["amount"].as<uint32_t>(), 0, doc["change"].as<uint32_t>(),
-                   methodOf(doc["method"].as<std::string>()), doc["tx"].as<std::string>()};
+            out = {Kind::Paid,
+                   doc["amount"].as<uint32_t>(),
+                   0,
+                   doc["change"].as<uint32_t>(),
+                   method,
+                   doc["tx"].as<std::string>(),
+                   doc["cash"].as<uint32_t>()};
             return true;
         }
         std::string code = doc["error"].is<const char*>() ? doc["error"].as<std::string>() : "";
@@ -90,14 +92,19 @@ KasseSnapshot fetchSessions(KasseLink& kasse)
 {
     KasseSnapshot snap;
     HttpReply reply = kasse.getJson("/api/sessions");
-    if (reply.status != 200 || !sessionsFromJson(reply.body, snap.sessions))
+    if (reply.status <= 0)
     {
         return snap;
     }
     JsonDocument doc;
-    deserializeJson(doc, reply.body);
-    snap.reachable = doc["now"].is<int64_t>();
-    snap.synced = snap.reachable && doc["synced"].as<bool>();
+    if (reply.status != 200 || deserializeJson(doc, reply.body) != DeserializationError::Ok ||
+        !doc["now"].is<int64_t>() || !doc["synced"].is<bool>() || !sessionsFromDoc(doc, snap.sessions))
+    {
+        snap.error = UNEXPECTED;
+        return snap;
+    }
+    snap.error.clear();
+    snap.synced = doc["synced"].as<bool>();
     snap.now = doc["now"].as<int64_t>();
     return snap;
 }

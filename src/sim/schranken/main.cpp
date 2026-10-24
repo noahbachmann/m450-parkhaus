@@ -252,7 +252,7 @@ HttpResponse adminRoute(const HttpRequest& req)
     {
         KasseSnapshot snap = fetchSessions(kasse);
         return htmlPage(renderKassePage(snap.sessions, req.arg("kz"), pendingNotice(req), snap.now, snap.synced,
-                                        snap.reachable));
+                                        snap.error));
     }
     if (post && req.path == "/kasse/pay")
     {

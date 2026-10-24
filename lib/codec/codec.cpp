@@ -1,6 +1,7 @@
 #include "codec.h"
 
 #include <ArduinoJson.h>
+#include <cstdio>
 
 #include "plate.h"
 
@@ -18,13 +19,6 @@ namespace
         {"closed", static_cast<int>(SessionStatus::Closed)},
         {"closed_free", static_cast<int>(SessionStatus::ClosedFree)},
         {"closed_unpaid", static_cast<int>(SessionStatus::ClosedUnpaid)},
-    };
-
-    const Named METHOD_NAMES[] = {
-        {"none", static_cast<int>(PaymentMethod::None)},
-        {"card", static_cast<int>(PaymentMethod::Card)},
-        {"twint", static_cast<int>(PaymentMethod::Twint)},
-        {"cash", static_cast<int>(PaymentMethod::Cash)},
     };
 
     template <size_t N>
@@ -59,6 +53,13 @@ namespace
         return false;
     }
 
+    // "TX-000042" -> 42; 0 for an empty or other reference.
+    uint32_t txNumber(const std::string& ref)
+    {
+        unsigned long n = 0;
+        return std::sscanf(ref.c_str(), "TX-%lu", &n) == 1 ? static_cast<uint32_t>(n) : 0;
+    }
+
     bool parseSession(JsonObjectConst o, ParkingSession& s)
     {
         if (!o["kz"].is<const char*>() || !o["entry"].is<int64_t>() || !o["exit"].is<int64_t>() ||
@@ -67,8 +68,8 @@ namespace
             return false;
         }
         int status = 0;
-        int method = 0;
-        if (!valueOf(STATUS_NAMES, o["status"], status) || !valueOf(METHOD_NAMES, o["method"], method))
+        if (!valueOf(STATUS_NAMES, o["status"], status) || !o["method"].is<const char*>() ||
+            !paymentMethodFromName(o["method"].as<std::string>(), s.method))
         {
             return false;
         }
@@ -79,7 +80,6 @@ namespace
         s.cashPaidRappen = o["cash"].as<uint32_t>();
         s.txRef = o["tx"].as<std::string>();
         s.status = static_cast<SessionStatus>(status);
-        s.method = static_cast<PaymentMethod>(method);
         return isValidPlate(s.plate);
     }
 }
@@ -130,6 +130,14 @@ bool registrationsFromJson(const std::string& json, RegistrationList& list)
 std::string sessionsToJson(const SessionStore& store)
 {
     JsonDocument doc;
+    sessionsToDoc(store, doc);
+    std::string out;
+    serializeJson(doc, out);
+    return out;
+}
+
+void sessionsToDoc(const SessionStore& store, JsonDocument& doc)
+{
     doc["nextTx"] = store.nextTxNumber();
     JsonArray arr = doc["sessions"].to<JsonArray>();
     for (const ParkingSession& s : store.all())
@@ -140,20 +148,21 @@ std::string sessionsToJson(const SessionStore& store)
         o["exit"] = s.exit;
         o["amount"] = s.amountRappen;
         o["cash"] = s.cashPaidRappen;
-        o["method"] = nameOf(METHOD_NAMES, static_cast<int>(s.method));
+        o["method"] = paymentMethodName(s.method);
         o["tx"] = s.txRef;
         o["status"] = sessionStatusName(s.status);
     }
-    std::string out;
-    serializeJson(doc, out);
-    return out;
 }
 
 bool sessionsFromJson(const std::string& json, SessionStore& store)
 {
     JsonDocument doc;
-    if (deserializeJson(doc, json) != DeserializationError::Ok || !doc["nextTx"].is<uint32_t>() ||
-        !doc["sessions"].is<JsonArrayConst>())
+    return deserializeJson(doc, json) == DeserializationError::Ok && sessionsFromDoc(doc, store);
+}
+
+bool sessionsFromDoc(const JsonDocument& doc, SessionStore& store)
+{
+    if (!doc["nextTx"].is<uint32_t>() || !doc["sessions"].is<JsonArrayConst>())
     {
         return false;
     }
@@ -163,6 +172,7 @@ bool sessionsFromJson(const std::string& json, SessionStore& store)
         return false;
     }
     std::vector<ParkingSession> loaded;
+    uint32_t nextTx = doc["nextTx"].as<uint32_t>();
     for (JsonVariantConst v : arr)
     {
         ParkingSession s;
@@ -177,9 +187,13 @@ bool sessionsFromJson(const std::string& json, SessionStore& store)
                 return false;
             }
         }
+        if (txNumber(s.txRef) >= nextTx)
+        {
+            nextTx = txNumber(s.txRef) + 1; // never hand out a stored reference again
+        }
         loaded.push_back(s);
     }
-    store.restore(std::move(loaded), doc["nextTx"].as<uint32_t>());
+    store.restore(std::move(loaded), nextTx);
     return true;
 }
 

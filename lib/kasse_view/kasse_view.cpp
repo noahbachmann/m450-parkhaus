@@ -6,20 +6,6 @@
 #include "plate.h"
 #include "tariff.h"
 
-namespace
-{
-    std::string trim(const std::string& s)
-    {
-        size_t begin = s.find_first_not_of(" \t");
-        if (begin == std::string::npos)
-        {
-            return "";
-        }
-        size_t end = s.find_last_not_of(" \t");
-        return s.substr(begin, end - begin + 1);
-    }
-}
-
 SessionView describeSession(const ParkingSession& session, int64_t now)
 {
     SessionView v;
@@ -41,7 +27,7 @@ SessionView describeSession(const ParkingSession& session, int64_t now)
         if (currentFee(session, now, fee))
         {
             v.fee = formatChf(fee);
-            v.tariffNote = tariffNote(now - session.entry, fee);
+            v.tariffNote = tariffNote(now - session.entry);
             v.payable = fee > 0;
         }
         if (session.cashPaidRappen > 0)
@@ -55,12 +41,16 @@ SessionView describeSession(const ParkingSession& session, int64_t now)
         if (session.status == SessionStatus::Paid)
         {
             v.paymentStatus = "bezahlt";
-            v.tariffNote = tariffNote(now - session.entry, session.amountRappen);
         }
     }
     if (session.method != PaymentMethod::None)
     {
-        v.payment = std::string(paymentMethodLabel(session.method)) + ", " + session.txRef;
+        v.payment = paymentMethodLabel(session.method);
+        if (session.method != PaymentMethod::Cash && session.cashPaidRappen > 0)
+        {
+            v.payment += " + Bargeld " + formatChf(session.cashPaidRappen);
+        }
+        v.payment += ", " + session.txRef;
     }
     return v;
 }
@@ -82,18 +72,40 @@ std::vector<const ParkingSession*> sessionsForList(const SessionStore& store)
     return list;
 }
 
-std::string tariffNote(int64_t durationSeconds, uint32_t feeRappen)
+std::string tariffNote(int64_t durationSeconds)
 {
-    if (durationSeconds <= FREE_MINUTES * 60)
+    FeeBreakdown b;
+    if (!feeBreakdown(durationSeconds, b))
+    {
+        return "";
+    }
+    if (b.free)
     {
         return "innerhalb der " + std::to_string(FREE_MINUTES) + " Freiminuten";
     }
-    int64_t unitSeconds = UNIT_MINUTES * 60;
-    int64_t units = (durationSeconds + unitSeconds - 1) / unitSeconds;
-    std::string note = std::to_string(units) + (units == 1 ? " angefangene Stunde à " : " angefangene Stunden à ") +
-                       formatChf(PRICE_PER_UNIT_RAPPEN) + " ab Einfahrt (" + std::to_string(FREE_MINUTES) +
-                       " Freiminuten überschritten)";
-    if (feeRappen < static_cast<uint64_t>(units) * PRICE_PER_UNIT_RAPPEN)
+    std::string unit = UNIT_MINUTES == 60 ? "Stunde" : std::to_string(UNIT_MINUTES) + "-Minuten-Einheit";
+    std::string units;
+    if (b.restUnits > 0)
+    {
+        units = std::to_string(b.restUnits) + " angefangene " + unit + (b.restUnits == 1 ? "" : "n") + " à " +
+                formatChf(PRICE_PER_UNIT_RAPPEN);
+    }
+    std::string note;
+    if (b.fullDays == 0)
+    {
+        note = units + " ab Einfahrt";
+    }
+    else
+    {
+        note = std::to_string(b.fullDays) + " × " + std::to_string(DAY_BLOCK_HOURS) + " h à " +
+               formatChf(b.dayFeeRappen);
+        if (!units.empty())
+        {
+            note += ", danach " + units;
+        }
+    }
+    note += " (" + std::to_string(FREE_MINUTES) + " Freiminuten überschritten)";
+    if (b.restCapped)
     {
         note += ", Tagesmaximum " + formatChf(DAILY_MAX_RAPPEN) + " pro angefangene " +
                 std::to_string(DAY_BLOCK_HOURS) + " h";
@@ -116,8 +128,13 @@ std::string paymentMessage(const PaymentResult& result, const std::string& plate
     {
     case Kind::Paid:
     {
-        std::string msg = "Bezahlt – " + formatChf(result.amountRappen) + ", " + paymentMethodLabel(result.method) +
-                          " – Transaktion " + result.txRef;
+        std::string msg = "Bezahlt – " + formatChf(result.amountRappen) + ", " + paymentMethodLabel(result.method);
+        if (result.cashRappen > 0 && result.method != PaymentMethod::Cash)
+        {
+            msg += " " + formatChf(result.amountRappen - result.cashRappen) + " + Bargeld " +
+                   formatChf(result.cashRappen);
+        }
+        msg += " – Transaktion " + result.txRef;
         if (result.method == PaymentMethod::Cash)
         {
             msg += " – Rückgeld " + formatChf(result.changeRappen);
@@ -125,7 +142,7 @@ std::string paymentMessage(const PaymentResult& result, const std::string& plate
         return msg;
     }
     case Kind::Declined:
-        return "Zahlung abgelehnt – anderes Zahlungsmittel wählen";
+        return PAYMENT_DECLINED_TEXT;
     case Kind::PartialCash:
         return "Restbetrag " + formatChf(result.remainingRappen) + " – unbezahlt";
     case Kind::AlreadyPaid:
@@ -152,31 +169,6 @@ bool paymentSucceeded(const PaymentResult& result)
 std::string noSessionMessage(const std::string& plate)
 {
     return "Kein offener Parkvorgang für " + plate;
-}
-
-bool parsePayMethod(const std::string& name, PayMethod& method)
-{
-    if (name == "card_ok")
-    {
-        method = PayMethod::CardOk;
-    }
-    else if (name == "card_declined")
-    {
-        method = PayMethod::CardDeclined;
-    }
-    else if (name == "twint")
-    {
-        method = PayMethod::Twint;
-    }
-    else if (name == "cash")
-    {
-        method = PayMethod::Cash;
-    }
-    else
-    {
-        return false;
-    }
-    return true;
 }
 
 bool parseChf(const std::string& text, uint32_t& rappen)

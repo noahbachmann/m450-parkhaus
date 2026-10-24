@@ -14,7 +14,7 @@ struct ApiResponse
     std::string body;
 };
 
-// GET /api/status?kz=<plate>
+// GET /api/status?kz=<plate>. 503 time_not_synced if the clock is before an open session's entry.
 ApiResponse handleStatus(const SessionStore& store, const std::string& kzParam, int64_t now);
 
 // POST /api/entry, body {"kz":"..."} or {"kz":"...","entry":<epoch>}. A repeated entry (see
@@ -27,7 +27,8 @@ ApiResponse handleExit(SessionStore& store, const std::string& body, int64_t now
 
 // POST /api/pay, body {"kz":"...","method":"card_ok"|"card_declined"|"twint"} (exit terminal, Kasse) or
 // {"kz":"...","method":"cash","amount":<Rappen inserted>} (Kasse).
-// 200 {"kz","status":"bezahlt","amount","method":"card"|"twint"|"cash","tx"} (+ "change" for cash) ·
+// 200 {"kz","status":"bezahlt","amount","method":"card"|"twint"|"cash","tx"} (+ "change" for cash, + "cash" for
+// card/TWINT after partial cash: the part already inserted) ·
 // 200 {"kz","status":"unbezahlt","amount":<fee>,"remaining"} after partial cash · 402 declined ·
 // 409 already_paid / nothing_to_pay · 404 no_session · 400 invalid_plate / invalid_amount / bad_request ·
 // 503 time_not_synced
