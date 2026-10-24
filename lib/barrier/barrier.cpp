@@ -95,6 +95,36 @@ bool Barrier::loopFault() const
     return fault;
 }
 
+BarrierEvent BarrierDriver::update(uint32_t nowMs, uint32_t openRequests, uint32_t passRequests, bool loopOccupied)
+{
+    if (openRequests != seenOpen)
+    {
+        seenOpen = openRequests;
+        current.open(nowMs);
+    }
+    if (passRequests != seenPass)
+    {
+        passAccepted = current.vehiclePassed();
+        seenPass = passRequests;
+    }
+    return current.update(nowMs, loopOccupied);
+}
+
+const Barrier& BarrierDriver::barrier() const
+{
+    return current;
+}
+
+uint32_t BarrierDriver::passesHandled() const
+{
+    return seenPass;
+}
+
+bool BarrierDriver::lastPassAccepted() const
+{
+    return passAccepted;
+}
+
 const char* barrierStateLabel(BarrierState state)
 {
     switch (state)

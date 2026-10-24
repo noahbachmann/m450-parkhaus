@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 
 #include "codec.h"
+#include "kasse_pages.h"
 #include "payment.h"
 #include "plate.h"
 #include "testdata.h"
@@ -232,4 +233,39 @@ ApiResponse handleReset(SessionStore& store)
     JsonDocument doc;
     doc["status"] = "reset";
     return respond(200, doc);
+}
+
+KasseRouteResult routeKasse(const WebRequest& req, SessionStore& store, int64_t now, bool timeSynced,
+                            const std::string& uiUrl)
+{
+    struct Route
+    {
+        const char* method;
+        const char* path;
+        int changedStatus; // a reply with this status changed the sessions; 0 = read only
+    };
+    static const Route ROUTES[] = {
+        {"GET", "/api/status", 0},  {"GET", "/api/sessions", 0}, {"POST", "/api/entry", 201},
+        {"POST", "/api/exit", 200}, {"POST", "/api/pay", 200},   {"POST", "/api/reset", 200},
+    };
+    if (req.method == "GET" && req.path == "/")
+    {
+        return {htmlPage(renderKasseServerPage(uiUrl))};
+    }
+    for (const Route& r : ROUTES)
+    {
+        if (req.method != r.method || req.path != r.path)
+        {
+            continue;
+        }
+        std::string path = r.path;
+        ApiResponse api = path == "/api/status"     ? handleStatus(store, req.arg("kz"), now)
+                          : path == "/api/sessions" ? handleSessions(store, now, timeSynced)
+                          : path == "/api/entry"    ? handleEntry(store, req.body, now, timeSynced)
+                          : path == "/api/exit"     ? handleExit(store, req.body, now, timeSynced)
+                          : path == "/api/pay"      ? handlePay(store, req.body, now, timeSynced)
+                                                    : handleReset(store);
+        return {jsonReply(api.status, api.body), r.changedStatus != 0 && api.status == r.changedStatus};
+    }
+    return {notFound()};
 }

@@ -4,6 +4,7 @@
 #include <string>
 
 #include "session.h"
+#include "web.h"
 
 // Pico 1 HTTP API (docs/context/architecture.md, "Interface Pico 2 -> Pico 1") as pure functions.
 // The web server glue only routes the request and sends status + body as application/json.
@@ -40,3 +41,14 @@ ApiResponse handleSessions(const SessionStore& store, int64_t now, bool timeSync
 
 // POST /api/reset — test-data reset: no sessions, tx counter 1. 200 {"status":"reset"}.
 ApiResponse handleReset(SessionStore& store);
+
+struct KasseRouteResult
+{
+    WebResponse response;
+    bool changed = false; // the sessions changed: save them
+};
+
+// All Pico 1 routes (board and simulator): the API above (JSON body in req.body) and GET / with a link to the
+// pages on Pico 2 at uiUrl. Anything else -> 404.
+KasseRouteResult routeKasse(const WebRequest& req, SessionStore& store, int64_t now, bool timeSynced,
+                            const std::string& uiUrl);

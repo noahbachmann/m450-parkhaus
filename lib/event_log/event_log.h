@@ -43,9 +43,13 @@ public:
     const std::vector<Event>& all() const;
     void clear();
     void restore(std::vector<Event> loaded);
+    // Changes with every add/clear/restore: compare before and after to know whether to save (the size stays
+    // at MAX_EVENTS once the log is full).
+    uint32_t revision() const;
 
 private:
     std::vector<Event> events;
+    uint32_t changes = 0;
 };
 
 // «Einfahrt», «Ausfahrt», "" for None.

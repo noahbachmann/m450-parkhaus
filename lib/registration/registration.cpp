@@ -26,6 +26,7 @@ RegistrationResult RegistrationList::add(const std::string& name, const std::str
         return RegistrationResult::Full;
     }
     entries.push_back({trimmed, plate});
+    changes++;
     return RegistrationResult::Ok;
 }
 
@@ -38,6 +39,7 @@ bool RegistrationList::remove(const std::string& rawPlate)
         return false;
     }
     entries.erase(it);
+    changes++;
     return true;
 }
 
@@ -55,4 +57,10 @@ const std::vector<Registration>& RegistrationList::all() const
 void RegistrationList::clear()
 {
     entries.clear();
+    changes++;
+}
+
+uint32_t RegistrationList::revision() const
+{
+    return changes;
 }

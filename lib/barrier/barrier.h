@@ -57,6 +57,24 @@ private:
     bool passed = false;
 };
 
+// Core-1 side of a barrier whose commands arrive as running counters (Pico 2: written by core 0). Each new count
+// is applied once, open before pass, then Barrier::update() with the loop input.
+class BarrierDriver
+{
+public:
+    BarrierEvent update(uint32_t nowMs, uint32_t openRequests, uint32_t passRequests, bool loopOccupied);
+    const Barrier& barrier() const;
+    // passRequests value applied last, and whether the barrier accepted that pass (Barrier::vehiclePassed()).
+    uint32_t passesHandled() const;
+    bool lastPassAccepted() const;
+
+private:
+    Barrier current;
+    uint32_t seenOpen = 0;
+    uint32_t seenPass = 0;
+    bool passAccepted = false;
+};
+
 // «offen», «schliesst», «geschlossen»
 const char* barrierStateLabel(BarrierState state);
 

@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include "barrier.h"
+#include "barrier_queue.h"
 
 namespace
 {
@@ -212,6 +213,61 @@ void test_new_opening_waits_for_next_vehicle()
     TEST_ASSERT_EQUAL(BarrierState::Open, b.state());
 }
 
+void test_driver_applies_each_request_once()
+{
+    BarrierDriver d;
+    d.update(0, 0, 0, false);
+    TEST_ASSERT_TRUE(BarrierState::Closed == d.barrier().state());
+
+    d.update(10, 0, 1, false); // pass while closed: refused
+    TEST_ASSERT_EQUAL_UINT32(1, d.passesHandled());
+    TEST_ASSERT_FALSE(d.lastPassAccepted());
+
+    d.update(20, 1, 1, false); // open
+    TEST_ASSERT_TRUE(BarrierState::Open == d.barrier().state());
+    d.update(30, 1, 2, false); // pass while open: accepted
+    TEST_ASSERT_TRUE(d.lastPassAccepted());
+    d.update(40, 1, 2, false); // same counters: nothing new
+    TEST_ASSERT_EQUAL_UINT32(2, d.passesHandled());
+
+    d.update(BARRIER_MIN_OPEN_MS + 20, 1, 2, false);
+    TEST_ASSERT_TRUE(BarrierState::Closing == d.barrier().state());
+}
+
+void test_driver_opens_before_pass_in_one_update()
+{
+    BarrierDriver d;
+    d.update(0, 1, 1, false);
+    TEST_ASSERT_TRUE(d.lastPassAccepted());
+}
+
+void test_event_queue_order_and_overflow()
+{
+    BarrierEventQueue q;
+    for (uint32_t i = 0; i < BarrierEventQueue::SIZE; ++i)
+    {
+        TEST_ASSERT_TRUE(q.push(i % 2 == 0 ? BarrierEvent::SafetyStop : BarrierEvent::LoopFault));
+    }
+    TEST_ASSERT_FALSE(q.push(BarrierEvent::SafetyStop));
+    TEST_ASSERT_EQUAL_UINT32(1, q.droppedCount());
+    BarrierEvent e;
+    TEST_ASSERT_TRUE(q.pop(e));
+    TEST_ASSERT_TRUE(BarrierEvent::SafetyStop == e);
+    TEST_ASSERT_TRUE(q.pop(e));
+    TEST_ASSERT_TRUE(BarrierEvent::LoopFault == e);
+    for (int i = 0; i < 20; ++i) // wrap around the ring several times
+    {
+        TEST_ASSERT_TRUE(q.push(BarrierEvent::LoopFault));
+        TEST_ASSERT_TRUE(q.pop(e));
+    }
+    int left = 0;
+    while (q.pop(e))
+    {
+        left++;
+    }
+    TEST_ASSERT_EQUAL_INT(BarrierEventQueue::SIZE - 2, left);
+}
+
 void test_labels()
 {
     TEST_ASSERT_EQUAL_STRING("offen", barrierStateLabel(BarrierState::Open));
@@ -237,6 +293,9 @@ int main()
     RUN_TEST(test_loop_occupied_then_free_counts_as_passed);
     RUN_TEST(test_vehicle_passed_needs_raised_barrier);
     RUN_TEST(test_new_opening_waits_for_next_vehicle);
+    RUN_TEST(test_driver_applies_each_request_once);
+    RUN_TEST(test_driver_opens_before_pass_in_one_update);
+    RUN_TEST(test_event_queue_order_and_overflow);
     RUN_TEST(test_labels);
     return UNITY_END();
 }

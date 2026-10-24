@@ -38,6 +38,7 @@ void EventLog::add(const Event& event)
         events.erase(events.begin());
     }
     events.push_back(event);
+    changes++;
 }
 
 const std::vector<Event>& EventLog::all() const
@@ -48,6 +49,12 @@ const std::vector<Event>& EventLog::all() const
 void EventLog::clear()
 {
     events.clear();
+    changes++;
+}
+
+uint32_t EventLog::revision() const
+{
+    return changes;
 }
 
 void EventLog::restore(std::vector<Event> loaded)
@@ -57,6 +64,7 @@ void EventLog::restore(std::vector<Event> loaded)
         loaded.erase(loaded.begin(), loaded.end() - MAX_EVENTS);
     }
     events = std::move(loaded);
+    changes++;
 }
 
 const char* gateLaneLabel(GateLane lane)

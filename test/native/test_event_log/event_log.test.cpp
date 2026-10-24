@@ -37,6 +37,22 @@ void test_add_keeps_order_and_drops_oldest()
     TEST_ASSERT_EQUAL_UINT(0, log.all().size());
 }
 
+void test_revision_changes_even_when_full()
+{
+    EventLog log;
+    for (size_t i = 0; i < MAX_EVENTS; ++i)
+    {
+        log.add({static_cast<int64_t>(i), EventType::CallButton});
+    }
+    uint32_t before = log.revision();
+    log.add({1000, EventType::PaymentAlert});
+    TEST_ASSERT_EQUAL_UINT(MAX_EVENTS, log.all().size());
+    TEST_ASSERT_TRUE(log.revision() != before);
+    before = log.revision();
+    log.clear();
+    TEST_ASSERT_TRUE(log.revision() != before);
+}
+
 void test_labels_and_names()
 {
     TEST_ASSERT_EQUAL_STRING("Sicherheitsabschaltung", eventTypeLabel(EventType::SafetyStop));
@@ -96,6 +112,7 @@ int main()
 {
     UNITY_BEGIN();
     RUN_TEST(test_add_keeps_order_and_drops_oldest);
+    RUN_TEST(test_revision_changes_even_when_full);
     RUN_TEST(test_labels_and_names);
     RUN_TEST(test_codec_round_trip);
     RUN_TEST(test_codec_rejects_invalid_files);

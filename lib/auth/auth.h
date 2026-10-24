@@ -24,9 +24,6 @@ std::string makeToken(const uint32_t random[4]);
 std::string loginCookie(const std::string& token);
 std::string logoutCookie();
 
-// After login: where to go. Only local admin pages are allowed («next» comes from the URL), else /betrieb.
-std::string loginTarget(const std::string& next);
-
 class LoginSessions
 {
 public:

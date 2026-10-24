@@ -89,6 +89,20 @@ void test_list_is_capped()
     TEST_ASSERT_EQUAL(MAX_REGISTRATIONS, list.all().size());
 }
 
+void test_revision_changes_only_on_success()
+{
+    RegistrationList list;
+    uint32_t r0 = list.revision();
+    TEST_ASSERT_TRUE(RegistrationResult::Ok == list.add("Test Kunde A", "LU 123456"));
+    uint32_t r1 = list.revision();
+    TEST_ASSERT_TRUE(r1 != r0);
+    TEST_ASSERT_TRUE(RegistrationResult::Duplicate == list.add("Test Kunde B", "lu123456"));
+    TEST_ASSERT_FALSE(list.remove("SZ555"));
+    TEST_ASSERT_EQUAL_UINT32(r1, list.revision());
+    TEST_ASSERT_TRUE(list.remove("LU123456"));
+    TEST_ASSERT_TRUE(list.revision() != r1);
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -99,5 +113,6 @@ int main()
     RUN_TEST(test_duplicate_plate_is_rejected);
     RUN_TEST(test_remove);
     RUN_TEST(test_list_is_capped);
+    RUN_TEST(test_revision_changes_only_on_success);
     return UNITY_END();
 }

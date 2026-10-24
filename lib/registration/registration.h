@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 #include <string>
 #include <vector>
 
@@ -31,7 +32,10 @@ public:
     bool contains(const std::string& rawPlate) const;
     const std::vector<Registration>& all() const;
     void clear();
+    // Changes with every successful add/remove and with clear: compare before and after to know whether to save.
+    uint32_t revision() const;
 
 private:
     std::vector<Registration> entries;
+    uint32_t changes = 0;
 };

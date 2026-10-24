@@ -28,6 +28,15 @@ namespace
         store.openEntry("AG 1", NOW - 5 * MIN);
         return store;
     }
+
+    WebRequest request(const char* method, const char* path, const std::string& body = "")
+    {
+        WebRequest req;
+        req.method = method;
+        req.path = path;
+        req.body = body;
+        return req;
+    }
 }
 
 void setUp()
@@ -226,6 +235,47 @@ void test_reset()
     TEST_ASSERT_EQUAL_UINT32(1, store.nextTxNumber());
 }
 
+void test_route_kasse_api_and_changed_flag()
+{
+    SessionStore store = testData();
+    WebRequest status = request("GET", "/api/status");
+    status.args["kz"] = "LU 123456";
+    KasseRouteResult r = routeKasse(status, store, NOW, true, "http://ui");
+    TEST_ASSERT_EQUAL_INT(200, r.response.status);
+    TEST_ASSERT_EQUAL_STRING("application/json", r.response.contentType.c_str());
+    TEST_ASSERT_NOT_NULL(strstr(r.response.body.c_str(), "\"bezahlt\""));
+    TEST_ASSERT_FALSE(r.changed);
+
+    TEST_ASSERT_TRUE(routeKasse(request("POST", "/api/entry", "{\"kz\":\"SZ555\"}"), store, NOW, true, "").changed);
+    KasseRouteResult again = routeKasse(request("POST", "/api/entry", "{\"kz\":\"LU123456\"}"), store, NOW, true, "");
+    TEST_ASSERT_EQUAL_INT(409, again.response.status);
+    TEST_ASSERT_FALSE(again.changed);
+
+    KasseRouteResult declined =
+        routeKasse(request("POST", "/api/pay", "{\"kz\":\"ZH98765\",\"method\":\"card_declined\"}"), store, NOW, true, "");
+    TEST_ASSERT_EQUAL_INT(402, declined.response.status);
+    TEST_ASSERT_FALSE(declined.changed);
+    TEST_ASSERT_TRUE(
+        routeKasse(request("POST", "/api/pay", "{\"kz\":\"ZH98765\",\"method\":\"cash\",\"amount\":100}"), store, NOW,
+                   true, "")
+            .changed); // partial cash is kept
+    TEST_ASSERT_TRUE(routeKasse(request("POST", "/api/exit", "{\"kz\":\"LU123456\"}"), store, NOW, true, "").changed);
+    TEST_ASSERT_FALSE(routeKasse(request("GET", "/api/sessions"), store, NOW, true, "").changed);
+    TEST_ASSERT_TRUE(routeKasse(request("POST", "/api/reset", "{}"), store, NOW, true, "").changed);
+    TEST_ASSERT_EQUAL_UINT(0, store.all().size());
+}
+
+void test_route_kasse_root_and_unknown()
+{
+    SessionStore store;
+    KasseRouteResult root = routeKasse(request("GET", "/"), store, NOW, true, "http://192.168.1.202");
+    TEST_ASSERT_EQUAL_INT(200, root.response.status);
+    TEST_ASSERT_NOT_NULL(strstr(root.response.body.c_str(), "http://192.168.1.202"));
+    TEST_ASSERT_EQUAL_INT(404, routeKasse(request("GET", "/api/entry"), store, NOW, true, "").response.status);
+    TEST_ASSERT_EQUAL_INT(404, routeKasse(request("POST", "/api/status"), store, NOW, true, "").response.status);
+    TEST_ASSERT_EQUAL_INT(404, routeKasse(request("GET", "/kasse"), store, NOW, true, "").response.status);
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -245,5 +295,7 @@ int main()
     RUN_TEST(test_pay_cash_invalid_amount);
     RUN_TEST(test_sessions_list);
     RUN_TEST(test_reset);
+    RUN_TEST(test_route_kasse_api_and_changed_flag);
+    RUN_TEST(test_route_kasse_root_and_unknown);
     return UNITY_END();
 }

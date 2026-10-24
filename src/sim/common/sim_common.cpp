@@ -9,6 +9,8 @@
 
 #ifdef _WIN32
 #include <direct.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #else
 #include <sys/stat.h>
 #endif
@@ -51,6 +53,7 @@ void makeDataDir()
 
 bool readDataFile(const char* name, std::string& out)
 {
+    std::remove((dataDir() + "/" + name + ".tmp").c_str()); // left over from an interrupted write
     std::ifstream in(dataDir() + "/" + name + ".json", std::ios::binary);
     if (!in)
     {
@@ -65,28 +68,20 @@ bool readDataFile(const char* name, std::string& out)
 void writeDataFile(const char* name, const std::string& data)
 {
     std::string path = dataDir() + "/" + name + ".json";
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
-    out << data;
-    if (!out)
+    std::string tmp = dataDir() + "/" + name + ".tmp";
+    bool ok = false;
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        out << data;
+        ok = static_cast<bool>(out.flush());
+    }
+#ifdef _WIN32
+    ok = ok && MoveFileExA(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+#else
+    ok = ok && std::rename(tmp.c_str(), path.c_str()) == 0;
+#endif
+    if (!ok)
     {
         std::printf("%s: write FAILED\n", path.c_str());
     }
-}
-
-HttpResponse redirect(const std::string& location)
-{
-    HttpResponse r;
-    r.status = 303;
-    r.location = location;
-    return r;
-}
-
-HttpResponse notFound()
-{
-    return {404, "text/plain; charset=utf-8", "Nicht gefunden", "", ""};
-}
-
-HttpResponse htmlPage(const std::string& html)
-{
-    return {200, "text/html; charset=utf-8", html, "", ""};
 }

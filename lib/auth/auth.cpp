@@ -7,11 +7,6 @@
 const char* const OPERATOR_USER = "betrieb";
 const char* const SESSION_COOKIE = "parkhaus_session";
 
-namespace
-{
-    const char* const ADMIN_PAGES[] = {"/kasse", "/registrierung", "/betrieb"};
-}
-
 bool credentialsOk(const std::string& user, const std::string& password, const std::string& expectedPassword)
 {
     return user == OPERATOR_USER && !expectedPassword.empty() && password == expectedPassword;
@@ -60,18 +55,6 @@ std::string loginCookie(const std::string& token)
 std::string logoutCookie()
 {
     return std::string(SESSION_COOKIE) + "=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict";
-}
-
-std::string loginTarget(const std::string& next)
-{
-    for (const char* page : ADMIN_PAGES)
-    {
-        if (next == page)
-        {
-            return next;
-        }
-    }
-    return "/betrieb";
 }
 
 void LoginSessions::add(const std::string& token)

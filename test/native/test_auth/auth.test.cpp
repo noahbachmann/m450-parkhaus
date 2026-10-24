@@ -37,16 +37,6 @@ void test_token_and_cookies()
                              logoutCookie().c_str());
 }
 
-void test_login_target_only_local_admin_pages()
-{
-    TEST_ASSERT_EQUAL_STRING("/kasse", loginTarget("/kasse").c_str());
-    TEST_ASSERT_EQUAL_STRING("/registrierung", loginTarget("/registrierung").c_str());
-    TEST_ASSERT_EQUAL_STRING("/betrieb", loginTarget("").c_str());
-    TEST_ASSERT_EQUAL_STRING("/betrieb", loginTarget("http://evil.example").c_str());
-    TEST_ASSERT_EQUAL_STRING("/betrieb", loginTarget("//evil.example").c_str());
-    TEST_ASSERT_EQUAL_STRING("/betrieb", loginTarget("/kasse/pay").c_str());
-}
-
 void test_login_sessions()
 {
     LoginSessions logins;
@@ -81,7 +71,6 @@ int main()
     RUN_TEST(test_credentials);
     RUN_TEST(test_cookie_value);
     RUN_TEST(test_token_and_cookies);
-    RUN_TEST(test_login_target_only_local_admin_pages);
     RUN_TEST(test_login_sessions);
     RUN_TEST(test_oldest_login_dropped);
     return UNITY_END();

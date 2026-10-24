@@ -5,12 +5,11 @@
 #include "format.h"
 #include "http_server.h"
 #include "kasse_api.h"
-#include "kasse_pages.h"
 #include "sim_common.h"
 #include "testdata.h"
 
-// Simulated Pico 1 "Kasse": JSON API for Pico 2, sessions in SIM_DATA/sessions.json. The pages (Kasse, Tarif)
-// are served by Pico 2, GET / links there (SCHRANKEN_PUBLIC_URL). Same routes as src/kasse/main.cpp.
+// Simulated Pico 1 "Kasse": the routes of lib/kasse_api (routeKasse), sessions in SIM_DATA/sessions.json.
+// GET / links to the pages on Pico 2 (SCHRANKEN_PUBLIC_URL).
 
 namespace
 {
@@ -22,55 +21,15 @@ void saveSessions()
     writeDataFile("sessions", sessionsToJson(sessions));
 }
 
-HttpResponse api(const ApiResponse& r)
+WebResponse route(const WebRequest& req)
 {
-    return {r.status, "application/json", r.body, "", ""};
-}
-
-// API call that changes the sessions on success.
-HttpResponse apiChange(const ApiResponse& r, int okStatus)
-{
-    if (r.status == okStatus)
+    // The PC clock is always set, so the simulated Kasse is always synced.
+    KasseRouteResult r = routeKasse(req, sessions, nowUtc(), true, uiUrl);
+    if (r.changed)
     {
         saveSessions();
     }
-    return api(r);
-}
-
-HttpResponse route(const HttpRequest& req)
-{
-    bool get = req.method == "GET";
-    bool post = req.method == "POST";
-    if (get && req.path == "/api/status")
-    {
-        return api(handleStatus(sessions, req.arg("kz"), nowUtc()));
-    }
-    if (get && req.path == "/api/sessions")
-    {
-        return api(handleSessions(sessions, nowUtc(), true));
-    }
-    if (post && req.path == "/api/entry")
-    {
-        return apiChange(handleEntry(sessions, req.body, nowUtc(), true), 201);
-    }
-    if (post && req.path == "/api/exit")
-    {
-        return apiChange(handleExit(sessions, req.body, nowUtc(), true), 200);
-    }
-    if (post && req.path == "/api/pay")
-    {
-        return apiChange(handlePay(sessions, req.body, nowUtc(), true), 200);
-    }
-    if (post && req.path == "/api/reset")
-    {
-        std::printf("sessions: test-data reset\n");
-        return apiChange(handleReset(sessions), 200);
-    }
-    if (get && req.path == "/")
-    {
-        return htmlPage(renderKasseServerPage(uiUrl));
-    }
-    return notFound();
+    return r.response;
 }
 
 void loadSessions()

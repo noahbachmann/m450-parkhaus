@@ -18,13 +18,9 @@ std::string listenHost();
 int64_t nowUtc();
 uint32_t nowMs();
 
-// Files in SIM_DATA (default "sim-data"), same JSON as LittleFS on the Picos.
+// Files in SIM_DATA (default "sim-data"), same JSON as LittleFS on the Picos. Written to <name>.tmp and renamed
+// over <name>.json, like the board.
 void makeDataDir();
 bool readDataFile(const char* name, std::string& out);
 void writeDataFile(const char* name, const std::string& data);
 std::string dataDir();
-
-HttpResponse redirect(const std::string& location);
-HttpResponse notFound();
-// 200 text/html.
-HttpResponse htmlPage(const std::string& html);

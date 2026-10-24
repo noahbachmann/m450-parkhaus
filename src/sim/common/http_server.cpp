@@ -35,27 +35,6 @@ namespace
         }
     }
 
-    void parseArgs(const std::string& text, std::map<std::string, std::string>& args)
-    {
-        size_t pos = 0;
-        while (!text.empty())
-        {
-            size_t amp = text.find('&', pos);
-            std::string pair = text.substr(pos, amp == std::string::npos ? std::string::npos : amp - pos);
-            if (!pair.empty())
-            {
-                size_t eq = pair.find('=');
-                std::string key = urlDecode(pair.substr(0, eq));
-                args[key] = eq == std::string::npos ? "" : urlDecode(pair.substr(eq + 1));
-            }
-            if (amp == std::string::npos)
-            {
-                break;
-            }
-            pos = amp + 1;
-        }
-    }
-
     std::string lower(std::string s)
     {
         for (char& c : s)
@@ -69,7 +48,7 @@ namespace
     }
 
     // Reads one request; false if the connection is broken or the request is malformed.
-    bool readRequest(socket_t client, HttpRequest& req)
+    bool readRequest(socket_t client, WebRequest& req)
     {
         std::string data;
         char buf[4096];
@@ -99,7 +78,7 @@ namespace
         req.path = target.substr(0, q);
         if (q != std::string::npos)
         {
-            parseArgs(target.substr(q + 1), req.args);
+            parseQuery(target.substr(q + 1), req.args);
         }
 
         size_t contentLength = 0;
@@ -149,7 +128,7 @@ namespace
         req.body.resize(contentLength);
         if (contentType.find("application/x-www-form-urlencoded") != std::string::npos)
         {
-            parseArgs(req.body, req.args);
+            parseQuery(req.body, req.args);
         }
         return true;
     }
@@ -171,8 +150,8 @@ namespace
     void handleClient(socket_t client, const HttpHandler& handler)
     {
         setSocketTimeouts(client, 2000);
-        HttpRequest req;
-        HttpResponse res;
+        WebRequest req;
+        WebResponse res;
         if (!readRequest(client, req))
         {
             res = {400, "text/plain; charset=utf-8", "Bad Request", "", ""};
@@ -223,51 +202,6 @@ namespace
         }
         return s;
     }
-}
-
-bool HttpRequest::hasArg(const std::string& name) const
-{
-    return args.count(name) != 0;
-}
-
-std::string HttpRequest::arg(const std::string& name) const
-{
-    auto it = args.find(name);
-    return it == args.end() ? "" : it->second;
-}
-
-std::string urlDecode(const std::string& text)
-{
-    std::string out;
-    out.reserve(text.size());
-    for (size_t i = 0; i < text.size(); ++i)
-    {
-        char c = text[i];
-        if (c == '+')
-        {
-            out += ' ';
-        }
-        else if (c == '%' && i + 2 < text.size())
-        {
-            char hex[3] = {text[i + 1], text[i + 2], 0};
-            char* end = nullptr;
-            long v = std::strtol(hex, &end, 16);
-            if (end == hex + 2)
-            {
-                out += static_cast<char>(v);
-                i += 2;
-            }
-            else
-            {
-                out += c;
-            }
-        }
-        else
-        {
-            out += c;
-        }
-    }
-    return out;
 }
 
 bool socketsInit()

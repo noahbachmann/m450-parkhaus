@@ -19,7 +19,7 @@ FormResult handleDeleteForm(RegistrationList& list, const std::string& kz);
 // Operator only.
 std::string renderRegistrationPage(const RegistrationList& list, const Notice& notice);
 
-// next: admin page to return to after login (see loginTarget), passed through as a hidden field.
+// next: admin page to return to after login (see SchrankenApp::loginTarget), passed through as a hidden field.
 std::string renderLoginPage(const Notice& notice, const std::string& next);
 
 struct LaneView

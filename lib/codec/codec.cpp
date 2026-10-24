@@ -123,7 +123,11 @@ bool registrationsFromJson(const std::string& json, RegistrationList& list)
             return false;
         }
     }
-    list = loaded;
+    list.clear(); // add() again instead of assigning, so list.revision() moves on
+    for (const Registration& r : loaded.all())
+    {
+        list.add(r.name, r.plate);
+    }
     return true;
 }
 
