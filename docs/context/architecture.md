@@ -40,8 +40,8 @@ Pico 1 has no external hardware.
 
 | Pico 1 "Kasse" (env `kasse`) | Pico 2 "Schranken" (env `schranken`) |
 |---|---|
-| Kasse web UI: search plate, show entry time/duration/fee, record payment | Registration web UI: add/list/delete plates (name + plate), persistent |
-| Automat web UI: pay by plate, card/TWINT/cash + change | Camera simulation UI: entry and exit plate input, optional entry time, (later) call button, abort |
+| Payments by plate: card/TWINT/cash + change (logic; the Kasse page is served by Pico 2, step 8) | All web pages (step 8): camera simulation, Tarif, login; operator: Kasse, registration, Betrieb |
+| Session list for Pico 2 (`GET /api/sessions`) | Registration list (name + plate), persistent |
 | Tariff calculation ([tariff.md](tariff.md)) | Barrier control: 2 servos, open/close |
 | Parking sessions, **persisted in flash** (survive reboot) | Safety loops + safety logic (step 7a) |
 | Payment-status endpoint for Pico 2 | Event log (step 7b): remote openings, safety stops, faults |
@@ -55,7 +55,8 @@ The registration list lives on Pico 2 (Testkonzept test object 01). Sessions liv
 bitte Ruftaste drücken») → ask Pico 1 to open a session with timestamp (optional backdated entry time)
 → Pico 1 rejects if a session is already open («Parkvorgang bereits offen – bitte Ruftaste drücken»)
 → success → servo opens (≤ 2 s total) → closes once the minimum open time (`BARRIER_MIN_OPEN_MS` = 5 s)
-has passed **and** the loop is free (without loop hardware: closes after 5 s). Same for the exit barrier.
+has passed, the vehicle has passed («Durchfahren» on the camera page, or the loop going occupied → free)
+**and** the loop is free (step 8). Same for the exit barrier.
 Pico 1 unreachable → stay closed, show fault, **no buffered session**.
 
 **Payment** (Pico 1): look up open session by plate → compute fee → simulated method → mark paid with
@@ -64,7 +65,7 @@ returns change. Already paid → «bereits bezahlt». No open session → «Kein
 
 **Exit** (Pico 2): normalize → query Pico 1 → `bezahlt`, or fee CHF 0.00 within free time → open
 servo, Pico 1 closes the session with the exit time (clock stops). `unbezahlt` → closed,
-«Gebühr CHF x.xx nicht bezahlt – bitte am Automaten bezahlen». `unbekannt` → closed. Timeout/error →
+«Gebühr CHF x.xx nicht bezahlt – bitte hier oder an der Kasse bezahlen». `unbekannt` → closed. Timeout/error →
 closed, «Kasse nicht erreichbar – bitte Ruftaste drücken». **Fail-safe: anything unexpected = closed.**
 
 ## Data
@@ -119,15 +120,25 @@ Pico 2 client timeout: **1000 ms** (keeps the entry ≤ 2 s). Timeout or connect
 - body `{"kz":"LU123456"}`; operator remote opening: `{"kz":"LU123456","override":true}` (non-bool → 400)
 - 200 `{"kz":"LU123456","status":"closed"|"closed_free","exit":1760533600,"fee":400}`; with `override` an
   unpaid session (or clock before entry) closes as `"closed_unpaid"`, `fee` = the unpaid amount
-- 402 `{"error":"unpaid","fee":400}` → «Gebühr CHF 4.00 nicht bezahlt – bitte am Automaten bezahlen»
+- 402 `{"error":"unpaid","fee":400}` → «Gebühr CHF 4.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen»
 - 404 `no_session` · 400 `invalid_plate` · 503 `time_not_synced` (also when the clock is before the
   session's entry time)
 
 Exit attempt without success (or abort) changes nothing: the session stays open and the clock keeps
 running. The registration check happens on Pico 2 before `/api/entry`. Pico 1 doesn't know registrations.
 
-The Kasse/Automat pages are served by Pico 1 itself and call its internal logic directly (no API
-needed). Later phases may add JSON endpoints for them if the pages use fetch().
+**`GET /api/sessions`** (step 8) — all sessions for the Kasse page and the camera page on Pico 2
+- 200: the `/sessions.json` format plus `"now"` (Pico 1 time, used for durations and fees) and `"synced"`
+
+**`POST /api/reset`** (step 8) — test-data reset (no sessions, tx counter 1), 200 `{"status":"reset"}`
+
+**`POST /api/pay` with cash** (step 8, Kasse page): `{"kz":"…","method":"cash","amount":<Rappen inserted>}`
+(1 … 100000, else 400 `invalid_amount`); paid → 200 as above with `"method":"cash","change":<Rappen>`;
+not covered yet → 200 `{"kz","status":"unbezahlt","amount":<fee>,"remaining":<Rappen>}`.
+
+**Superseded by step 8:** Pico 1 serves no pages any more except `GET /` (link to Pico 2). The step-4
+description below is kept for the Kasse page content, which Pico 2 now renders from `/api/sessions`
+(routes `/kasse`, `/kasse/pay` on Pico 2; no `/automat`; reset on `/betrieb`).
 
 **Pico 1 web pages (step 4, decided 2026-10-22):** server-rendered HTML forms, no JavaScript.
 - `GET /` → 303 to `/kasse`.
@@ -159,7 +170,7 @@ needed). Later phases may add JSON endpoints for them if the pages use fetch().
 
 **Barrier safety (step 7a, decided 2026-10-23):**
 - Closed → open immediately on a positive decision. Open → closing once `BARRIER_MIN_OPEN_MS` (5 s) has
-  passed and the loop is free. Closing = linear 2 s sweep 90° → 0° (`BARRIER_CLOSE_MS`).
+  passed, the vehicle has passed (step 8) and the loop is free. Closing = linear 2 s sweep 90° → 0° (`BARRIER_CLOSE_MS`).
 - Loop occupied while closing → stop and back to fully open in the same update (TF-13 < 0.5 s), event
   «Sicherheitsabschaltung»; the 5 s minimum open time restarts.
 - Loop occupied for 5 min without a break → fault «Sicherungsschleife <Einfahrt|Ausfahrt> länger als 5 min
@@ -174,7 +185,7 @@ needed). Later phases may add JSON endpoints for them if the pages use fetch().
   Sicherungsschleife», «Fernöffnung», «Kasse nicht erreichbar», «Ruftaste» (7c). Each with time (Pico 2
   NTP), lane, plate, user, reason, note. Written to `/events.json` after every new event. The test-data
   reset on Pico 2 also clears the log.
-- `GET /betrieb` (HTTP Basic auth, user «betrieb», password `OPERATOR_PASSWORD` in `secrets.h`; missing →
+- `GET /betrieb` (step 8: login form instead of HTTP Basic auth; user «betrieb», password `OPERATOR_PASSWORD` in `secrets.h`; missing →
   build warning and example password `parkhaus`): per lane barrier state, last plate typed there, its
   status from `GET /api/status` («kein Parkvorgang», «bezahlt», «unbezahlt (CHF x.xx)», «Kasse nicht
   erreichbar»), loop fault; «Schranke öffnen» (`<details>`) → plate + reason → «Bestätigen»; event log
@@ -202,6 +213,35 @@ needed). Later phases may add JSON endpoints for them if the pages use fetch().
   nothing to pay) → exit retried automatically, opens on success («Bezahlt – CHF x.xx, TWINT – …»).
   A new plate or an opening resets the decline counter.
 
+**UI rework after TF-34 round 1 (step 8, decided by the user 2026-10-23):**
+- **One UI on Pico 2**, one nav (`appendPageStart(…, Role, …)` in `lib/html`): «Kamerasimulation»,
+  «Tarif» for everyone; «Kasse», «Registrierung», «Betrieb» only for the logged-in operator. Right side:
+  «🔒 Anmelden» or «👤 betrieb (Admin)» + «Abmelden». `/` and the default page = `/kamera`. The simulator's
+  link bar and `/sim` are gone.
+- **Login** (`lib/auth`): `GET/POST /login` (fields `user`, `password`, `next`), `POST /logout`. Success →
+  random 128-bit token (sim: `std::random_device`, board: `rp2040.hwrand32()`) in RAM (max. 4, oldest
+  dropped) and cookie `parkhaus_session` (`Path=/; HttpOnly; SameSite=Strict`). Admin routes without a
+  valid cookie → 303 `/login?next=<page>`; `next` only to `/kasse`, `/registrierung`, `/betrieb`. Replaces
+  HTTP Basic auth. Wrong password → «Benutzer oder Passwort falsch».
+- **Kasse page on Pico 2** (`lib/kasse_client`): `GET /api/sessions` → `renderKassePage`; `POST /kasse/pay`
+  → `/api/pay` (CHF parsed on Pico 2, sent in Rappen), notice after PRG as before. Pico 1 down →
+  «Kasse nicht erreichbar – …». **No Automat**: the Kasse takes its role (TF-21/22/24/32).
+- **Camera page:** below the lanes, «Parkvorgänge (Kasse)» from `/api/sessions` (read-only testing aid);
+  plate fields get a `<datalist>` of registered plates and plates in the car park.
+- **Session lists** (Kasse, camera page): active (open/paid) first, then closed, newest first in each group.
+- **«Durchfahren»** (`POST /kamera/durchfahren`, `lane`), shown while the barrier is open → «<PLATE>
+  durchgefahren – Schranke schliesst»; when the page sees the barrier closed → «… – Schranke geschlossen».
+  Barrier closed → «Keine offene Schranke – Fahrzeug kann nicht durchfahren». Firmware: core 0 → core 1
+  pass-request counter like the open requests. Without a click (and without a loop) the barrier stays open.
+- **«Neuer Kunde registrieren»** (remote opening, entry only, extra field `name`): registers name + plate
+  (errors from the registration, barrier stays closed), then `/api/entry` and opens like any remote
+  opening; event note «Neukunde registriert – Parkvorgang eröffnet». Pico 1 down: the registration stays,
+  barrier closed, logged.
+- **Test-data reset** only on `/betrieb` (`POST /reset`): registrations, event log, and Pico 1 via
+  `/api/reset`.
+- **UI text change:** «Gebühr CHF x.xx nicht bezahlt – bitte hier oder an der Kasse bezahlen» (was «… am
+  Automaten …» in test-concept.md TF-24).
+
 ## Domain rules (decided 2026-10-19, step 2)
 
 - **Fee 0 (free time):** payment is refused («nothing to pay»), the session stays `open`; exit closes
@@ -222,8 +262,9 @@ needed). Later phases may add JSON endpoints for them if the pages use fetch().
   `26 h 3 min`. Europe/Zurich offset is computed by a pure function (EU rule), not via `TZ`.
 
 Libraries: `lib/registration`, `lib/session` (store, state machine, payment), `lib/format`,
-`lib/codec` (JSON files), `lib/kasse_api` (API handlers → status + body), `lib/kasse_view` (Kasse/Automat
-page texts, CHF input parsing, pay-form handling, page HTML), `lib/html` (shared page building blocks),
+`lib/codec` (JSON files), `lib/kasse_api` (API handlers → status + body), `lib/kasse_view` (Kasse and
+Tarif page texts and HTML, CHF input parsing), `lib/kasse_client` (Pico 2 side: sessions, payment, reset via
+the API), `lib/auth` (login tokens and cookies), `lib/html` (shared page building blocks),
 `lib/barrier` (barrier state machine), `lib/gate` (entry/exit decisions on Pico 2), `lib/schranken_view`
 (registration and camera pages), `lib/event_log` (event log), `lib/operator_view` (operator view, remote
 opening, logging helpers), `lib/terminal` (call button, exit abort, payment at the exit terminal).
@@ -240,13 +281,15 @@ File formats (LittleFS):
 ## PC simulator (decided 2026-10-23)
 
 Two native programs with the same `lib/` code as the firmware, talking HTTP like the boards:
-- `src/sim/kasse/` (env `sim_kasse`, `localhost:8081`): Pico 1 — API, Kasse/Automat pages, sessions.
-- `src/sim/schranken/` (env `sim_schranken`, `localhost:8082`): Pico 2 — registration, camera page,
-  barriers, `/sim` page for the safety loops. Calls the Kasse at `KASSE_URL` (default
-  `http://localhost:8081`) with a 1000 ms total timeout.
-- `src/sim/common/`: own minimal HTTP server + client (Winsock/POSIX, no dependency), data files, banner.
+- `src/sim/kasse/` (env `sim_kasse`, `localhost:8081`): Pico 1 — API, sessions, `/` link page.
+- `src/sim/schranken/` (env `sim_schranken`, `localhost:8082`): Pico 2 — all pages, barriers (no loops:
+  «Durchfahren» only). Calls the Kasse at `KASSE_URL` (default `http://localhost:8081`) with a 1000 ms total
+  timeout.
+- `src/sim/common/`: own minimal HTTP server (with Cookie / Set-Cookie) + client (Winsock/POSIX, no
+  dependency), data files.
 - Config by environment: `SIM_HOST` (listen address, default `127.0.0.1`), `SIM_DATA` (default
-  `sim-data`), `KASSE_URL`.
+  `sim-data`), `KASSE_URL`, `SCHRANKEN_PUBLIC_URL` (link on Pico 1's `/`, default `http://localhost:8082`),
+  `OPERATOR_PASSWORD`.
 - Docker: `Dockerfile` (build stage `gcc:13-bookworm`, ArduinoJson single header 7.4.3, static libstdc++;
   runtime `debian:bookworm-slim`), `docker-compose.yml` with services `kasse` and `schranken`, ports bound
   to 127.0.0.1, data in `./sim-data/<service>`. Pico 1 off = `docker compose stop kasse`.

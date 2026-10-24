@@ -10,8 +10,10 @@ Die Phase-1-Testfälle aus dem Testkonzept laufen als Systemtest auf dem PC:
 `test/native/test_system/system.test.cpp`. Dort arbeitet dieselbe Logik wie auf den Picos zusammen:
 
 - **Pico 2:** Registrierungen, Ein-/Ausfahrtsentscheid (`lib/gate`), Schrankensteuerung (`lib/barrier`)
-- **Pico 1:** Schnittstelle `/api/entry`, `/api/exit`, `/api/status` (`lib/kasse_api`), Bezahlen an Kasse
-  und Automat (`lib/kasse_view`), Seiten Kasse/Automat
+- **Pico 1:** Schnittstelle `/api/entry`, `/api/exit`, `/api/status`, `/api/pay`, `/api/sessions`
+  (`lib/kasse_api`)
+- **Kasse-Seite auf Pico 2:** Parkvorgänge und Bezahlen über die Schnittstelle (`lib/kasse_client`,
+  `lib/kasse_view`); seit Schritt 8 gibt es keinen Automaten mehr, die Kasse übernimmt dessen Testfälle
 - Statt HTTP ruft Pico 2 die Schnittstelle von Pico 1 direkt im selben Programm auf. «Pico 1 aus» heisst:
   keine Antwort, genau wie bei einem Timeout.
 - Die Uhr ist simuliert (Sekunden für die Parkdauer, Millisekunden für die Schranke).
@@ -37,12 +39,12 @@ Ergebnis = Ausgabe von `pio test -e native`, Suite `test_system` (dazu die Unit-
 | TF-10 | 2 | `test_tf10_second_entry_rejected` | «Parkvorgang bereits offen – bitte Ruftaste drücken», eine Sitzung, Zeit unverändert (zweite Einfahrt nach ≥ 30 s; früher gilt als Wiederholung derselben Einfahrt) | bestanden |
 | TF-11 | 2 | `test_tf11_kasse_off_at_entry` | Ohne Pico 1: zu, «Kasse nicht erreichbar …», keine Sitzung; danach Zeit des 2. Versuchs | bestanden |
 | TF-18 | 1 | `test_tf18_reference_fees_via_backdated_entry` | R-01..R-11 über rückdatierte Einfahrt an der Kasse exakt; R-12 abgelehnt | bestanden |
-| TF-19 | 2 | `test_tf19_duration_and_fee_at_kasse_and_automat`, `test_tariff_page_us14_tf19`, `test_tariff_linked_from_kasse_and_automat_tf19` | «1 h 20 min», «CHF 4.00», Hinweis 2 angefangene Stunden + 15 Freiminuten an Kasse und Automat; Tarifseite von beiden aus erreichbar, Werte gleich wie tariff.md (R-02..R-11) | bestanden |
+| TF-19 | 2 | `test_tf19_duration_and_fee_at_kasse`, `test_tariff_page_us14_tf19`, `test_tariff_linked_from_kasse_tf19` | «1 h 20 min», «CHF 4.00», Hinweis 2 angefangene Stunden + 15 Freiminuten an der Kasse; Tarifseite von der Kasse aus erreichbar, Werte gleich wie tariff.md (R-02..R-11) | bestanden |
 | TF-20 | 1 | `test_tf20_card_payment_once` | «Bezahlt – CHF 4.00, Karte» + Transaktionsnummer; 2. Versuch «bereits bezahlt» | bestanden |
-| TF-21 | 1 | `test_tf21_automat_cash_and_twint` | Rückgeld CHF 4.00; TWINT; «Restbetrag CHF 1.00», dann bezahlt, Rückgeld CHF 0.00 | bestanden |
-| TF-22 | 2 | `test_tf22_automat_without_session` | «Kein offener Parkvorgang für SZ555», kein Zahlformular, keine Buchung | bestanden |
+| TF-21 | 1 | `test_tf21_kasse_cash_and_twint` | Rückgeld CHF 4.00; TWINT; «Restbetrag CHF 1.00», dann bezahlt, Rückgeld CHF 0.00 | bestanden |
+| TF-22 | 2 | `test_tf22_kasse_without_session` | «Kein offener Parkvorgang für SZ555», kein Zahlformular, keine Buchung | bestanden |
 | TF-23 | 1 | `test_tf23_paid_exit_closes_session` | Öffnet, «abgeschlossen», Ausfahrtszeit gesetzt, Dauer bleibt stehen | bestanden |
-| TF-24 | 1 | `test_tf24_unpaid_exit_then_pay_then_exit` | «Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen», nach Zahlung offen | bestanden |
+| TF-24 | 1 | `test_tf24_unpaid_exit_then_pay_then_exit` | «Gebühr CHF 6.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen», nach Zahlung offen | bestanden |
 | TF-25 | 2 | `test_tf25_free_time_exit` | Öffnet, CHF 0.00, «abgeschlossen (Freizeit)» | bestanden |
 | TF-29 | 1 | `test_tf29_status_interface_twenty_requests` | 20 Abfragen: bezahlt / unbezahlt / unbekannt / HTTP 400 | bestanden (Antwortzeit < 1 s nicht messbar) |
 | TF-30 | 1 | `test_tf30_kasse_off_at_exit_paid_status_persisted` | Ohne Pico 1 beide zu; nach Neustart KZ-01 noch bezahlt und öffnet | bestanden |
@@ -84,6 +86,10 @@ Hauptschleife auf dem Pico), der Leitstelle (`test/native/test_operator_view/`) 
 
 | Klasse | Beschreibung | Status |
 |---|---|---|
+| 2 | TF-34 Runde 1: Oberfläche unübersichtlich – zwei Navigationen (Pico 1 und Pico 2) plus Simulator-Leiste, Admin-Seiten für alle sichtbar, Anmeldung per Browser-Fenster ohne Hinweis, ob man angemeldet ist. | behoben (23.10.2026): eine Oberfläche auf Pico 2 mit einer Navigation, Anmeldeformular, Anzeige 🔒 «Anmelden» bzw. 👤 «betrieb (Admin)»; Kasse, Registrierung und Betrieb nur nach Anmeldung. Tests `test_auth`, `test_nav_*`. |
+| 2 | TF-34 Runde 1: Keine Rückmeldung, dass ein Fahrzeug durch die Schranke gefahren ist. | behoben (23.10.2026): Knopf «Durchfahren», Meldung «… durchgefahren – Schranke schliesst» bzw. «… – Schranke geschlossen»; die Schranke schliesst erst nach der Durchfahrt. Die Seite «Steuerung (Schleifen)» entfällt. Tests `test_stays_open_until_vehicle_passed`, `test_barrier_waits_for_drive_through`. |
+| 3 | TF-34 Runde 1: Leitstelle kann bei der Fernöffnung keinen neuen Kunden registrieren. | behoben (23.10.2026): Grund «Neuer Kunde registrieren» mit Namensfeld an der Einfahrt registriert das Kennzeichen und öffnet. Tests `test_new_customer_*`. |
+| 3 | TF-34 Runde 1: Kamerasimulation und Kasse getrennt, beim Testen fehlen die aktuellen Kennzeichen; Automat überflüssig. | behoben (23.10.2026): Liste der Parkvorgänge (offene zuerst) und Kennzeichen-Vorschläge auf der Kamerasimulation; Automat entfernt, die Kasse übernimmt TF-21/22/24/32 (Meldung «… bitte hier oder an der Kasse bezahlen»). |
 | 2 | Antwortet Pico 1 bei einer Einfahrt erst nach dem Timeout (1000 ms), wird der Parkvorgang trotzdem eröffnet, die Schranke bleibt aber zu; der zweite Versuch meldete «Parkvorgang bereits offen». Gefunden im PC-Simulator mit angehaltenem Kasse-Container. | behoben (23.10.2026): eine Wiederholung innert 30 s für einen offenen, unbezahlten Parkvorgang gilt als dieselbe Einfahrt und öffnet. Tests `test_late_kasse_answer_then_retry_opens`, `test_repeated_entry_*`; im Simulator nachgestellt. |
 
 ## Nicht geprüft (nur mit Hardware möglich)

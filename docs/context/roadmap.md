@@ -174,6 +174,20 @@ Hardware test suites under `test/board/` and the `v1.0` tag are dropped (no hard
 - Fix after 7d (user decision 2026-10-23): late entry reply → `EntryResult::Repeated` within 30 s for an open,
   unpaid session (see architecture, domain rules). `pio test -e native` → 17 suites, 177 cases.
 
+### 8 — UI rework after TF-34 round 1 (user findings 2026-10-23)
+
+- One UI on Pico 2 with one role-based nav and a login form (`lib/auth`, cookie), admin badge; Kasse,
+  Registrierung, Betrieb only after login. Pico 1 API-only (+ `/api/sessions`, `/api/reset`, cash via
+  `/api/pay`); Kasse page rendered by Pico 2 through `lib/kasse_client`. Automat, `/sim` and the simulator
+  link bar removed.
+- Camera page: «Durchfahren» (barrier closes only after the pass), session list (active first) and plate
+  suggestions. Betrieb: «Neuer Kunde registrieren» at the entry, test-data reset for both Picos.
+- Tests: new `test_auth`, `test_kasse_client`; barrier, terminal, operator, views, Kasse API, system
+  updated (TF-21/22/24/32 via the Kasse).
+- **User verifies:** `pio test -e native` → 19 suites, 214 cases passed; `pio run` → both `SUCCESS`
+  (firmware APIs `WebServer::collectHeaders`/`header`, `rp2040.hwrand32()` not compiled by the agent);
+  `docker compose up --build` → `http://localhost:8082`.
+
 ## Open after step 7
 
 - TF-33 / TF-34 are manual tests; the user runs them later with the PC simulator.

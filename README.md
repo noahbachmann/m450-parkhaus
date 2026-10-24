@@ -12,10 +12,12 @@ Projekt im Modul 450 (BBZW Sursee, Klasse sina24cL).
 Prototyp eines Parkhauses mit Ein- und Ausfahrtsschranke auf zwei Raspberry Pi Pico W,
 programmiert in C++ mit dem Arduino-Framework und gebaut mit PlatformIO.
 
-- **Pico 1 (Kasse):** Weboberfläche für Kasse und Automat, Berechnung der Parkgebühr,
-  Speicherung der Parkvorgänge, Schnittstelle für den Zahlungsstatus.
-- **Pico 2 (Schranken):** steuert beide Schranken (Servos), Registrierung der Kennzeichen und
-  eine Weboberfläche, die die Kennzeichenkamera simuliert (Kennzeichen wird manuell eingegeben).
+- **Pico 1 (Kasse):** Berechnung der Parkgebühr, Speicherung der Parkvorgänge, Zahlungen;
+  JSON-Schnittstelle für Pico 2 (keine eigenen Bedienseiten).
+- **Pico 2 (Schranken):** steuert beide Schranken (Servos), Registrierung der Kennzeichen und die
+  ganze Weboberfläche: Kamerasimulation (Kennzeichen wird manuell eingegeben), Tarif und – nach der
+  Anmeldung als Betriebspersonal – Kasse, Registrierung und Leitstelle. Die Kassen-Daten holt Pico 2
+  bei Pico 1.
 
 Bei der Ausfahrt fragt Pico 2 bei Pico 1 nach, ob die Gebühr bezahlt wurde. Nur dann öffnet die Schranke.
 
@@ -33,25 +35,36 @@ sind nicht aufgeführt.
 | US-06 | Einfahrtsschranke öffnet bei registriertem Kennzeichen (AK1, AK2, Normalisierung statt AK3), Terminal zeigt das erkannte Kennzeichen (AK4) | umgesetzt |
 | US-07 | Parkuhr startet automatisch bei der Einfahrt, ein offener Parkvorgang pro Kennzeichen (AK1, 2, 4, 5) | umgesetzt |
 | US-13 | Erkennung bei der Ausfahrt, Parkvorgang wird beendet (AK1, AK2); ohne Parkvorgang bleibt die Schranke zu (AK3); «Fahrzeug wendet» lässt den Parkvorgang offen (AK4) | umgesetzt |
-| US-14 | Parkdauer und Gebühr an Kasse und Automat, angefangene Stunden und Freiminuten (AK1, AK2); gültiger Tarif an Kasse und Automat einsehbar (AK3) | umgesetzt |
+| US-14 | Parkdauer und Gebühr an der Kasse, angefangene Stunden und Freiminuten (AK1, AK2); gültiger Tarif einsehbar (AK3) | umgesetzt |
 | US-16 | Ausfahrt nur bei bezahlter Gebühr oder CHF 0.00 (AK1); abgelehnte Zahlung mit Grund (AK2), Bezahlen direkt am Ausfahrtsterminal (AK3), nach 5 Ablehnungen wird die Leitstelle benachrichtigt (AK4); jede Öffnung ohne Zahlung wird mit Grund und Benutzer protokolliert (AK5) | umgesetzt |
-| US-17 | Bezahlen am Automaten über das Kennzeichen: Karte, TWINT, Bargeld mit Rückgeld (AK1, AK2) | umgesetzt |
-| US-08 | Hilfe bei nicht erkanntem Kennzeichen: Leitstelle sieht Spur, Kennzeichen, Zahlungsstatus; Fernöffnung nur mit Grund, eröffnet bei der Einfahrt einen Parkvorgang, wird protokolliert (AK2–5) | umgesetzt (Phase 2) |
-| US-09 | Sichere Schrankenbewegung: schliesst nur bei freier Schleife, Stopp und Öffnen beim Schliessen, Störmeldung nach 5 min (AK1–3) | umgesetzt (Phase 2) |
+| US-17 | Bezahlen an der Kasse über das Kennzeichen: Karte, TWINT, Bargeld mit Rückgeld (AK1, AK2); einen separaten Automaten gibt es nicht | umgesetzt |
+| US-08 | Hilfe bei nicht erkanntem Kennzeichen: Leitstelle sieht Spur, Kennzeichen, Zahlungsstatus; Fernöffnung nur mit Grund, eröffnet bei der Einfahrt einen Parkvorgang, wird protokolliert (AK2–5); bei der Einfahrt auch mit «Neuer Kunde registrieren» | umgesetzt (Phase 2) |
+| US-09 | Sichere Schrankenbewegung: schliesst erst, wenn das Fahrzeug durchgefahren ist und die Schleife frei ist, Stopp und Öffnen beim Schliessen, Störmeldung nach 5 min (AK1–3) | umgesetzt (Phase 2) |
 | Auftrag | Ein- und Ausfahrtsschranke (Servos) | umgesetzt, auf Hardware ungetestet |
 | Auftrag | Berechnung der Parkgebühr | umgesetzt |
-| Auftrag | Bezahlung an Kasse oder Automat | umgesetzt |
+| Auftrag | Bezahlung an der Kasse (der Automat ist in der Kasse aufgegangen) | umgesetzt |
 
 ### Weboberflächen
 
-| Pico | Adresse | Inhalt |
-|---|---|---|
-| Pico 1 | `/kasse`, `/automat` | Kennzeichen suchen, Dauer und Gebühr, bezahlen; Kasse mit Liste aller Parkvorgänge |
-| Pico 1 | `/tarif` | Gültiger Tarif mit Beispielen |
-| Pico 1 | `/api/status`, `/api/entry`, `/api/exit`, `/api/pay` | JSON-Schnittstelle für Pico 2 |
-| Pico 2 | `/kamera` | Kamerasimulation: Kennzeichen bei Ein- und Ausfahrt eingeben, optional rückdatierte Einfahrtszeit; Ruftaste, «Fahrzeug wendet», Bezahlen am Ausfahrtsterminal |
-| Pico 2 | `/registrierung` | Kennzeichen registrieren, löschen, Testdaten zurücksetzen |
-| Pico 2 | `/betrieb` | Leitstelle (Benutzer «betrieb»): Spuren, Fernöffnung mit Grund, Ereignisprotokoll mit Filter |
+Alle Seiten laufen auf Pico 2 und haben eine gemeinsame Navigation. Ohne Anmeldung sieht man nur
+Kamerasimulation und Tarif (🔒 «Anmelden»). Nach der Anmeldung als «betrieb» zeigt die Navigation
+👤 «betrieb (Admin)» mit «Abmelden» und zusätzlich Kasse, Registrierung und Betrieb.
+
+| Pico | Adresse | Zugang | Inhalt |
+|---|---|---|---|
+| Pico 2 | `/kamera` (Startseite) | alle | Kamerasimulation: Kennzeichen bei Ein- und Ausfahrt eingeben, optional rückdatierte Einfahrtszeit; «Durchfahren», Ruftaste, «Fahrzeug wendet», Bezahlen am Ausfahrtsterminal; darunter alle Parkvorgänge (offene zuerst) als Testhilfe |
+| Pico 2 | `/tarif` | alle | Gültiger Tarif mit Beispielen |
+| Pico 2 | `/login` | alle | Anmeldung Betriebspersonal |
+| Pico 2 | `/kasse` | Betrieb | Kennzeichen suchen, Dauer und Gebühr, bezahlen (Karte, TWINT, Bargeld); Liste aller Parkvorgänge, offene zuerst |
+| Pico 2 | `/registrierung` | Betrieb | Kennzeichen registrieren und löschen |
+| Pico 2 | `/betrieb` | Betrieb | Leitstelle: Spuren, Fernöffnung mit Grund (bei der Einfahrt auch «Neuer Kunde registrieren»), Ereignisprotokoll mit Filter, Testdaten zurücksetzen |
+| Pico 1 | `/` | alle | Hinweis mit Link auf Pico 2 |
+| Pico 1 | `/api/status`, `/api/sessions`, `/api/entry`, `/api/exit`, `/api/pay`, `/api/reset` | Pico 2 | JSON-Schnittstelle |
+
+Die Schranke schliesst erst, wenn das Fahrzeug durchgefahren ist: Auf der Kamerasimulation erscheint dazu
+der Knopf «Durchfahren» (er ersetzt die Sicherungsschleife). Er führt zu «LU123456 durchgefahren – Schranke
+schliesst», nach dem Schliessen zu «… – Schranke geschlossen». Ist eine Schleife angeschlossen, zählt auch
+das Freiwerden der Schleife als Durchfahrt.
 
 Hardware-Aufbau, Pinbelegung und WLAN-Einrichtung: [docs/aufbau-anleitung.md](docs/aufbau-anleitung.md)
 
@@ -87,17 +100,16 @@ Danach im Browser:
 
 | Adresse | Inhalt |
 |---|---|
-| `http://localhost:8081/kasse`, `/automat`, `/tarif` | Pico 1: Kasse, Automat, Tarif |
-| `http://localhost:8081/api/status?kz=LU123456` | Pico 1: JSON-Schnittstelle (auch `POST /api/entry`, `/api/exit`) |
-| `http://localhost:8082/kamera`, `/registrierung` | Pico 2: Kamerasimulation und Registrierung |
-| `http://localhost:8082/betrieb` | Pico 2: Leitstelle, Anmeldung «betrieb» / «parkhaus» |
-| `http://localhost:8082/sim` | Steuerung: Sicherungsschleifen belegen/freigeben |
+| `http://localhost:8082` | Pico 2: alle Seiten (Kamerasimulation, Tarif; Anmeldung «betrieb» / «parkhaus» für Kasse, Registrierung, Betrieb) |
+| `http://localhost:8081/api/status?kz=LU123456` | Pico 1: JSON-Schnittstelle (auch `GET /api/sessions`, `POST /api/entry`, `/api/exit`, `/api/pay`, `/api/reset`) |
 
-- Auf jeder Seite verlinkt eine dunkle Leiste alle Seiten beider «Picos».
 - Pico 1 «ausschalten» (TF-11, TF-30): `docker compose stop kasse` bzw. das Kasse-Programm beenden;
-  wieder einschalten mit `docker compose start kasse`. Die Schranken bleiben dann zu.
+  wieder einschalten mit `docker compose start kasse`. Die Schranken bleiben dann zu, Kasse und Liste der
+  Parkvorgänge zeigen «Kasse nicht erreichbar».
 - Die Schranken werden als Text angezeigt («offen», «schliesst», «geschlossen»); Seite neu laden, um
   den aktuellen Stand zu sehen. Die Konsole zeigt alle Anfragen, Entscheide und Schrankenbewegungen.
+- Die Sicherheitsabschaltung (Schleife beim Schliessen belegt, TF-13/14) lässt sich im Simulator nicht
+  mehr von Hand auslösen; sie ist mit den Unit- und Systemtests geprüft.
 - Daten liegen in `sim-data/kasse/` und `sim-data/schranken/` (gleiches JSON-Format wie im Flash der
   Picos). Ordner löschen = Testdaten.
 - Die Uhr ist die Uhr des PCs.
@@ -105,7 +117,7 @@ Danach im Browser:
 ### Tests
 
 - **Unit-Tests** pro Modul in `test/native/test_<modul>/` (Tarif, Kennzeichen, Parkvorgänge, Zahlung,
-  Schnittstelle, Seiten, Schranke, Ein-/Ausfahrtsentscheid).
+  Schnittstelle, Kassen-Client, Anmeldung, Seiten, Schranke, Ein-/Ausfahrtsentscheid).
 - **Systemtest** `test/native/test_system/`: die Testfälle TF-01 bis TF-32 des Testkonzepts mit der Logik
   beider Picos in einem Programm.
 - Die Tests auf der Hardware (Servos, Zeitmessungen, WLAN, Stromunterbruch) konnten nicht durchgeführt
@@ -116,5 +128,8 @@ Danach im Browser:
 ## Bekannte Einschränkungen
 
 - Firmware nur gebaut, nie auf den Picos gelaufen (ab Schritt 4 keine Hardware mehr).
+- Ohne Klick auf «Durchfahren» (und ohne angeschlossene Schleife) bleibt eine geöffnete Schranke offen.
+- Die Anmeldung gilt bis zum Abmelden oder Neustart von Pico 2; höchstens 4 Browser gleichzeitig (der
+  älteste wird abgemeldet).
 - TF-10 von Hand: zwischen den beiden Einfahrten mindestens 30 s warten. Eine Wiederholung innert 30 s
   gilt als dieselbe Einfahrt (falls die Antwort der Kasse zu spät kam) und öffnet die Schranke.

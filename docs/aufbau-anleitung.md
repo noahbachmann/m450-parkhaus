@@ -38,11 +38,11 @@ Die beiden Picos haben getrennte Aufgaben und sprechen über das WLAN per HTTP m
    │  Pico 1  «Kasse»        │ ◄────────────── │  Pico 2  «Schranken»        │
    │  192.168.1.201          │  Zahlungsstatus │  192.168.1.202              │
    │                         │  Ein-/Ausfahrt  │                             │
-   │  • Kasse + Automat (Web)│                 │  • Einfahrtsschranke (Servo)│
+   │  • Kasse (Schnittstelle)│                 │  • Einfahrtsschranke (Servo)│
    │  • Gebührenberechnung   │                 │  • Ausfahrtsschranke (Servo)│
    │  • Parkvorgänge         │                 │  • 2 Sicherheitsschleifen   │
-   │                         │                 │  • Registrierung, Kamera-   │
-   │  keine externe Hardware │                 │    Simulation (Web)         │
+   │                         │                 │  • alle Webseiten (Kamera-  │
+   │  keine externe Hardware │                 │    Simulation, Kasse, …)    │
    └─────────────────────────┘                 └─────────────────────────────┘
 ```
 
@@ -428,9 +428,9 @@ Weboberflächen im Browser:
 
 | Adresse | Inhalt |
 |---|---|
-| `http://<KASSE_IP>/kasse`, `http://<KASSE_IP>/automat` | Kasse und Automat |
-| `http://<SCHRANKEN_IP>/kamera` | Kamera-Simulation (Einfahrt mit optionaler Einfahrtszeit, Ausfahrt) |
-| `http://<SCHRANKEN_IP>/registrierung` | Registrierung (hinzufügen, löschen, Testdaten zurücksetzen) |
+| `http://<SCHRANKEN_IP>/kamera` | Kamera-Simulation (Einfahrt mit optionaler Einfahrtszeit, Ausfahrt, «Durchfahren») |
+| `http://<SCHRANKEN_IP>/login` | Anmeldung «betrieb»; danach Kasse, Registrierung und Betrieb in der Navigation |
+| `http://<KASSE_IP>/` | nur ein Hinweis mit Link auf Pico 2 (Pico 1 hat keine eigenen Bedienseiten) |
 
 Schnittstelle der Kasse direkt testen:
 
@@ -444,10 +444,10 @@ Antwort zum Beispiel: `{"kz":"LU123456","status":"unbekannt"}` – die Kasse ist
 
 - [ ] Auf Pico 2 ein Kennzeichen registrieren (z. B. `LU 123456`).
 - [ ] In der Kamera-Simulation bei der **Einfahrt** eingeben → Servo 1 öffnet.
-- [ ] Schranke schliesst wieder: ohne Taster nach 5 s von selbst, mit Taster nach Loslassen von
-  Taster 1.
+- [ ] Schranke schliesst wieder: nach «Durchfahren» auf der Kamera-Simulation oder, mit Taster, nach
+  Drücken und Loslassen von Taster 1 (frühestens 5 s nach dem Öffnen).
 - [ ] **Ausfahrt** ohne Bezahlung → Servo 2 bleibt zu, Meldung zur offenen Gebühr.
-- [ ] Am Automaten (Pico 1) bezahlen.
+- [ ] Anmelden und an der Kasse (`/kasse` auf Pico 2) bezahlen.
 - [ ] **Ausfahrt** erneut → Servo 2 öffnet.
 
 ---

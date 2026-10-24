@@ -30,7 +30,7 @@ PlatformIO only. Parent `M450/CLAUDE.md` says cmake/make/ctest — wrong here.
     pio run -e kasse -t upload           flash Pico 1 (same with -e schranken)
     pio device monitor -b 115200         serial console
     pio test -e native                   host-side unit tests, no board
-    docker compose up --build            PC simulator: Kasse localhost:8081, Schranken localhost:8082
+    docker compose up --build            PC simulator: UI localhost:8082 (Pico 2), Kasse API localhost:8081
     pio run -e sim_kasse -t exec         same without Docker (plus -e sim_schranken in a 2nd terminal)
     pio test -e kasse                    on-board tests, board required (later)
 

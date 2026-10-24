@@ -1,5 +1,9 @@
 # Schritt 4 – Pico 1 «Kasse»: Anleitung und Prüfung
 
+> **Überholt seit Schritt 8:** Die Kasse-Seite läuft jetzt auf Pico 2 (`/kasse`, nach Anmeldung), den
+> Automaten gibt es nicht mehr. Pico 1 bietet nur noch die Schnittstelle. Diese Anleitung beschreibt den
+> Stand von Schritt 4.
+
 Was in Schritt 4 dazukommt und wie man es Schritt für Schritt prüft. Voraussetzung: Schritt 3 läuft
 (LED leuchtet dauernd, Uhrzeit synchronisiert), siehe [aufbau-anleitung.md](aufbau-anleitung.md).
 
