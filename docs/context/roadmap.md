@@ -190,8 +190,9 @@ Hardware test suites under `test/board/` and the `v1.0` tag are dropped (no hard
 
 - Fix after step 8: «Fahrzeug bleibt stehen» / «Fahrzeug fährt weiter» per lane on the camera page
   (`POST /kamera/schleife`, firmware + simulator, ORed with the loop pin), so TF-12/13/14/15 can be triggered
-  by hand again. Tests `test_left_loop_counts_as_pass`, `test_loop_toggle_tf13`.
-- **User verifies:** `pio test -e native` → 19 suites, 216 cases passed; `pio run` → both `SUCCESS`;
+  by hand again. Only while the barrier is up; while held only «Fahrzeug fährt weiter» (no «Durchfahren»).
+  Tests `test_left_loop_counts_as_pass`, `test_loop_toggle_tf13`, `test_no_loop_toggle_while_closed`.
+- **User verifies:** `pio test -e native` → 19 suites, 217 cases passed; `pio run` → both `SUCCESS`;
   `docker compose up --build` → TF-13 by hand as described in the README.
 
 ## Open after step 7

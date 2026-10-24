@@ -58,7 +58,8 @@ bitte Ruftaste drücken») → ask Pico 1 to open a session with timestamp (opti
 has passed, the vehicle has passed («Durchfahren» on the camera page, or the loop going occupied → free)
 **and** the loop is free (step 8). «Fahrzeug bleibt stehen» / «Fahrzeug fährt weiter» (`POST /kamera/schleife`,
 `lane`, `held=1|0`) occupies / frees the loop from the web page, ORed with the loop pin on the board; freeing it
-while the barrier is up counts as the pass (`leftLoop`). Same for the exit barrier.
+while the barrier is up counts as the pass (`leftLoop`). Hold only while the barrier is up; while held,
+«Durchfahren» is hidden. Same for the exit barrier.
 Pico 1 unreachable → stay closed, show fault, **no buffered session**.
 
 **Payment** (Pico 1): look up open session by plate → compute fee → simulated method → mark paid with

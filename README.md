@@ -66,8 +66,9 @@ der Knopf «Durchfahren» (er ersetzt die Sicherungsschleife). Er führt zu «LU
 schliesst», nach dem Schliessen zu «… – Schranke geschlossen». Ist eine Schleife angeschlossen, zählt auch
 das Freiwerden der Schleife als Durchfahrt.
 
-«Fahrzeug bleibt stehen» belegt die Sicherungsschleife von der Webseite aus (Anzeige «Sicherungsschleife:
-belegt»), «Fahrzeug fährt weiter» gibt sie wieder frei und zählt als Durchfahrt. Damit lassen sich TF-12,
+Solange die Schranke offen ist oder schliesst, belegt «Fahrzeug bleibt stehen» die Sicherungsschleife von der
+Webseite aus (Anzeige «Sicherungsschleife: belegt»). Dann gibt es nur noch «Fahrzeug fährt weiter»: es gibt
+die Schleife frei und zählt als Durchfahrt («Durchfahren» ist so lange ausgeblendet). Damit lassen sich TF-12,
 TF-13/14 und TF-15 im Simulator von Hand prüfen. Sicherheitsabschaltung (TF-13): Schranke öffnen, nach
 mindestens 5 s «Durchfahren» klicken – die Schranke schliesst jetzt 2 s lang – und sofort «Fahrzeug bleibt
 stehen» klicken. Die Schranke ist wieder «offen», im Ereignisprotokoll steht «Sicherheitsabschaltung».
