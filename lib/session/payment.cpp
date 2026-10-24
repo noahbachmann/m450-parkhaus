@@ -43,7 +43,7 @@ PaymentResult pay(SessionStore& store, const std::string& rawPlate, PayMethod me
         paidWith = PaymentMethod::Twint;
         break;
     case PayMethod::Cash:
-        if (cashInsertedRappen == 0)
+        if (cashInsertedRappen == 0 || cashInsertedRappen > MAX_CASH_RAPPEN)
         {
             return {Kind::InvalidAmount, fee, fee > s->cashPaidRappen ? fee - s->cashPaidRappen : 0};
         }

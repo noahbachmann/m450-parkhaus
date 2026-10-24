@@ -64,6 +64,7 @@ void recordGate(LaneTerminal& t, const GateResult& result)
     {
         clearPayment(t);
         t.callPending = false;
+        t.passing = false;
         return;
     }
     if (result.unpaid)
@@ -79,10 +80,34 @@ void recordGate(LaneTerminal& t, const GateResult& result)
     clearPayment(t);
 }
 
-void recordRemoteOpening(LaneTerminal& t)
+void recordRemoteOpening(LaneTerminal& t, const std::string& plate)
 {
     clearPayment(t);
     t.callPending = false;
+    t.passing = false;
+    t.lastPlate = plate;
+}
+
+GateResult driveThrough(LaneTerminal& t, bool barrierUp)
+{
+    if (!barrierUp)
+    {
+        return message(t.lastPlate, "err", "Keine offene Schranke – Fahrzeug kann nicht durchfahren");
+    }
+    t.passing = true;
+    std::string who = t.lastPlate.empty() ? "Fahrzeug" : t.lastPlate;
+    return message(t.lastPlate, "ok", who + " durchgefahren – Schranke schliesst");
+}
+
+GateResult closedAfterPass(LaneTerminal& t)
+{
+    if (!t.passing)
+    {
+        return message(t.lastPlate, "", "");
+    }
+    t.passing = false;
+    std::string who = t.lastPlate.empty() ? "Fahrzeug" : t.lastPlate;
+    return message(t.lastPlate, "ok", who + " durchgefahren – Schranke geschlossen");
 }
 
 GateResult pressCallButton(LaneTerminal& t, int64_t now, EventLog& log)

@@ -2,12 +2,13 @@
 
 #include <stdint.h>
 #include <string>
+#include <vector>
 
 #include "html.h"
 #include "payment.h"
 #include "session.h"
 
-// Texts shown on the Kasse and Automat pages (German, verbatim from test-concept.md where given).
+// Texts shown on the Kasse page (German, verbatim from test-concept.md where given).
 
 struct SessionView
 {
@@ -26,6 +27,10 @@ struct SessionView
 
 SessionView describeSession(const ParkingSession& session, int64_t now);
 
+// Order of the session lists (Kasse, camera page): active (open, paid) first, then closed; newest first in
+// each group.
+std::vector<const ParkingSession*> sessionsForList(const SessionStore& store);
+
 // "2 angefangene Stunden à CHF 2.00 ab Einfahrt (15 Freiminuten überschritten)".
 std::string tariffNote(int64_t durationSeconds, uint32_t feeRappen);
 
@@ -41,13 +46,6 @@ bool paymentSucceeded(const PaymentResult& result);
 
 // «Kein offener Parkvorgang für SZ555»
 std::string noSessionMessage(const std::string& plate);
-
-using PayFormResult = FormResult;
-
-// Form fields of POST /kasse/pay and /automat/pay: kz, method (card_ok|card_declined|twint|cash),
-// amount in CHF (cash only).
-PayFormResult handlePayForm(SessionStore& store, const std::string& kz, const std::string& method,
-                            const std::string& amount, int64_t now, bool timeOk);
 
 // Form value -> method: "card_ok", "card_declined", "twint", "cash". False for anything else.
 bool parsePayMethod(const std::string& name, PayMethod& method);

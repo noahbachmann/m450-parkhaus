@@ -17,10 +17,18 @@ struct FormResult
     bool changed = false;
 };
 
+// Who is looking at the page: decides the nav links and the login badge.
+enum class Role
+{
+    Public,
+    Admin, // logged in as operator «betrieb»
+};
+
 std::string htmlEscape(const std::string& text);
 
-// <!doctype html> ... <body><nav>…</nav><h1>heading</h1>. nav is raw HTML (links).
-void appendPageStart(std::string& html, const char* title, const char* nav, const char* heading);
+// <!doctype html> ... <body><nav>…</nav><h1>heading</h1>. One nav for all pages (served by Pico 2):
+// Kamerasimulation, Tarif; for Admin also Kasse, Registrierung, Betrieb. Right: login badge.
+void appendPageStart(std::string& html, const char* title, Role role, const char* heading);
 void appendPageEnd(std::string& html);
 void appendNotice(std::string& html, const char* cls, const std::string& text);
 // Table row label/value; skipped if value is empty.

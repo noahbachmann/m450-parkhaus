@@ -6,7 +6,7 @@
 #include "plate.h"
 #include "schranken_view.h"
 
-const char* const OPERATOR_USER = "betrieb";
+const char* const NEW_CUSTOMER_REASON = "Neuer Kunde registrieren";
 
 namespace
 {
@@ -58,6 +58,12 @@ namespace
         return {false, ""};
     }
 
+    // «Kennzeichen registriert: NW654321 – » after a new-customer registration.
+    std::string registeredPrefix(const RemoteOpenResult& r, const std::string& plate)
+    {
+        return r.registered ? registrationMessage(RegistrationResult::Ok) + ": " + plate + " – " : "";
+    }
+
     std::string kzBody(const std::string& plate, bool override)
     {
         JsonDocument doc;
@@ -98,7 +104,19 @@ namespace
         {
             html += "<option>" + htmlEscape(reason) + "</option>";
         }
-        html += "</select></label></p><button type=\"submit\">Bestätigen</button></form></details></div>";
+        if (l.lane == GateLane::Entry)
+        {
+            html += "<option>";
+            html += NEW_CUSTOMER_REASON;
+            html += "</option></select></label></p><p><label>Name (nur für «";
+            html += NEW_CUSTOMER_REASON;
+            html += "») <input name=\"name\" maxlength=\"40\" autocomplete=\"off\"></label></p>";
+        }
+        else
+        {
+            html += "</select></label></p>";
+        }
+        html += "<button type=\"submit\">Bestätigen</button></form></details></div>";
     }
 
     void appendLog(std::string& html, const EventLog& log, const std::string& filter)
@@ -180,11 +198,13 @@ std::string laneStatus(KasseLink& kasse, const std::string& plate)
     return status;
 }
 
-RemoteOpenResult remoteOpen(GateLane lane, const std::string& rawPlate, const std::string& reason, int64_t now,
-                            KasseLink& kasse, EventLog& log)
+RemoteOpenResult remoteOpen(GateLane lane, const std::string& rawPlate, const std::string& reason,
+                            const std::string& name, int64_t now, KasseLink& kasse, RegistrationList& registrations,
+                            EventLog& log)
 {
     RemoteOpenResult r;
-    bool knownReason = false;
+    bool newCustomer = reason == NEW_CUSTOMER_REASON;
+    bool knownReason = newCustomer;
     for (const std::string& allowed : remoteOpenReasons())
     {
         knownReason = knownReason || reason == allowed;
@@ -206,6 +226,21 @@ RemoteOpenResult remoteOpen(GateLane lane, const std::string& rawPlate, const st
         r.notice = {"err", "Bitte gültiges Kennzeichen eingeben"};
         return r;
     }
+    if (newCustomer)
+    {
+        if (lane != GateLane::Entry)
+        {
+            r.notice = {"err", "Neukunden nur an der Einfahrt registrieren"};
+            return r;
+        }
+        RegistrationResult added = registrations.add(name, plate);
+        if (added != RegistrationResult::Ok)
+        {
+            r.notice = {"err", registrationMessage(added) + " – Schranke bleibt zu"};
+            return r;
+        }
+        r.registered = true;
+    }
 
     HttpReply reply = lane == GateLane::Entry ? kasse.postJson("/api/entry", kzBody(plate, false))
                                               : kasse.postJson("/api/exit", kzBody(plate, true));
@@ -221,14 +256,19 @@ RemoteOpenResult remoteOpen(GateLane lane, const std::string& rawPlate, const st
         e.note = "Fernöffnung abgebrochen, Schranke bleibt zu";
         log.add(e);
         r.logged = true;
-        r.notice = {"err", "Kasse nicht erreichbar – Schranke bleibt zu"};
+        r.notice = {"err", registeredPrefix(r, plate) + "Kasse nicht erreichbar – Schranke bleibt zu"};
         return r;
     }
     KasseOutcome outcome = lane == GateLane::Entry ? entryOutcome(reply) : exitOutcome(reply);
     if (!outcome.confirmed)
     {
-        r.notice = {"err", "Unerwartete Antwort der Kasse (" + std::to_string(reply.status) + ") – Schranke bleibt zu"};
+        r.notice = {"err", registeredPrefix(r, plate) + "Unerwartete Antwort der Kasse (" +
+                               std::to_string(reply.status) + ") – Schranke bleibt zu"};
         return r;
+    }
+    if (newCustomer)
+    {
+        outcome.note = "Neukunde registriert – " + outcome.note;
     }
 
     Event e;
@@ -242,6 +282,7 @@ RemoteOpenResult remoteOpen(GateLane lane, const std::string& rawPlate, const st
     log.add(e);
 
     r.open = true;
+    r.plate = plate;
     r.logged = true;
     r.notice = {"ok", std::string("Schranke ") + gateLaneLabel(lane) + " geöffnet – " + outcome.note};
     return r;
@@ -291,18 +332,20 @@ std::string renderOperatorPage(const OperatorLane& entry, const OperatorLane& ex
 {
     std::string html;
     html.reserve(8192);
-    appendPageStart(html, "Betrieb", SCHRANKEN_NAV, "Betrieb – Leitstelle");
+    appendPageStart(html, "Betrieb", Role::Admin, "Betrieb – Leitstelle");
     if (notice.cls[0] != '\0')
     {
         appendNotice(html, notice.cls, notice.text);
     }
-    html += "<p class=\"muted\">Angemeldet als «";
-    html += OPERATOR_USER;
-    html += "». <a href=\"/betrieb\">Aktualisieren</a></p><div class=\"lanes\">";
+    html += "<p class=\"muted\"><a href=\"/betrieb\">Aktualisieren</a></p><div class=\"lanes\">";
     appendLane(html, entry);
     appendLane(html, exit);
     html += "</div>";
     appendLog(html, log, filter);
+    html += "<h2>Testdaten</h2><form method=\"post\" action=\"/reset\" "
+            "onsubmit=\"return confirm('Registrierungen, Ereignisprotokoll und alle Parkvorgänge zurücksetzen?')\">"
+            "<button type=\"submit\">Testdaten zurücksetzen</button></form><p class=\"muted\">Registrierungen KZ-01, "
+            "KZ-02, KZ-08, KZ-10; Ereignisprotokoll leer; Kasse: keine Parkvorgänge, Transaktionszähler auf 1.</p>";
     appendPageEnd(html);
     return html;
 }

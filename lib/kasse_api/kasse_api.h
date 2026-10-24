@@ -25,7 +25,17 @@ ApiResponse handleEntry(SessionStore& store, const std::string& body, int64_t no
 // sessions as closed_unpaid)
 ApiResponse handleExit(SessionStore& store, const std::string& body, int64_t now, bool timeSynced);
 
-// POST /api/pay, body {"kz":"...","method":"card_ok"|"card_declined"|"twint"} — payment at the exit terminal
-// (no cash there). 200 {"kz","status":"bezahlt","amount","method","tx"} · 402 declined · 409 already_paid /
-// nothing_to_pay · 404 no_session · 400 invalid_plate / bad_request · 503 time_not_synced
+// POST /api/pay, body {"kz":"...","method":"card_ok"|"card_declined"|"twint"} (exit terminal, Kasse) or
+// {"kz":"...","method":"cash","amount":<Rappen inserted>} (Kasse).
+// 200 {"kz","status":"bezahlt","amount","method":"card"|"twint"|"cash","tx"} (+ "change" for cash) ·
+// 200 {"kz","status":"unbezahlt","amount":<fee>,"remaining"} after partial cash · 402 declined ·
+// 409 already_paid / nothing_to_pay · 404 no_session · 400 invalid_plate / invalid_amount / bad_request ·
+// 503 time_not_synced
 ApiResponse handlePay(SessionStore& store, const std::string& body, int64_t now, bool timeSynced);
+
+// GET /api/sessions — all sessions for the Kasse page and the camera page on Pico 2, in the flash file format
+// (see codec.h) plus "now" (Pico 1 time, authoritative for fees) and "synced".
+ApiResponse handleSessions(const SessionStore& store, int64_t now, bool timeSynced);
+
+// POST /api/reset — test-data reset: no sessions, tx counter 1. 200 {"status":"reset"}.
+ApiResponse handleReset(SessionStore& store);

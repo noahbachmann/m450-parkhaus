@@ -1,5 +1,6 @@
 #include <unity.h>
 
+#include <cstring>
 #include <string>
 
 #include "kasse_api.h"
@@ -154,12 +155,59 @@ void test_pay_at_exit_terminal_tf28()
     assertResponse(404, "{\"error\":\"no_session\"}",
                    handlePay(store, "{\"kz\":\"SZ555\",\"method\":\"card_ok\"}", NOW, true));
     assertResponse(400, "{\"error\":\"bad_request\"}",
-                   handlePay(store, "{\"kz\":\"SZ555\",\"method\":\"cash\"}", NOW, true));
+                   handlePay(store, "{\"kz\":\"SZ555\",\"method\":\"cash\",\"amount\":\"10\"}", NOW, true));
+    assertResponse(400, "{\"error\":\"bad_request\"}",
+                   handlePay(store, "{\"kz\":\"SZ555\",\"method\":\"bitcoin\"}", NOW, true));
     assertResponse(400, "{\"error\":\"bad_request\"}", handlePay(store, "{\"kz\":\"SZ555\"}", NOW, true));
     assertResponse(400, "{\"error\":\"invalid_plate\"}",
                    handlePay(store, "{\"kz\":\"L1\",\"method\":\"twint\"}", NOW, true));
     assertResponse(503, "{\"error\":\"time_not_synced\"}",
                    handlePay(store, "{\"kz\":\"AG1\",\"method\":\"twint\"}", NOW, false));
+}
+
+void test_pay_cash_at_kasse_tf21()
+{
+    SessionStore store = testData();
+    assertResponse(200, "{\"kz\":\"ZH98765\",\"status\":\"unbezahlt\",\"amount\":600,\"remaining\":500}",
+                   handlePay(store, "{\"kz\":\"ZH98765\",\"method\":\"cash\",\"amount\":100}", NOW, true));
+    assertResponse(200,
+                   "{\"kz\":\"ZH98765\",\"status\":\"bezahlt\",\"amount\":600,\"method\":\"cash\",\"tx\":\"TX-000002\","
+                   "\"change\":500}",
+                   handlePay(store, "{\"kz\":\"ZH98765\",\"method\":\"cash\",\"amount\":1000}", NOW, true));
+    TEST_ASSERT_TRUE(SessionStatus::Paid == store.findActive("ZH98765")->status);
+}
+
+void test_pay_cash_invalid_amount()
+{
+    SessionStore store = testData();
+    const char* bodies[] = {"{\"kz\":\"ZH98765\",\"method\":\"cash\"}",
+                            "{\"kz\":\"ZH98765\",\"method\":\"cash\",\"amount\":0}",
+                            "{\"kz\":\"ZH98765\",\"method\":\"cash\",\"amount\":100001}"};
+    for (const char* body : bodies)
+    {
+        assertResponse(400, "{\"error\":\"invalid_amount\"}", handlePay(store, body, NOW, true));
+    }
+    TEST_ASSERT_EQUAL_UINT32(0, store.findActive("ZH98765")->cashPaidRappen);
+}
+
+void test_sessions_list()
+{
+    SessionStore store = testData();
+    ApiResponse r = handleSessions(store, NOW, true);
+    TEST_ASSERT_EQUAL_INT(200, r.status);
+    TEST_ASSERT_NOT_NULL(strstr(r.body.c_str(), "\"nextTx\":2,\"sessions\":[{\"kz\":\"LU123456\""));
+    TEST_ASSERT_NOT_NULL(strstr(r.body.c_str(), "\"kz\":\"AG1\""));
+    TEST_ASSERT_NOT_NULL(strstr(r.body.c_str(), "],\"now\":1760530000,\"synced\":true}"));
+    TEST_ASSERT_NOT_NULL(strstr(handleSessions(SessionStore{}, NOW, false).body.c_str(),
+                                "{\"nextTx\":1,\"sessions\":[],\"now\":1760530000,\"synced\":false}"));
+}
+
+void test_reset()
+{
+    SessionStore store = testData();
+    assertResponse(200, "{\"status\":\"reset\"}", handleReset(store));
+    TEST_ASSERT_EQUAL_UINT(0, store.all().size());
+    TEST_ASSERT_EQUAL_UINT32(1, store.nextTxNumber());
 }
 
 int main()
@@ -175,5 +223,9 @@ int main()
     RUN_TEST(test_exit_errors);
     RUN_TEST(test_exit_override_tf31);
     RUN_TEST(test_pay_at_exit_terminal_tf28);
+    RUN_TEST(test_pay_cash_at_kasse_tf21);
+    RUN_TEST(test_pay_cash_invalid_amount);
+    RUN_TEST(test_sessions_list);
+    RUN_TEST(test_reset);
     return UNITY_END();
 }

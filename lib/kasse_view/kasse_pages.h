@@ -6,23 +6,16 @@
 #include "kasse_view.h"
 #include "session.h"
 
-enum class Page
-{
-    Kasse,
-    Automat,
-};
-
-// Navigation links of the Pico 1 pages (Kasse, Automat, Tarif).
-extern const char* const KASSE_NAV;
+// Pages served by Pico 2 with the sessions read from Pico 1 (see kasse_client.h).
 
 // /tarif: the valid tariff (US-14 AK3) with example fees, all generated from lib/tariff.
-std::string renderTariffPage();
+std::string renderTariffPage(Role role);
 
-// Base path of the page: "/kasse" or "/automat".
-const char* pagePath(Page page);
+// /kasse (operator): search any plate (latest session, also closed), pay, list all sessions.
+// Notice: result of the last POST, shown above the search form. now / timeOk: Pico 1 clock;
+// reachable = false: Pico 1 didn't answer, only the notice and the search form are shown.
+std::string renderKassePage(const SessionStore& store, const std::string& query, const Notice& notice, int64_t now,
+                            bool timeOk, bool reachable);
 
-// Kasse: search any plate (latest session, also closed), pay, list all sessions, test-data reset.
-// Automat: only open/paid sessions, pay.
-// Notice: result of the last POST, shown above the search form.
-std::string renderPage(Page page, const SessionStore& store, const std::string& query, const Notice& notice,
-                       int64_t now, bool timeOk);
+// GET / on Pico 1: it only serves the API; the pages are on Pico 2 at uiUrl.
+std::string renderKasseServerPage(const std::string& uiUrl);

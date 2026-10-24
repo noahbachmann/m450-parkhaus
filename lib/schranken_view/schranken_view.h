@@ -3,12 +3,10 @@
 #include <string>
 
 #include "html.h"
+#include "kasse_client.h"
 #include "registration.h"
 
-// Pico 2 pages: registration (/registrierung) and camera simulation (/kamera).
-
-// Navigation links of all Pico 2 pages.
-extern const char* const SCHRANKEN_NAV;
+// Pico 2 pages: registration (/registrierung), camera simulation (/kamera), login (/login).
 
 // «Kennzeichen registriert», «Kennzeichen bereits registriert», …
 std::string registrationMessage(RegistrationResult result);
@@ -18,7 +16,11 @@ FormResult handleRegistrationForm(RegistrationList& list, const std::string& nam
 // POST /registrierung/delete: field kz.
 FormResult handleDeleteForm(RegistrationList& list, const std::string& kz);
 
+// Operator only.
 std::string renderRegistrationPage(const RegistrationList& list, const Notice& notice);
+
+// next: admin page to return to after login (see loginTarget), passed through as a hidden field.
+std::string renderLoginPage(const Notice& notice, const std::string& next);
 
 struct LaneView
 {
@@ -28,6 +30,10 @@ struct LaneView
     std::string fault;                   // loop fault message; empty if none
     std::string payPlate;                // exit: plate with an unpaid fee -> payment form; empty = none
     std::string payFee;                  // "CHF 6.00"
+    bool canPass = false;                // barrier up: «Durchfahren» offered
 };
 
-std::string renderCameraPage(const LaneView& entry, const LaneView& exit);
+// Lanes on top, below the sessions from Pico 1 (active first) as a testing aid. The plate fields suggest
+// registered plates and plates in the car park.
+std::string renderCameraPage(const LaneView& entry, const LaneView& exit, const KasseSnapshot& kasse,
+                             const RegistrationList& registrations, Role role);

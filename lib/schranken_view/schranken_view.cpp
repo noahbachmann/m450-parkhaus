@@ -1,9 +1,9 @@
 #include "schranken_view.h"
 
-#include "plate.h"
+#include <set>
 
-const char* const SCHRANKEN_NAV = "<a href=\"/kamera\">Kamerasimulation</a>"
-                                  "<a href=\"/registrierung\">Registrierung</a><a href=\"/betrieb\">Betrieb</a>";
+#include "kasse_view.h"
+#include "plate.h"
 
 namespace
 {
@@ -39,21 +39,83 @@ namespace
         html += lane.cls;
         html += "\">" + htmlEscape(lane.terminal) + "</div><form method=\"post\" action=\"";
         html += action;
-        html += "\"><p><label>Kennzeichen <input name=\"kz\" placeholder=\"LU 123456\" autocomplete=\"off\"></label></p>";
+        html += "\"><p><label>Kennzeichen <input name=\"kz\" placeholder=\"LU 123456\" autocomplete=\"off\" "
+                "list=\"plates\"></label></p>";
         if (withEntryTime)
         {
             html += "<p><label>Einfahrtszeit (leer = jetzt) <input type=\"datetime-local\" name=\"entry\" step=\"1\">"
                     "</label></p>";
         }
         html += "<button type=\"submit\">Erfassen</button></form>";
+        const char* laneName = withEntryTime ? "entry" : "exit";
+        if (lane.canPass)
+        {
+            html += "<form method=\"post\" action=\"/kamera/durchfahren\" class=\"inline\"><input type=\"hidden\" "
+                    "name=\"lane\" value=\"";
+            html += laneName;
+            html += "\"><button type=\"submit\"><strong>Durchfahren</strong></button></form> ";
+        }
         if (!withEntryTime)
         {
             appendExitTerminal(html, lane);
         }
         html += "<form method=\"post\" action=\"/kamera/ruftaste\" class=\"inline\"><input type=\"hidden\" "
                 "name=\"lane\" value=\"";
-        html += withEntryTime ? "entry" : "exit";
+        html += laneName;
         html += "\"><button type=\"submit\">Ruftaste</button></form></div>";
+    }
+
+    void appendPlateSuggestions(std::string& html, const KasseSnapshot& kasse, const RegistrationList& registrations)
+    {
+        std::set<std::string> plates;
+        for (const Registration& r : registrations.all())
+        {
+            plates.insert(r.plate);
+        }
+        for (const ParkingSession& s : kasse.sessions.all())
+        {
+            if (isActive(s.status))
+            {
+                plates.insert(s.plate);
+            }
+        }
+        html += "<datalist id=\"plates\">";
+        for (const std::string& plate : plates)
+        {
+            html += "<option value=\"" + htmlEscape(plate) + "\">";
+        }
+        html += "</datalist>";
+    }
+
+    void appendSessions(std::string& html, const KasseSnapshot& kasse)
+    {
+        html += "<h2>Parkvorgänge (Kasse)</h2>";
+        if (!kasse.reachable)
+        {
+            html += "<p class=\"muted\">Kasse nicht erreichbar – Parkvorgänge können nicht angezeigt werden.</p>";
+            return;
+        }
+        if (kasse.sessions.all().empty())
+        {
+            html += "<p class=\"muted\">Keine Parkvorgänge.</p>";
+            return;
+        }
+        html += "<p class=\"muted\">Offene zuerst, dann abgeschlossene – zum Testen.</p><div class=\"scroll\"><table>"
+                "<tr><th>Kennzeichen</th><th>Einfahrt</th><th>Ausfahrt</th><th>Dauer</th><th>Gebühr</th>"
+                "<th>Status</th></tr>";
+        for (const ParkingSession* s : sessionsForList(kasse.sessions))
+        {
+            SessionView v = describeSession(*s, kasse.now);
+            std::string status = v.status;
+            if (s->status == SessionStatus::Open)
+            {
+                status += " (unbezahlt)";
+            }
+            html += "<tr><td>" + htmlEscape(v.plate) + "</td><td>" + htmlEscape(v.entry) + "</td><td>" +
+                    htmlEscape(v.exit) + "</td><td>" + htmlEscape(v.duration) + "</td><td>" + htmlEscape(v.fee) +
+                    "</td><td>" + htmlEscape(status) + "</td></tr>";
+        }
+        html += "</table></div>";
     }
 }
 
@@ -108,7 +170,7 @@ std::string renderRegistrationPage(const RegistrationList& list, const Notice& n
 {
     std::string html;
     html.reserve(4096);
-    appendPageStart(html, "Registrierung", SCHRANKEN_NAV, "Registrierung");
+    appendPageStart(html, "Registrierung", Role::Admin, "Registrierung");
     if (notice.cls[0] != '\0')
     {
         appendNotice(html, notice.cls, notice.text);
@@ -135,24 +197,43 @@ std::string renderRegistrationPage(const RegistrationList& list, const Notice& n
         }
         html += "</table></div>";
     }
-    html += "<h2>Testdaten</h2>"
-            "<form method=\"post\" action=\"/reset\" "
-            "onsubmit=\"return confirm('Registrierungen auf die Testdaten zurücksetzen?')\">"
-            "<button type=\"submit\">Testdaten zurücksetzen</button></form>";
+    html += "<p class=\"muted\">Testdaten zurücksetzen: auf der Seite <a href=\"/betrieb\">Betrieb</a>.</p>";
     appendPageEnd(html);
     return html;
 }
 
-std::string renderCameraPage(const LaneView& entry, const LaneView& exit)
+std::string renderLoginPage(const Notice& notice, const std::string& next)
 {
     std::string html;
-    html.reserve(4096);
-    appendPageStart(html, "Kamerasimulation", SCHRANKEN_NAV, "Kamerasimulation");
+    html.reserve(2048);
+    appendPageStart(html, "Anmelden", Role::Public, "Anmelden – Betriebspersonal");
+    if (notice.cls[0] != '\0')
+    {
+        appendNotice(html, notice.cls, notice.text);
+    }
+    html += "<form method=\"post\" action=\"/login\" class=\"card\"><input type=\"hidden\" name=\"next\" value=\"" +
+            htmlEscape(next) +
+            "\"><p><label>Benutzer <input name=\"user\" autocomplete=\"username\" autofocus></label></p>"
+            "<p><label>Passwort <input type=\"password\" name=\"password\" autocomplete=\"current-password\">"
+            "</label></p><button type=\"submit\">Anmelden</button></form>"
+            "<p class=\"muted\">Kasse, Registrierung und Betrieb sind nur für das Betriebspersonal.</p>";
+    appendPageEnd(html);
+    return html;
+}
+
+std::string renderCameraPage(const LaneView& entry, const LaneView& exit, const KasseSnapshot& kasse,
+                             const RegistrationList& registrations, Role role)
+{
+    std::string html;
+    html.reserve(8192);
+    appendPageStart(html, "Kamerasimulation", role, "Kamerasimulation");
+    appendPlateSuggestions(html, kasse, registrations);
     html += "<div class=\"lanes\">";
     appendLane(html, "Einfahrt", "/kamera/einfahrt", true, entry);
     appendLane(html, "Ausfahrt", "/kamera/ausfahrt", false, exit);
-    html += "</div><p class=\"muted\"><a href=\"/kamera\">Aktualisieren</a> – die Schranke schliesst frühestens nach 5 s, "
-            "sobald die Sicherungsschleife frei ist.</p>";
+    html += "</div><p class=\"muted\"><a href=\"/kamera\">Aktualisieren</a> – die Schranke schliesst, sobald das "
+            "Fahrzeug durchgefahren ist («Durchfahren»), frühestens 5 s nach dem Öffnen.</p>";
+    appendSessions(html, kasse);
     appendPageEnd(html);
     return html;
 }

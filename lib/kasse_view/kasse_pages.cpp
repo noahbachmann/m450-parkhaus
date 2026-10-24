@@ -5,8 +5,6 @@
 #include "plate.h"
 #include "tariff.h"
 
-const char* const KASSE_NAV = "<a href=\"/kasse\">Kasse</a><a href=\"/automat\">Automat</a><a href=\"/tarif\">Tarif</a>";
-
 namespace
 {
 void appendSession(std::string& html, const SessionView& v)
@@ -25,11 +23,9 @@ void appendSession(std::string& html, const SessionView& v)
     html += "</table></div>";
 }
 
-void appendPayForm(std::string& html, Page page, const std::string& plate)
+void appendPayForm(std::string& html, const std::string& plate)
 {
-    html += "<form method=\"post\" action=\"";
-    html += pagePath(page);
-    html += "/pay\" class=\"card methods\"><input type=\"hidden\" name=\"kz\" value=\"" + htmlEscape(plate) + "\">"
+    html += "<form method=\"post\" action=\"/kasse/pay\" class=\"card methods\"><input type=\"hidden\" name=\"kz\" value=\"" + htmlEscape(plate) + "\">"
             "<strong>Zahlungsmittel</strong>"
             "<label><input type=\"radio\" name=\"method\" value=\"card_ok\" checked> Karte OK</label>"
             "<label><input type=\"radio\" name=\"method\" value=\"card_declined\"> Karte abgelehnt</label>"
@@ -43,31 +39,22 @@ void appendPayForm(std::string& html, Page page, const std::string& plate)
 void appendSessionList(std::string& html, const SessionStore& store, int64_t now)
 {
     html += "<h2>Parkvorgänge</h2>";
-    const auto& all = store.all();
-    if (all.empty())
+    if (store.all().empty())
     {
         html += "<p class=\"muted\">Keine Parkvorgänge gespeichert.</p>";
         return;
     }
     html += "<div class=\"scroll\"><table><tr><th>Kennzeichen</th><th>Einfahrt</th><th>Ausfahrt</th><th>Dauer</th>"
             "<th>Gebühr</th><th>Status</th><th>Zahlung</th></tr>";
-    for (auto it = all.rbegin(); it != all.rend(); ++it)
+    for (const ParkingSession* s : sessionsForList(store))
     {
-        SessionView v = describeSession(*it, now);
+        SessionView v = describeSession(*s, now);
         html += "<tr><td><a href=\"/kasse?kz=" + htmlEscape(v.plate) + "\">" + htmlEscape(v.plate) + "</a></td><td>" +
                 htmlEscape(v.entry) + "</td><td>" + htmlEscape(v.exit) + "</td><td>" + htmlEscape(v.duration) +
                 "</td><td>" + htmlEscape(v.fee) + "</td><td>" + htmlEscape(v.status) + "</td><td>" +
                 htmlEscape(v.payment) + "</td></tr>";
     }
     html += "</table></div>";
-}
-
-void appendResetForm(std::string& html)
-{
-    html += "<h2>Testdaten</h2>"
-            "<form method=\"post\" action=\"/reset\" "
-            "onsubmit=\"return confirm('Alle Parkvorgänge löschen und Transaktionszähler zurücksetzen?')\">"
-            "<button type=\"submit\">Testdaten zurücksetzen</button></form>";
 }
 }
 
@@ -85,7 +72,7 @@ std::string exampleDuration(int64_t seconds)
 }
 }
 
-std::string renderTariffPage()
+std::string renderTariffPage(Role role)
 {
     const int64_t MIN = 60;
     const int64_t HOUR = 3600;
@@ -104,7 +91,7 @@ std::string renderTariffPage()
     };
     std::string html;
     html.reserve(4096);
-    appendPageStart(html, "Tarif", KASSE_NAV, "Tarif");
+    appendPageStart(html, "Tarif", role, "Tarif");
     html += "<div class=\"card\"><p><strong>" + htmlEscape(tariffSummary()) + "</strong></p><table>";
     appendRow(html, "Freizeit", "bis und mit " + std::to_string(FREE_MINUTES) + " min: " + formatChf(0));
     appendRow(html, "Preis", formatChf(PRICE_PER_UNIT_RAPPEN) + " pro angefangene " + std::to_string(UNIT_MINUTES) +
@@ -123,21 +110,18 @@ std::string renderTariffPage()
     return html;
 }
 
-const char* pagePath(Page page)
+std::string renderKassePage(const SessionStore& store, const std::string& query, const Notice& notice, int64_t now,
+                            bool timeOk, bool reachable)
 {
-    return page == Page::Kasse ? "/kasse" : "/automat";
-}
-
-std::string renderPage(Page page, const SessionStore& store, const std::string& query, const Notice& notice,
-                       int64_t now, bool timeOk)
-{
-    bool kasse = page == Page::Kasse;
     std::string html;
     html.reserve(4096);
-    appendPageStart(html, kasse ? "Kasse" : "Automat", KASSE_NAV,
-                    kasse ? "Kasse" : "Automat – Parkgebühr bezahlen");
+    appendPageStart(html, "Kasse", Role::Admin, "Kasse");
 
-    if (!timeOk)
+    if (!reachable)
+    {
+        appendNotice(html, "err", "Kasse nicht erreichbar – Parkvorgänge können nicht angezeigt werden");
+    }
+    else if (!timeOk)
     {
         appendNotice(html, "err", "Uhrzeit nicht synchronisiert – Gebühren und Zahlungen nicht möglich");
     }
@@ -146,17 +130,21 @@ std::string renderPage(Page page, const SessionStore& store, const std::string& 
         appendNotice(html, notice.cls, notice.text);
     }
 
-    html += "<form method=\"get\" action=\"";
-    html += pagePath(page);
-    html += "\"><label>Kennzeichen <input name=\"kz\" value=\"" + htmlEscape(query) +
+    html += "<form method=\"get\" action=\"/kasse\"><label>Kennzeichen <input name=\"kz\" value=\"" +
+            htmlEscape(query) +
             "\" placeholder=\"LU 123456\" autocomplete=\"off\" autofocus></label> "
             "<button type=\"submit\">Suchen</button></form>";
+    if (!reachable)
+    {
+        appendPageEnd(html);
+        return html;
+    }
 
     std::string plate = normalizePlate(query);
     if (!plate.empty())
     {
         const ParkingSession* s = store.findActive(plate);
-        if (s == nullptr && kasse)
+        if (s == nullptr)
         {
             s = store.findLatest(plate);
         }
@@ -180,20 +168,27 @@ std::string renderPage(Page page, const SessionStore& store, const std::string& 
             // Also offered when paid, so a second attempt answers «bereits bezahlt» (TF-20).
             if (timeOk && (v.payable || s->status == SessionStatus::Paid))
             {
-                appendPayForm(html, page, v.plate);
+                appendPayForm(html, v.plate);
             }
         }
     }
 
-    if (kasse)
-    {
-        appendSessionList(html, store, now);
-        appendResetForm(html);
-    }
+    appendSessionList(html, store, now);
     if (timeOk)
     {
         html += "<p class=\"muted\">Stand: " + formatDateTime(now) + "</p>";
     }
     appendPageEnd(html);
     return html;
+}
+
+std::string renderKasseServerPage(const std::string& uiUrl)
+{
+    std::string url = htmlEscape(uiUrl);
+    return "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\">"
+           "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Kasse-Server – Parkhaus"
+           "</title></head><body style=\"font-family:system-ui,sans-serif;max-width:860px;margin:0 auto;padding:16px\">"
+           "<h1>Kasse-Server (Pico 1)</h1><p>Dieser Pico führt die Parkvorgänge und beantwortet die Anfragen der "
+           "Schranken. Die Bedienung (Kamerasimulation, Kasse, Tarif, Betrieb) läuft auf Pico 2:</p><p><a href=\"" +
+           url + "\">" + url + "</a></p></body></html>";
 }

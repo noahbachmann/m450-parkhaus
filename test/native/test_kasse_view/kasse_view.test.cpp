@@ -164,71 +164,53 @@ void test_html_escape()
     TEST_ASSERT_EQUAL_STRING("LU123456", htmlEscape("LU123456").c_str());
 }
 
-void test_pay_form_tf20_card_then_already_paid()
+void test_session_list_order_active_first()
 {
     SessionStore store;
-    store.openEntry("LU123456", NOW - 80 * MIN);
-    PayFormResult first = handlePayForm(store, "lu 123456", "card_ok", "", NOW, true);
-    TEST_ASSERT_TRUE(first.changed);
-    TEST_ASSERT_EQUAL_STRING("ok", first.notice.cls);
-    TEST_ASSERT_EQUAL_STRING("Bezahlt – CHF 4.00, Karte – Transaktion TX-000001", first.notice.text.c_str());
-
-    PayFormResult second = handlePayForm(store, "LU123456", "card_ok", "", NOW + 5, true);
-    TEST_ASSERT_FALSE(second.changed);
-    TEST_ASSERT_EQUAL_STRING("err", second.notice.cls);
-    TEST_ASSERT_EQUAL_STRING("bereits bezahlt", second.notice.text.c_str());
-    TEST_ASSERT_EQUAL_UINT32(2, store.nextTxNumber());
-}
-
-void test_pay_form_tf21_cash()
-{
-    SessionStore store;
-    store.openEntry("LU123456", NOW - 150 * MIN);
-    PayFormResult change = handlePayForm(store, "LU123456", "cash", "10.00", NOW, true);
-    TEST_ASSERT_EQUAL_STRING("Bezahlt – CHF 6.00, Bargeld – Transaktion TX-000001 – Rückgeld CHF 4.00",
-                             change.notice.text.c_str());
-
-    store.openEntry("AG1", NOW - 30 * MIN);
-    PayFormResult partial = handlePayForm(store, "AG1", "cash", "1", NOW, true);
-    TEST_ASSERT_TRUE(partial.changed);
-    TEST_ASSERT_EQUAL_STRING("info", partial.notice.cls);
-    TEST_ASSERT_EQUAL_STRING("Restbetrag CHF 1.00 – unbezahlt", partial.notice.text.c_str());
-    PayFormResult rest = handlePayForm(store, "AG1", "cash", "1,00", NOW, true);
-    TEST_ASSERT_EQUAL_STRING("ok", rest.notice.cls);
-    TEST_ASSERT_EQUAL_STRING("Bezahlt – CHF 2.00, Bargeld – Transaktion TX-000002 – Rückgeld CHF 0.00",
-                             rest.notice.text.c_str());
-}
-
-void test_pay_form_rejects_bad_input()
-{
-    SessionStore store;
-    store.openEntry("LU123456", NOW - 80 * MIN);
-    PayFormResult noMethod = handlePayForm(store, "LU123456", "bitcoin", "", NOW, true);
-    TEST_ASSERT_EQUAL_STRING("Bitte Zahlungsmittel wählen", noMethod.notice.text.c_str());
-    PayFormResult badCash = handlePayForm(store, "LU123456", "cash", "zehn", NOW, true);
-    TEST_ASSERT_EQUAL_STRING("Bitte eingeworfenen Betrag in CHF eingeben", badCash.notice.text.c_str());
-    PayFormResult noTime = handlePayForm(store, "LU123456", "card_ok", "", NOW, false);
-    TEST_ASSERT_EQUAL_STRING("Uhrzeit nicht synchronisiert – bitte später erneut versuchen",
-                             noTime.notice.text.c_str());
-    PayFormResult declined = handlePayForm(store, "LU123456", "card_declined", "", NOW, true);
-    TEST_ASSERT_FALSE(declined.changed);
-    TEST_ASSERT_EQUAL_STRING("Zahlung abgelehnt – anderes Zahlungsmittel wählen", declined.notice.text.c_str());
-    TEST_ASSERT_EQUAL(SessionStatus::Open, store.findActive("LU123456")->status);
+    store.openEntry("LU123456", NOW - 3 * HOUR);
+    store.openEntry("AG1", NOW - 2 * HOUR);
+    store.tryExit("AG1", NOW - 2 * HOUR + MIN); // closed (free)
+    store.openEntry("ZH98765", NOW - HOUR);
+    store.openEntry("SZ555", NOW - 30 * MIN);
+    pay(store, "SZ555", PayMethod::Twint, NOW);
+    store.openEntry("AG1", NOW - 10 * MIN); // again, open
+    std::vector<const ParkingSession*> list = sessionsForList(store);
+    const char* expected[] = {"AG1", "SZ555", "ZH98765", "LU123456", "AG1"};
+    TEST_ASSERT_EQUAL_UINT(5, list.size());
+    for (size_t i = 0; i < list.size(); ++i)
+    {
+        TEST_ASSERT_EQUAL_STRING(expected[i], list[i]->plate.c_str());
+    }
+    TEST_ASSERT_FALSE(isActive(list[4]->status));
 }
 
 void test_kasse_page_tf19()
 {
     SessionStore store;
     store.openEntry("LU123456", NOW - 80 * MIN);
-    std::string html = renderPage(Page::Kasse, store, "lu 123456", Notice{}, NOW, true);
+    std::string html = renderKassePage(store, "lu 123456", Notice{}, NOW, true, true);
     TEST_ASSERT_TRUE(contains(html, "<td>LU123456</td>"));
     TEST_ASSERT_TRUE(contains(html, "<td>15.10.2025 12:46:40</td>"));
     TEST_ASSERT_TRUE(contains(html, "<td>1 h 20 min</td>"));
     TEST_ASSERT_TRUE(contains(html, "<td>CHF 4.00</td>"));
     TEST_ASSERT_TRUE(contains(html, "2 angefangene Stunden"));
     TEST_ASSERT_TRUE(contains(html, "action=\"/kasse/pay\""));
+    TEST_ASSERT_TRUE(contains(html, "value=\"cash\""));
     TEST_ASSERT_TRUE(contains(html, "Parkvorgänge"));
-    TEST_ASSERT_TRUE(contains(html, "action=\"/reset\""));
+    TEST_ASSERT_TRUE(contains(html, "(Admin)"));
+}
+
+void test_kasse_list_shows_active_before_closed()
+{
+    SessionStore store;
+    store.openEntry("AG1", NOW - 2 * HOUR);
+    store.tryExit("AG1", NOW - 2 * HOUR + MIN);
+    store.openEntry("LU123456", NOW - 3 * HOUR);
+    std::string html = renderKassePage(store, "", Notice{}, NOW, true, true);
+    size_t open = html.find("kz=LU123456\">LU123456");
+    size_t closed = html.find("kz=AG1\">AG1");
+    TEST_ASSERT_TRUE(open != std::string::npos && closed != std::string::npos);
+    TEST_ASSERT_TRUE(open < closed);
 }
 
 void test_paid_session_keeps_pay_form_tf20()
@@ -237,36 +219,33 @@ void test_paid_session_keeps_pay_form_tf20()
     store.openEntry("LU123456", NOW - 80 * MIN);
     pay(store, "LU123456", PayMethod::CardOk, NOW);
     Notice notice{"ok", "Bezahlt – CHF 4.00, Karte – Transaktion TX-000001"};
-    std::string html = renderPage(Page::Automat, store, "LU123456", notice, NOW, true);
+    std::string html = renderKassePage(store, "LU123456", notice, NOW, true, true);
     TEST_ASSERT_TRUE(contains(html, "notice ok\">Bezahlt – CHF 4.00, Karte – Transaktion TX-000001"));
-    TEST_ASSERT_TRUE(contains(html, "action=\"/automat/pay\""));
-    TEST_ASSERT_FALSE(contains(html, "action=\"/reset\""));
+    TEST_ASSERT_TRUE(contains(html, "action=\"/kasse/pay\""));
 }
 
-void test_automat_without_session_tf22()
+void test_kasse_without_session_tf22()
 {
     SessionStore store;
-    std::string html = renderPage(Page::Automat, store, "SZ 555", Notice{}, NOW, true);
+    std::string html = renderKassePage(store, "SZ 555", Notice{}, NOW, true, true);
     TEST_ASSERT_TRUE(contains(html, "Kein offener Parkvorgang für SZ555"));
-    TEST_ASSERT_FALSE(contains(html, "/pay"));
+    TEST_ASSERT_FALSE(contains(html, "/kasse/pay"));
 }
 
-void test_automat_ignores_closed_kasse_shows_it()
+void test_kasse_shows_closed_session_without_payment()
 {
     SessionStore store;
     store.openEntry("AG1", NOW - 5 * MIN);
     store.tryExit("AG1", NOW);
-    std::string automat = renderPage(Page::Automat, store, "AG1", Notice{}, NOW, true);
-    TEST_ASSERT_TRUE(contains(automat, "Kein offener Parkvorgang für AG1"));
-    std::string kasse = renderPage(Page::Kasse, store, "AG1", Notice{}, NOW, true);
-    TEST_ASSERT_TRUE(contains(kasse, "abgeschlossen (Freizeit)"));
-    TEST_ASSERT_FALSE(contains(kasse, "/kasse/pay"));
+    std::string html = renderKassePage(store, "AG1", Notice{}, NOW, true, true);
+    TEST_ASSERT_TRUE(contains(html, "abgeschlossen (Freizeit)"));
+    TEST_ASSERT_FALSE(contains(html, "/kasse/pay"));
 }
 
 void test_page_escapes_query_and_flags_invalid_plate()
 {
     SessionStore store;
-    std::string html = renderPage(Page::Kasse, store, "<script>", Notice{}, NOW, true);
+    std::string html = renderKassePage(store, "<script>", Notice{}, NOW, true, true);
     TEST_ASSERT_FALSE(contains(html, "<script>"));
     TEST_ASSERT_TRUE(contains(html, "&lt;script&gt;"));
     TEST_ASSERT_TRUE(contains(html, "Ungültiges Kennzeichen"));
@@ -276,9 +255,19 @@ void test_page_without_time_offers_no_payment()
 {
     SessionStore store;
     store.openEntry("LU123456", NOW - 80 * MIN);
-    std::string html = renderPage(Page::Automat, store, "LU123456", Notice{}, NOW, false);
+    std::string html = renderKassePage(store, "LU123456", Notice{}, NOW, false, true);
     TEST_ASSERT_TRUE(contains(html, "Uhrzeit nicht synchronisiert"));
-    TEST_ASSERT_FALSE(contains(html, "/automat/pay"));
+    TEST_ASSERT_FALSE(contains(html, "/kasse/pay"));
+}
+
+void test_page_without_kasse_shows_fault_only()
+{
+    SessionStore store;
+    std::string html = renderKassePage(store, "LU123456", Notice{}, 0, false, false);
+    TEST_ASSERT_TRUE(contains(html, "Kasse nicht erreichbar"));
+    TEST_ASSERT_FALSE(contains(html, "Uhrzeit nicht synchronisiert"));
+    TEST_ASSERT_FALSE(contains(html, "<h2>Parkvorgänge</h2>"));
+    TEST_ASSERT_FALSE(contains(html, "Kein offener Parkvorgang"));
 }
 
 void test_tariff_summary_matches_tariff_md()
@@ -290,7 +279,7 @@ void test_tariff_summary_matches_tariff_md()
 
 void test_tariff_page_us14_tf19()
 {
-    std::string html = renderTariffPage();
+    std::string html = renderTariffPage(Role::Public);
     TEST_ASSERT_TRUE(contains(html, "15 Freiminuten; wird die Freizeit überschritten"));
     // reference values from tariff.md
     TEST_ASSERT_TRUE(contains(html, "<td>0 h 15 min</td><td>CHF 0.00</td>"));        // R-02
@@ -304,18 +293,23 @@ void test_tariff_page_us14_tf19()
     TEST_ASSERT_TRUE(contains(html, "<td>24 h 0 min</td><td>CHF 20.00</td>"));       // R-09
     TEST_ASSERT_TRUE(contains(html, "<td>24 h 0 min 1 s</td><td>CHF 22.00</td>"));   // R-10
     TEST_ASSERT_TRUE(contains(html, "<td>48 h 0 min</td><td>CHF 40.00</td>"));       // R-11
+    TEST_ASSERT_FALSE(contains(html, "href=\"/kasse\"")); // public nav
 }
 
-void test_tariff_linked_from_kasse_and_automat_tf19()
+void test_tariff_linked_from_kasse_tf19()
 {
     SessionStore store;
     store.openEntry("LU123456", NOW - 80 * MIN);
-    for (Page p : {Page::Kasse, Page::Automat})
-    {
-        std::string html = renderPage(p, store, "LU123456", Notice{}, NOW, true);
-        TEST_ASSERT_TRUE(contains(html, "<a href=\"/tarif\">Tarif</a>"));
-        TEST_ASSERT_TRUE(contains(html, "<a href=\"/tarif\">Tarif anzeigen</a>"));
-    }
+    std::string html = renderKassePage(store, "LU123456", Notice{}, NOW, true, true);
+    TEST_ASSERT_TRUE(contains(html, "<a href=\"/tarif\">Tarif</a>"));
+    TEST_ASSERT_TRUE(contains(html, "<a href=\"/tarif\">Tarif anzeigen</a>"));
+}
+
+void test_kasse_server_page_links_to_pico2()
+{
+    std::string html = renderKasseServerPage("http://192.168.1.51");
+    TEST_ASSERT_TRUE(contains(html, "<a href=\"http://192.168.1.51\">"));
+    TEST_ASSERT_FALSE(contains(html, "<nav>"));
 }
 
 int main()
@@ -330,17 +324,18 @@ int main()
     RUN_TEST(test_payment_messages_tf20_tf21_tf22);
     RUN_TEST(test_parse_chf);
     RUN_TEST(test_html_escape);
-    RUN_TEST(test_pay_form_tf20_card_then_already_paid);
-    RUN_TEST(test_pay_form_tf21_cash);
-    RUN_TEST(test_pay_form_rejects_bad_input);
+    RUN_TEST(test_session_list_order_active_first);
     RUN_TEST(test_kasse_page_tf19);
+    RUN_TEST(test_kasse_list_shows_active_before_closed);
     RUN_TEST(test_paid_session_keeps_pay_form_tf20);
-    RUN_TEST(test_automat_without_session_tf22);
-    RUN_TEST(test_automat_ignores_closed_kasse_shows_it);
+    RUN_TEST(test_kasse_without_session_tf22);
+    RUN_TEST(test_kasse_shows_closed_session_without_payment);
     RUN_TEST(test_page_escapes_query_and_flags_invalid_plate);
     RUN_TEST(test_page_without_time_offers_no_payment);
+    RUN_TEST(test_page_without_kasse_shows_fault_only);
     RUN_TEST(test_tariff_summary_matches_tariff_md);
     RUN_TEST(test_tariff_page_us14_tf19);
-    RUN_TEST(test_tariff_linked_from_kasse_and_automat_tf19);
+    RUN_TEST(test_tariff_linked_from_kasse_tf19);
+    RUN_TEST(test_kasse_server_page_links_to_pico2);
     return UNITY_END();
 }

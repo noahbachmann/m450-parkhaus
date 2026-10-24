@@ -8,8 +8,6 @@
 
 namespace
 {
-    constexpr uint32_t MAX_CASH_RAPPEN = 100000;
-
     std::string trim(const std::string& s)
     {
         size_t begin = s.find_first_not_of(" \t");
@@ -65,6 +63,23 @@ SessionView describeSession(const ParkingSession& session, int64_t now)
         v.payment = std::string(paymentMethodLabel(session.method)) + ", " + session.txRef;
     }
     return v;
+}
+
+std::vector<const ParkingSession*> sessionsForList(const SessionStore& store)
+{
+    std::vector<const ParkingSession*> list;
+    const std::vector<ParkingSession>& all = store.all();
+    for (bool active : {true, false})
+    {
+        for (auto it = all.rbegin(); it != all.rend(); ++it)
+        {
+            if (isActive(it->status) == active)
+            {
+                list.push_back(&*it);
+            }
+        }
+    }
+    return list;
 }
 
 std::string tariffNote(int64_t durationSeconds, uint32_t feeRappen)
@@ -137,36 +152,6 @@ bool paymentSucceeded(const PaymentResult& result)
 std::string noSessionMessage(const std::string& plate)
 {
     return "Kein offener Parkvorgang für " + plate;
-}
-
-PayFormResult handlePayForm(SessionStore& store, const std::string& kz, const std::string& method,
-                            const std::string& amount, int64_t now, bool timeOk)
-{
-    PayFormResult r;
-    if (!timeOk)
-    {
-        r.notice = {"err", "Uhrzeit nicht synchronisiert – bitte später erneut versuchen"};
-        return r;
-    }
-    PayMethod m;
-    if (!parsePayMethod(method, m))
-    {
-        r.notice = {"err", "Bitte Zahlungsmittel wählen"};
-        return r;
-    }
-    uint32_t cash = 0;
-    if (m == PayMethod::Cash && !parseChf(amount, cash))
-    {
-        cash = 0; // pay() answers InvalidAmount
-    }
-    std::string plate = normalizePlate(kz);
-    PaymentResult p = pay(store, plate, m, now, cash);
-    r.changed = paymentSucceeded(p);
-    const char* cls = p.kind == PaymentResult::Kind::Paid          ? "ok"
-                      : p.kind == PaymentResult::Kind::PartialCash ? "info"
-                                                                   : "err";
-    r.notice = {cls, paymentMessage(p, plate)};
-    return r;
 }
 
 bool parsePayMethod(const std::string& name, PayMethod& method)

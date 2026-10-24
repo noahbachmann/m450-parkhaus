@@ -10,6 +10,8 @@ namespace
     constexpr int64_t NOW = 1760530000; // 15.10.2025 14:06:40 Zurich (CEST)
     constexpr int64_t MIN = 60;
 
+    RegistrationList regs; // only touched by «Neuer Kunde registrieren»
+
     bool contains(const std::string& text, const std::string& part)
     {
         return text.find(part) != std::string::npos;
@@ -47,6 +49,7 @@ namespace
 
 void setUp()
 {
+    regs = RegistrationList{};
 }
 
 void tearDown()
@@ -71,7 +74,7 @@ void test_remote_open_entry_opens_session_tf16()
 {
     LocalKasse kasse;
     EventLog log;
-    RemoteOpenResult r = remoteOpen(GateLane::Entry, "BE4711", "Kennzeichen nicht erkannt", NOW, kasse, log);
+    RemoteOpenResult r = remoteOpen(GateLane::Entry, "BE4711", "Kennzeichen nicht erkannt", "", NOW, kasse, regs, log);
     TEST_ASSERT_TRUE(r.open);
     TEST_ASSERT_TRUE(r.logged);
     TEST_ASSERT_EQUAL_STRING("Schranke Einfahrt geöffnet – Parkvorgang eröffnet", r.notice.text.c_str());
@@ -92,7 +95,7 @@ void test_remote_open_without_reason_tf17()
     EventLog log;
     for (const char* reason : {"", "weil ich will"})
     {
-        RemoteOpenResult r = remoteOpen(GateLane::Entry, "BE4711", reason, NOW, kasse, log);
+        RemoteOpenResult r = remoteOpen(GateLane::Entry, "BE4711", reason, "", NOW, kasse, regs, log);
         TEST_ASSERT_FALSE(r.open);
         TEST_ASSERT_FALSE(r.logged);
         TEST_ASSERT_EQUAL_STRING("Bitte Grund auswählen", r.notice.text.c_str());
@@ -106,7 +109,7 @@ void test_remote_open_exit_unpaid_tf31()
     LocalKasse kasse;
     EventLog log;
     kasse.store.openEntry("ZH98765", NOW - 150 * MIN);
-    RemoteOpenResult r = remoteOpen(GateLane::Exit, "ZH98765", "Kulanz", NOW, kasse, log);
+    RemoteOpenResult r = remoteOpen(GateLane::Exit, "ZH98765", "Kulanz", "", NOW, kasse, regs, log);
     TEST_ASSERT_TRUE(r.open);
     TEST_ASSERT_EQUAL_STRING("Schranke Ausfahrt geöffnet – ohne Zahlung", r.notice.text.c_str());
     const ParkingSession* s = kasse.store.findLatest("ZH98765");
@@ -125,11 +128,11 @@ void test_remote_open_exit_paid_and_without_session()
     kasse.store.openEntry("LU123456", NOW - 80 * MIN);
     pay(kasse.store, "LU123456", PayMethod::Twint, NOW);
     TEST_ASSERT_EQUAL_STRING("Schranke Ausfahrt geöffnet – bezahlt",
-                             remoteOpen(GateLane::Exit, "LU123456", "Technische Störung", NOW, kasse, log)
+                             remoteOpen(GateLane::Exit, "LU123456", "Technische Störung", "", NOW, kasse, regs, log)
                                  .notice.text.c_str());
     TEST_ASSERT_EQUAL(SessionStatus::Closed, kasse.store.findLatest("LU123456")->status);
     TEST_ASSERT_EQUAL_STRING("Schranke Ausfahrt geöffnet – kein Parkvorgang",
-                             remoteOpen(GateLane::Exit, "SZ555", "Kulanz", NOW, kasse, log).notice.text.c_str());
+                             remoteOpen(GateLane::Exit, "SZ555", "Kulanz", "", NOW, kasse, regs, log).notice.text.c_str());
     TEST_ASSERT_EQUAL_UINT(2, log.all().size());
 }
 
@@ -140,7 +143,7 @@ void test_remote_open_with_kasse_off_stays_closed()
     EventLog log;
     for (GateLane lane : {GateLane::Entry, GateLane::Exit})
     {
-        RemoteOpenResult r = remoteOpen(lane, "BE4711", "Kennzeichen nicht erkannt", NOW, kasse, log);
+        RemoteOpenResult r = remoteOpen(lane, "BE4711", "Kennzeichen nicht erkannt", "", NOW, kasse, regs, log);
         TEST_ASSERT_FALSE(r.open);
         TEST_ASSERT_TRUE(r.logged);
         TEST_ASSERT_EQUAL_STRING("Kasse nicht erreichbar – Schranke bleibt zu", r.notice.text.c_str());
@@ -159,7 +162,7 @@ void test_remote_open_needs_valid_plate()
     EventLog log;
     for (const char* kz : {"", "LU-12#45"})
     {
-        RemoteOpenResult r = remoteOpen(GateLane::Entry, kz, "Kennzeichen nicht erkannt", NOW, kasse, log);
+        RemoteOpenResult r = remoteOpen(GateLane::Entry, kz, "Kennzeichen nicht erkannt", "", NOW, kasse, regs, log);
         TEST_ASSERT_FALSE(r.open);
         TEST_ASSERT_FALSE(r.logged);
         TEST_ASSERT_EQUAL_STRING("Bitte gültiges Kennzeichen eingeben", r.notice.text.c_str());
@@ -182,7 +185,7 @@ void test_remote_open_unexpected_reply_stays_closed()
         }
     } kasse;
     EventLog log;
-    RemoteOpenResult r = remoteOpen(GateLane::Exit, "ZH98765", "Kulanz", NOW, kasse, log);
+    RemoteOpenResult r = remoteOpen(GateLane::Exit, "ZH98765", "Kulanz", "", NOW, kasse, regs, log);
     TEST_ASSERT_FALSE(r.open);
     TEST_ASSERT_FALSE(r.logged);
     TEST_ASSERT_EQUAL_STRING("Unerwartete Antwort der Kasse (503) – Schranke bleibt zu", r.notice.text.c_str());
@@ -216,7 +219,7 @@ void test_operator_page_filter_tf14()
         logBarrierEvent(log, i % 2 == 0 ? GateLane::Entry : GateLane::Exit, BarrierEvent::SafetyStop, NOW + i);
     }
     LocalKasse kasse;
-    remoteOpen(GateLane::Entry, "BE4711", "Kennzeichen nicht erkannt", NOW + 10, kasse, log);
+    remoteOpen(GateLane::Entry, "BE4711", "Kennzeichen nicht erkannt", "", NOW + 10, kasse, regs, log);
 
     OperatorLane entry{GateLane::Entry, "offen", "BE4711", "kein Parkvorgang", "",
                        "Ruftaste gedrückt – BE4711 (15.10.2025 14:06:40)"};
@@ -240,6 +243,79 @@ void test_operator_page_filter_tf14()
     TEST_ASSERT_TRUE(contains(stops, "value=\"safety_stop\" selected"));
 }
 
+void test_new_customer_registers_and_opens()
+{
+    LocalKasse kasse;
+    EventLog log;
+    RemoteOpenResult r =
+        remoteOpen(GateLane::Entry, "nw 654321", NEW_CUSTOMER_REASON, "Neu Kunde", NOW, kasse, regs, log);
+    TEST_ASSERT_TRUE(r.open);
+    TEST_ASSERT_TRUE(r.registered);
+    TEST_ASSERT_EQUAL_STRING("NW654321", r.plate.c_str());
+    TEST_ASSERT_EQUAL_STRING("ok", r.notice.cls);
+    TEST_ASSERT_EQUAL_STRING("Schranke Einfahrt geöffnet – Neukunde registriert – Parkvorgang eröffnet",
+                             r.notice.text.c_str());
+    TEST_ASSERT_TRUE(regs.contains("NW654321"));
+    TEST_ASSERT_EQUAL_STRING("Neu Kunde", regs.all()[0].name.c_str());
+    TEST_ASSERT_NOT_NULL(kasse.store.findActive("NW654321"));
+    TEST_ASSERT_EQUAL(EventType::RemoteOpening, log.all()[0].type);
+    TEST_ASSERT_EQUAL_STRING(NEW_CUSTOMER_REASON, log.all()[0].reason.c_str());
+    TEST_ASSERT_EQUAL_STRING("Neukunde registriert – Parkvorgang eröffnet", log.all()[0].note.c_str());
+}
+
+void test_new_customer_rejected_registration_stays_closed()
+{
+    LocalKasse kasse;
+    EventLog log;
+    RemoteOpenResult noName = remoteOpen(GateLane::Entry, "NW654321", NEW_CUSTOMER_REASON, "", NOW, kasse, regs, log);
+    TEST_ASSERT_FALSE(noName.open);
+    TEST_ASSERT_FALSE(noName.registered);
+    TEST_ASSERT_EQUAL_STRING("Bitte Namen eingeben (1–40 Zeichen) – Schranke bleibt zu", noName.notice.text.c_str());
+
+    regs.add("Test Kunde A", "LU123456");
+    RemoteOpenResult dup = remoteOpen(GateLane::Entry, "LU123456", NEW_CUSTOMER_REASON, "X", NOW, kasse, regs, log);
+    TEST_ASSERT_FALSE(dup.open);
+    TEST_ASSERT_EQUAL_STRING("Kennzeichen bereits registriert – Schranke bleibt zu", dup.notice.text.c_str());
+
+    RemoteOpenResult exit = remoteOpen(GateLane::Exit, "NW654321", NEW_CUSTOMER_REASON, "X", NOW, kasse, regs, log);
+    TEST_ASSERT_FALSE(exit.open);
+    TEST_ASSERT_EQUAL_STRING("Neukunden nur an der Einfahrt registrieren", exit.notice.text.c_str());
+    TEST_ASSERT_EQUAL_UINT(1, regs.all().size());
+    TEST_ASSERT_EQUAL_UINT(0, log.all().size());
+    TEST_ASSERT_EQUAL_UINT(0, kasse.store.all().size());
+}
+
+void test_new_customer_kasse_down_keeps_registration()
+{
+    LocalKasse kasse;
+    kasse.online = false;
+    EventLog log;
+    RemoteOpenResult r = remoteOpen(GateLane::Entry, "NW654321", NEW_CUSTOMER_REASON, "Neu", NOW, kasse, regs, log);
+    TEST_ASSERT_FALSE(r.open);
+    TEST_ASSERT_TRUE(r.registered);
+    TEST_ASSERT_TRUE(r.logged);
+    TEST_ASSERT_EQUAL_STRING("Kennzeichen registriert: NW654321 – Kasse nicht erreichbar – Schranke bleibt zu",
+                             r.notice.text.c_str());
+    TEST_ASSERT_TRUE(regs.contains("NW654321"));
+    TEST_ASSERT_EQUAL(EventType::KasseUnreachable, log.all()[0].type);
+}
+
+void test_operator_page_offers_new_customer_at_entry_only()
+{
+    OperatorLane entry;
+    OperatorLane exit;
+    exit.lane = GateLane::Exit;
+    EventLog log;
+    std::string html = renderOperatorPage(entry, exit, log, "", Notice{});
+    size_t exitCard = html.find("<h2>Ausfahrt</h2>");
+    size_t option = html.find("<option>Neuer Kunde registrieren</option>");
+    TEST_ASSERT_TRUE(option != std::string::npos && option < exitCard);
+    TEST_ASSERT_EQUAL_UINT(std::string::npos, html.find("Neuer Kunde registrieren</option>", exitCard));
+    TEST_ASSERT_TRUE(contains(html, "name=\"name\""));
+    TEST_ASSERT_TRUE(contains(html, "action=\"/reset\""));
+    TEST_ASSERT_TRUE(contains(html, "(Admin)"));
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -253,5 +329,9 @@ int main()
     RUN_TEST(test_remote_open_unexpected_reply_stays_closed);
     RUN_TEST(test_log_helpers_tf14_tf15_tf30);
     RUN_TEST(test_operator_page_filter_tf14);
+    RUN_TEST(test_new_customer_registers_and_opens);
+    RUN_TEST(test_new_customer_rejected_registration_stays_closed);
+    RUN_TEST(test_new_customer_kasse_down_keeps_registration);
+    RUN_TEST(test_operator_page_offers_new_customer_at_entry_only);
     return UNITY_END();
 }

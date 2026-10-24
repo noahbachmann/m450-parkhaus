@@ -5,6 +5,7 @@
 #include "codec.h"
 #include "payment.h"
 #include "plate.h"
+#include "testdata.h"
 
 namespace
 {
@@ -168,6 +169,10 @@ ApiResponse handlePay(SessionStore& store, const std::string& body, int64_t now,
     {
         method = PayMethod::Twint;
     }
+    else if (name == "cash" && (req["amount"].isNull() || req["amount"].is<uint32_t>()))
+    {
+        method = PayMethod::Cash;
+    }
     else
     {
         return error(400, "bad_request");
@@ -180,7 +185,7 @@ ApiResponse handlePay(SessionStore& store, const std::string& body, int64_t now,
     {
         return error(503, "time_not_synced");
     }
-    PaymentResult r = pay(store, plate, method, now);
+    PaymentResult r = pay(store, plate, method, now, req["amount"].as<uint32_t>());
     switch (r.kind)
     {
     case PaymentResult::Kind::Paid:
@@ -189,10 +194,25 @@ ApiResponse handlePay(SessionStore& store, const std::string& body, int64_t now,
         doc["kz"] = plate;
         doc["status"] = "bezahlt";
         doc["amount"] = r.amountRappen;
-        doc["method"] = r.method == PaymentMethod::Twint ? "twint" : "card";
+        doc["method"] = r.method == PaymentMethod::Twint ? "twint" : r.method == PaymentMethod::Cash ? "cash" : "card";
         doc["tx"] = r.txRef;
+        if (r.method == PaymentMethod::Cash)
+        {
+            doc["change"] = r.changeRappen;
+        }
         return respond(200, doc);
     }
+    case PaymentResult::Kind::PartialCash:
+    {
+        JsonDocument doc;
+        doc["kz"] = plate;
+        doc["status"] = "unbezahlt";
+        doc["amount"] = r.amountRappen;
+        doc["remaining"] = r.remainingRappen;
+        return respond(200, doc);
+    }
+    case PaymentResult::Kind::InvalidAmount:
+        return error(400, "invalid_amount");
     case PaymentResult::Kind::Declined:
         return error(402, "declined");
     case PaymentResult::Kind::AlreadyPaid:
@@ -204,10 +224,24 @@ ApiResponse handlePay(SessionStore& store, const std::string& body, int64_t now,
     case PaymentResult::Kind::TimeError:
         return error(503, "time_not_synced");
     case PaymentResult::Kind::InvalidPlate:
-        return error(400, "invalid_plate");
-    case PaymentResult::Kind::PartialCash:
-    case PaymentResult::Kind::InvalidAmount:
         break;
     }
-    return error(400, "bad_request");
+    return error(400, "invalid_plate");
+}
+
+ApiResponse handleSessions(const SessionStore& store, int64_t now, bool timeSynced)
+{
+    JsonDocument doc;
+    deserializeJson(doc, sessionsToJson(store));
+    doc["now"] = now;
+    doc["synced"] = timeSynced;
+    return respond(200, doc);
+}
+
+ApiResponse handleReset(SessionStore& store)
+{
+    loadDefaultSessions(store);
+    JsonDocument doc;
+    doc["status"] = "reset";
+    return respond(200, doc);
 }

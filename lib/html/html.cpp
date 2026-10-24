@@ -1,10 +1,16 @@
 #include "html.h"
 
+#include "auth.h"
+
 namespace
 {
     const char* STYLE = "body{font-family:system-ui,sans-serif;max-width:860px;margin:0 auto;padding:16px;"
                         "background:#f6f7f9;color:#1d232b}"
-                        "nav a{margin-right:16px;font-weight:600}"
+                        "nav{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;padding-bottom:10px;"
+                        "border-bottom:1px solid #dde1e6}"
+                        "nav a{font-weight:600}"
+                        ".who{margin-left:auto;padding:4px 10px;border-radius:14px;background:#e8ebef;font-size:.9rem}"
+                        ".who.admin{background:#1d4ed8;color:#fff}.who.admin button{font-size:.85rem;padding:2px 8px}"
                         "h1{font-size:1.5rem}h2{font-size:1.15rem;margin-top:28px}"
                         "form{margin:12px 0}input,button,select{font-size:1rem;padding:6px 10px}"
                         "button{cursor:pointer}"
@@ -53,15 +59,26 @@ std::string htmlEscape(const std::string& text)
     return out;
 }
 
-void appendPageStart(std::string& html, const char* title, const char* nav, const char* heading)
+void appendPageStart(std::string& html, const char* title, Role role, const char* heading)
 {
     html += "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\">"
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>";
     html += title;
     html += " – Parkhaus</title><style>";
     html += STYLE;
-    html += "</style></head><body><nav>";
-    html += nav;
+    html += "</style></head><body><nav><a href=\"/kamera\">Kamerasimulation</a><a href=\"/tarif\">Tarif</a>";
+    if (role == Role::Admin)
+    {
+        html += "<a href=\"/kasse\">Kasse</a><a href=\"/registrierung\">Registrierung</a>"
+                "<a href=\"/betrieb\">Betrieb</a><span class=\"who admin\">&#128100; ";
+        html += OPERATOR_USER;
+        html += " (Admin) <form method=\"post\" action=\"/logout\" class=\"inline\">"
+                "<button type=\"submit\">Abmelden</button></form></span>";
+    }
+    else
+    {
+        html += "<span class=\"who\">&#128274; <a href=\"/login\">Anmelden</a></span>";
+    }
     html += "</nav><h1>";
     html += heading;
     html += "</h1>";

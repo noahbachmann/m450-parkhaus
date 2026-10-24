@@ -134,7 +134,7 @@ void test_tf27_abort_keeps_session_open()
     kasse.store.openEntry("ZH98765", NOW - 58 * MIN);
     LaneTerminal t = exitTerminal();
     GateResult unpaid = exitRequest("ZH98765", kasse);
-    TEST_ASSERT_EQUAL_STRING("Gebühr CHF 2.00 nicht bezahlt – bitte am Automaten bezahlen", unpaid.message.c_str());
+    TEST_ASSERT_EQUAL_STRING("Gebühr CHF 2.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen", unpaid.message.c_str());
     recordGate(t, unpaid);
     GateResult r = abortAtTerminal(t);
     TEST_ASSERT_FALSE(r.open);
@@ -162,8 +162,9 @@ void test_call_button()
     TEST_ASSERT_EQUAL(EventType::CallButton, log.all()[0].type);
     TEST_ASSERT_EQUAL(GateLane::Entry, log.all()[0].lane);
     TEST_ASSERT_EQUAL_STRING("BE4711", log.all()[0].plate.c_str());
-    recordRemoteOpening(t);
+    recordRemoteOpening(t, "BE4711");
     TEST_ASSERT_EQUAL_STRING("", callLabel(t).c_str());
+    TEST_ASSERT_EQUAL_STRING("BE4711", t.lastPlate.c_str());
 }
 
 void test_pay_without_offer_or_kasse()
@@ -190,11 +191,54 @@ void test_paid_elsewhere_meanwhile_just_exits()
     EventLog log;
     LaneTerminal t = exitTerminal();
     recordGate(t, exitRequest("ZH98765", kasse));
-    handlePay(kasse.store, "{\"kz\":\"ZH98765\",\"method\":\"twint\"}", NOW, true); // paid at the Automat
+    handlePay(kasse.store, "{\"kz\":\"ZH98765\",\"method\":\"twint\"}", NOW, true); // paid at the Kasse
     GateResult r = payAtTerminal(t, "card_ok", NOW, kasse, log);
     TEST_ASSERT_TRUE(r.open);
     TEST_ASSERT_EQUAL_STRING("ZH98765 – Gute Fahrt, Ausfahrt frei", r.message.c_str());
     TEST_ASSERT_EQUAL_UINT32(2, kasse.store.nextTxNumber()); // no double booking
+}
+
+void test_drive_through_then_closed_message()
+{
+    LaneTerminal t;
+    t.lane = GateLane::Entry;
+    GateResult opened;
+    opened.open = true;
+    opened.plate = "LU123456";
+    recordGate(t, opened);
+    TEST_ASSERT_EQUAL_STRING("", closedAfterPass(t).message.c_str()); // nothing passed yet
+    GateResult r = driveThrough(t, true);
+    TEST_ASSERT_EQUAL_STRING("ok", r.cls);
+    TEST_ASSERT_EQUAL_STRING("LU123456 durchgefahren – Schranke schliesst", r.message.c_str());
+    TEST_ASSERT_TRUE(t.passing);
+    GateResult closed = closedAfterPass(t);
+    TEST_ASSERT_EQUAL_STRING("ok", closed.cls);
+    TEST_ASSERT_EQUAL_STRING("LU123456 durchgefahren – Schranke geschlossen", closed.message.c_str());
+    TEST_ASSERT_EQUAL_STRING("", closedAfterPass(t).message.c_str()); // once
+}
+
+void test_drive_through_without_open_barrier()
+{
+    LaneTerminal t = exitTerminal();
+    GateResult r = driveThrough(t, false);
+    TEST_ASSERT_EQUAL_STRING("err", r.cls);
+    TEST_ASSERT_EQUAL_STRING("Keine offene Schranke – Fahrzeug kann nicht durchfahren", r.message.c_str());
+    TEST_ASSERT_FALSE(t.passing);
+    TEST_ASSERT_EQUAL_STRING("Fahrzeug durchgefahren – Schranke schliesst", driveThrough(t, true).message.c_str());
+}
+
+void test_new_opening_clears_pass()
+{
+    LaneTerminal t = exitTerminal();
+    driveThrough(t, true);
+    recordRemoteOpening(t, "ZH98765");
+    TEST_ASSERT_FALSE(t.passing);
+    driveThrough(t, true);
+    GateResult opened;
+    opened.open = true;
+    opened.plate = "LU123456";
+    recordGate(t, opened);
+    TEST_ASSERT_FALSE(t.passing);
 }
 
 int main()
@@ -208,5 +252,8 @@ int main()
     RUN_TEST(test_call_button);
     RUN_TEST(test_pay_without_offer_or_kasse);
     RUN_TEST(test_paid_elsewhere_meanwhile_just_exits);
+    RUN_TEST(test_drive_through_then_closed_message);
+    RUN_TEST(test_drive_through_without_open_barrier);
+    RUN_TEST(test_new_opening_clears_pass);
     return UNITY_END();
 }

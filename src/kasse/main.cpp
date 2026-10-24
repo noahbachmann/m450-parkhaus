@@ -7,9 +7,7 @@
 #include "format.h"
 #include "kasse_api.h"
 #include "kasse_pages.h"
-#include "kasse_view.h"
 #include "net.h"
-#include "plate.h"
 #include "secrets.h"
 #include "status_led.h"
 #include "storage.h"
@@ -23,10 +21,6 @@ WebServer server(80);
 bool serverStarted = false;
 SessionStore sessions;
 unsigned long lastReportMs = 0;
-
-// Result of the last POST, shown once after the redirect (post/redirect/get: reload doesn't pay twice).
-uint32_t noticeId = 0;
-Notice lastNotice;
 
 void saveSessions()
 {
@@ -75,19 +69,14 @@ std::string argOf(const char* name)
     return server.arg(name).c_str();
 }
 
-void redirectWithNotice(const String& path, const std::string& plate, const char* cls, const std::string& text)
+// API call that changes the sessions on success.
+void sendApiChange(const ApiResponse& r, int okStatus)
 {
-    lastNotice = {cls, text};
-    noticeId++;
-    String url = path + "?";
-    if (isValidPlate(plate))
+    if (r.status == okStatus)
     {
-        url += "kz=" + String(plate.c_str()) + "&";
+        saveSessions();
     }
-    url += "m=" + String(noticeId);
-    server.sendHeader("Location", url);
-    server.send(303);
-    logRequest(303);
+    sendApi(r);
 }
 
 // The body of an application/json POST is in the "plain" argument.
@@ -96,69 +85,38 @@ void onApiStatus()
     sendApi(handleStatus(sessions, argOf("kz"), nowUtc()));
 }
 
+void onApiSessions()
+{
+    sendApi(handleSessions(sessions, nowUtc(), timeReady()));
+}
+
 void onApiEntry()
 {
-    ApiResponse r = handleEntry(sessions, argOf("plain"), nowUtc(), timeReady());
-    if (r.status == 201)
-    {
-        saveSessions();
-    }
-    sendApi(r);
+    sendApiChange(handleEntry(sessions, argOf("plain"), nowUtc(), timeReady()), 201);
 }
 
 void onApiExit()
 {
-    ApiResponse r = handleExit(sessions, argOf("plain"), nowUtc(), timeReady());
-    if (r.status == 200)
-    {
-        saveSessions();
-    }
-    sendApi(r);
+    sendApiChange(handleExit(sessions, argOf("plain"), nowUtc(), timeReady()), 200);
 }
 
 void onApiPay()
 {
-    ApiResponse r = handlePay(sessions, argOf("plain"), nowUtc(), timeReady());
-    if (r.status == 200)
-    {
-        saveSessions();
-    }
-    sendApi(r);
+    sendApiChange(handlePay(sessions, argOf("plain"), nowUtc(), timeReady()), 200);
 }
 
-void showPage(Page page)
+void onApiReset()
 {
-    Notice notice;
-    if (server.hasArg("m") && server.arg("m").toInt() == static_cast<long>(noticeId))
-    {
-        notice = lastNotice;
-    }
-    std::string html = renderPage(page, sessions, argOf("kz"), notice, nowUtc(), timeReady());
-    server.send(200, "text/html; charset=utf-8", String(html.c_str()));
-    logRequest(200);
-}
-
-void onPay(Page page)
-{
-    std::string plate = normalizePlate(argOf("kz"));
-    PayFormResult r = handlePayForm(sessions, plate, argOf("method"), argOf("amount"), nowUtc(), timeReady());
-    if (r.changed)
-    {
-        saveSessions();
-    }
-    Serial.print("[pay] ");
-    Serial.print(plate.c_str());
-    Serial.print(": ");
-    Serial.println(r.notice.text.c_str());
-    redirectWithNotice(pagePath(page), plate, r.notice.cls, r.notice.text);
-}
-
-void onReset()
-{
-    loadDefaultSessions(sessions);
-    saveSessions();
     Serial.println("sessions: test-data reset");
-    redirectWithNotice("/kasse", "", "ok", "Testdaten zurückgesetzt – keine Parkvorgänge, Transaktionszähler auf 1");
+    sendApiChange(handleReset(sessions), 200);
+}
+
+// The pages are on Pico 2.
+void onRoot()
+{
+    String uiUrl = String("http://") + IPAddress(SCHRANKEN_IP).toString();
+    server.send(200, "text/html; charset=utf-8", String(renderKasseServerPage(uiUrl.c_str()).c_str()));
+    logRequest(200);
 }
 
 void onNotFound()
@@ -173,19 +131,9 @@ void setupRoutes()
     server.on("/api/entry", HTTP_POST, onApiEntry);
     server.on("/api/exit", HTTP_POST, onApiExit);
     server.on("/api/pay", HTTP_POST, onApiPay);
-    server.on("/", HTTP_GET, []() {
-        server.sendHeader("Location", "/kasse");
-        server.send(303);
-    });
-    server.on("/kasse", HTTP_GET, []() { showPage(Page::Kasse); });
-    server.on("/automat", HTTP_GET, []() { showPage(Page::Automat); });
-    server.on("/tarif", HTTP_GET, []() {
-        server.send(200, "text/html; charset=utf-8", String(renderTariffPage().c_str()));
-        logRequest(200);
-    });
-    server.on("/kasse/pay", HTTP_POST, []() { onPay(Page::Kasse); });
-    server.on("/automat/pay", HTTP_POST, []() { onPay(Page::Automat); });
-    server.on("/reset", HTTP_POST, onReset);
+    server.on("/api/sessions", HTTP_GET, onApiSessions);
+    server.on("/api/reset", HTTP_POST, onApiReset);
+    server.on("/", HTTP_GET, onRoot);
     server.onNotFound(onNotFound);
 }
 

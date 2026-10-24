@@ -21,14 +21,22 @@ struct LaneTerminal
     bool callPending = false; // call button pressed or payment alert, not yet handled by the operator
     int64_t callTime = 0;
     std::string callText;   // «Ruftaste gedrückt», «Zahlung 5× abgelehnt»
+    bool passing = false;   // «Durchfahren» pressed, barrier not closed yet
 };
 
 // After an entry/exit decision: remembers the plate, offers payment after an unpaid exit, clears the call and
 // payment state when the barrier opens.
 void recordGate(LaneTerminal& t, const GateResult& result);
 
-// Operator opened the barrier: call handled, payment offer gone.
-void recordRemoteOpening(LaneTerminal& t);
+// Operator opened the barrier for plate: call handled, payment offer gone.
+void recordRemoteOpening(LaneTerminal& t, const std::string& plate);
+
+// «Durchfahren»: the vehicle passed the open barrier (stands in for the safety loop). barrierUp = the
+// barrier accepted it (Barrier::vehiclePassed()).
+GateResult driveThrough(LaneTerminal& t, bool barrierUp);
+// Call when the barrier is closed: after «Durchfahren» returns «… durchgefahren – Schranke geschlossen»
+// once; otherwise an empty message (nothing to show).
+GateResult closedAfterPass(LaneTerminal& t);
 
 // «Ruftaste»: logs the call (lane, last plate) and shows it in the operator view.
 GateResult pressCallButton(LaneTerminal& t, int64_t now, EventLog& log);

@@ -1,5 +1,5 @@
-# PC simulator: Pico 1 "Kasse" (API, Kasse/Automat, sessions) and Pico 2 "Schranken" (registration, camera,
-# barriers), talking HTTP like the real boards. Start: docker compose up --build
+# PC simulator: Pico 1 "Kasse" (JSON API, sessions) and Pico 2 "Schranken" (all pages, barriers), talking HTTP
+# like the real boards. Start: docker compose up --build, then http://localhost:8082
 services:
   kasse:
     build: .

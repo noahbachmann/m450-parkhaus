@@ -7,6 +7,7 @@
 #include "format.h"
 #include "gate.h"
 #include "kasse_api.h"
+#include "kasse_client.h"
 #include "kasse_pages.h"
 #include "kasse_view.h"
 #include "operator_view.h"
@@ -17,7 +18,7 @@
 #include "testdata.h"
 
 // Phase-1 system test (test-concept.md, P1 cases) without hardware: Pico 2 logic (registrations, gate,
-// barriers) talks to Pico 1 logic (kasse_api handlers, pay form, pages) through an in-process link.
+// barriers, Kasse page and payment) talks to Pico 1 logic (kasse_api handlers) through an in-process link.
 // A "reboot" is a round-trip through the flash file format.
 
 namespace
@@ -72,6 +73,7 @@ namespace
             ApiResponse r = p == "/api/entry"  ? handleEntry(sessions, body, now, true)
                             : p == "/api/exit" ? handleExit(sessions, body, now, true)
                             : p == "/api/pay"  ? handlePay(sessions, body, now, true)
+                            : p == "/api/reset" ? handleReset(sessions)
                                                : ApiResponse{404, "{\"error\":\"not_found\"}"};
             return {r.status, r.body};
         }
@@ -82,7 +84,8 @@ namespace
             {
                 return {};
             }
-            ApiResponse r = handleStatus(sessions, urlArg(pathAndQuery, "kz"), now);
+            ApiResponse r = pathAndQuery == "/api/sessions" ? handleSessions(sessions, now, true)
+                                                            : handleStatus(sessions, urlArg(pathAndQuery, "kz"), now);
             return {r.status, r.body};
         }
 
@@ -118,14 +121,25 @@ namespace
             return r;
         }
 
+        // Kasse page on Pico 2 → POST /api/pay.
         FormResult pay(const std::string& kz, const char* method, const char* amount = "")
         {
-            return handlePayForm(sessions, kz, method, amount, now, true);
+            return payAtKasse(*this, kz, method, amount);
         }
 
-        std::string page(Page p, const std::string& kz)
+        // Kasse page on Pico 2, sessions read from Pico 1.
+        std::string page(const std::string& kz)
         {
-            return renderPage(p, sessions, kz, Notice{}, now, true);
+            KasseSnapshot snap = fetchSessions(*this);
+            return renderKassePage(snap.sessions, kz, Notice{}, snap.now, snap.synced, snap.reachable);
+        }
+
+        // «Durchfahren» on the camera page.
+        GateResult driveThrough(GateLane lane)
+        {
+            bool entry = lane == GateLane::Entry;
+            return ::driveThrough(entry ? entryTerminal : exitTerminal,
+                                  (entry ? entryBarrier : exitBarrier).vehiclePassed());
         }
 
         HttpReply status(const std::string& kz)
@@ -146,13 +160,14 @@ namespace
         }
 
         // Operator «Schranke öffnen» → «Bestätigen».
-        RemoteOpenResult remote(GateLane lane, const std::string& kz, const std::string& reason)
+        RemoteOpenResult remote(GateLane lane, const std::string& kz, const std::string& reason,
+                                const std::string& name = "")
         {
-            RemoteOpenResult r = remoteOpen(lane, kz, reason, now, *this, log);
+            RemoteOpenResult r = remoteOpen(lane, kz, reason, name, now, *this, registrations, log);
             if (r.open)
             {
                 (lane == GateLane::Entry ? entryBarrier : exitBarrier).open(nowMs);
-                recordRemoteOpening(lane == GateLane::Entry ? entryTerminal : exitTerminal);
+                recordRemoteOpening(lane == GateLane::Entry ? entryTerminal : exitTerminal, r.plate);
             }
             return r;
         }
@@ -311,7 +326,7 @@ void test_tf07_unregistered_stays_closed_no_session()
     sys.wait(10);
     TEST_ASSERT_EQUAL(BarrierState::Closed, sys.entryBarrier.state());
     TEST_ASSERT_EQUAL_UINT(0, sys.sessions.all().size());
-    TEST_ASSERT_TRUE(contains(sys.page(Page::Kasse, "BE4711"), "Kein offener Parkvorgang für BE4711"));
+    TEST_ASSERT_TRUE(contains(sys.page("BE4711"), "Kein offener Parkvorgang für BE4711"));
 }
 
 void test_tf08_ten_entry_cycles()
@@ -336,11 +351,11 @@ void test_tf09_entry_time_and_running_duration()
     const ParkingSession* s = sys.sessions.findActive("ZH98765");
     TEST_ASSERT_NOT_NULL(s);
     TEST_ASSERT_EQUAL_INT64(START, s->entry);
-    std::string html = sys.page(Page::Kasse, "ZH98765");
+    std::string html = sys.page("ZH98765");
     TEST_ASSERT_TRUE(contains(html, "<td>15.10.2025 14:06:40</td>"));
     TEST_ASSERT_TRUE(contains(html, "<td>0 h 0 min</td>"));
     sys.wait(90);
-    TEST_ASSERT_TRUE(contains(sys.page(Page::Kasse, "ZH98765"), "<td>0 h 1 min</td>"));
+    TEST_ASSERT_TRUE(contains(sys.page("ZH98765"), "<td>0 h 1 min</td>"));
 }
 
 void test_tf10_second_entry_rejected()
@@ -393,7 +408,7 @@ void test_tf18_reference_fees_via_backdated_entry()
         GateResult r = c.ago == 0 ? sys.entry("LU123456") : sys.entryAgo("LU123456", c.ago);
         TEST_ASSERT_TRUE_MESSAGE(r.open, c.id);
         sys.wait(30); // read at the Kasse within 60 s
-        std::string html = sys.page(Page::Kasse, "LU123456");
+        std::string html = sys.page("LU123456");
         TEST_ASSERT_TRUE_MESSAGE(contains(html, std::string("<th>Gebühr</th><td>") + c.fee + "</td>"), c.id);
     }
 
@@ -403,17 +418,14 @@ void test_tf18_reference_fees_via_backdated_entry()
     TEST_ASSERT_EQUAL_UINT(0, sys.sessions.all().size());
 }
 
-void test_tf19_duration_and_fee_at_kasse_and_automat()
+void test_tf19_duration_and_fee_at_kasse()
 {
     System sys;
     assertOpen(sys.entryAgo("LU123456", 80 * MIN));
-    for (Page p : {Page::Kasse, Page::Automat})
-    {
-        std::string html = sys.page(p, "LU123456");
-        TEST_ASSERT_TRUE(contains(html, "<td>1 h 20 min</td>"));
-        TEST_ASSERT_TRUE(contains(html, "<td>CHF 4.00</td>"));
-        TEST_ASSERT_TRUE(contains(html, "2 angefangene Stunden à CHF 2.00 ab Einfahrt (15 Freiminuten überschritten)"));
-    }
+    std::string html = sys.page("LU123456");
+    TEST_ASSERT_TRUE(contains(html, "<td>1 h 20 min</td>"));
+    TEST_ASSERT_TRUE(contains(html, "<td>CHF 4.00</td>"));
+    TEST_ASSERT_TRUE(contains(html, "2 angefangene Stunden à CHF 2.00 ab Einfahrt (15 Freiminuten überschritten)"));
 }
 
 void test_tf20_card_payment_once()
@@ -427,7 +439,7 @@ void test_tf20_card_payment_once()
     TEST_ASSERT_EQUAL_UINT32(2, sys.sessions.nextTxNumber());
 }
 
-void test_tf21_automat_cash_and_twint()
+void test_tf21_kasse_cash_and_twint()
 {
     System sys;
     assertOpen(sys.entryAgo("LU123456", 2 * HOUR + 30 * MIN));
@@ -445,12 +457,12 @@ void test_tf21_automat_cash_and_twint()
     TEST_ASSERT_TRUE(contains(sys.status("AG1").body, "\"status\":\"bezahlt\""));
 }
 
-void test_tf22_automat_without_session()
+void test_tf22_kasse_without_session()
 {
     System sys;
-    std::string html = sys.page(Page::Automat, "SZ 555");
+    std::string html = sys.page("SZ 555");
     TEST_ASSERT_TRUE(contains(html, "Kein offener Parkvorgang für SZ555"));
-    TEST_ASSERT_FALSE(contains(html, "/automat/pay"));
+    TEST_ASSERT_FALSE(contains(html, "/kasse/pay"));
     TEST_ASSERT_EQUAL_STRING("Kein offener Parkvorgang für SZ555", sys.pay("SZ555", "card_ok").notice.text.c_str());
     TEST_ASSERT_EQUAL_UINT32(1, sys.sessions.nextTxNumber());
 }
@@ -467,20 +479,22 @@ void test_tf23_paid_exit_closes_session()
     const ParkingSession* s = sys.sessions.findLatest("LU123456");
     TEST_ASSERT_EQUAL(SessionStatus::Closed, s->status);
     TEST_ASSERT_EQUAL_INT64(exitTime, s->exit);
-    std::string before = sys.page(Page::Kasse, "LU123456");
+    std::string before = sys.page("LU123456");
     TEST_ASSERT_TRUE(contains(before, "<td>abgeschlossen</td>"));
     TEST_ASSERT_TRUE(contains(before, "<td>1 h 21 min</td>"));
+    TEST_ASSERT_EQUAL_STRING("LU123456 durchgefahren – Schranke schliesst",
+                             sys.driveThrough(GateLane::Exit).message.c_str());
     sys.wait((BARRIER_MIN_OPEN_MS + BARRIER_CLOSE_MS) / 1000);
     TEST_ASSERT_EQUAL(BarrierState::Closed, sys.exitBarrier.state());
     sys.wait(MIN);
-    TEST_ASSERT_TRUE(contains(sys.page(Page::Kasse, "LU123456"), "<td>1 h 21 min</td>"));
+    TEST_ASSERT_TRUE(contains(sys.page("LU123456"), "<td>1 h 21 min</td>"));
 }
 
 void test_tf24_unpaid_exit_then_pay_then_exit()
 {
     System sys;
     assertOpen(sys.entryAgo("ZH98765", 2 * HOUR + 30 * MIN));
-    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen");
+    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 6.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen");
     sys.wait(10);
     TEST_ASSERT_EQUAL(BarrierState::Closed, sys.exitBarrier.state());
     TEST_ASSERT_EQUAL(SessionStatus::Open, sys.sessions.findActive("ZH98765")->status);
@@ -496,7 +510,7 @@ void test_tf25_free_time_exit()
     const ParkingSession* s = sys.sessions.findLatest("AG1");
     TEST_ASSERT_EQUAL(SessionStatus::ClosedFree, s->status);
     TEST_ASSERT_EQUAL_UINT32(0, s->amountRappen);
-    std::string html = sys.page(Page::Kasse, "AG1");
+    std::string html = sys.page("AG1");
     TEST_ASSERT_TRUE(contains(html, "<td>CHF 0.00</td>"));
     TEST_ASSERT_TRUE(contains(html, "abgeschlossen (Freizeit)"));
 }
@@ -548,7 +562,7 @@ void test_tf30_kasse_off_at_exit_paid_status_persisted()
     sys.kasseOn = true;
     TEST_ASSERT_EQUAL(SessionStatus::Paid, sys.sessions.findActive("LU123456")->status);
     assertOpen(sys.exit("LU123456"));
-    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen");
+    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 6.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen");
 }
 
 void test_tf32_whole_system()
@@ -556,8 +570,8 @@ void test_tf32_whole_system()
     System sys;
     TEST_ASSERT_TRUE(handleRegistrationForm(sys.registrations, "Test Kunde F", "OW 2026").changed);
     assertOpen(sys.entryAgo("OW 2026", 2 * HOUR + 30 * MIN));
-    TEST_ASSERT_TRUE(contains(sys.page(Page::Automat, "OW2026"), "<td>CHF 6.00</td>"));
-    assertClosed(sys.exit("OW2026"), "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen");
+    TEST_ASSERT_TRUE(contains(sys.page("OW2026"), "<td>CHF 6.00</td>"));
+    assertClosed(sys.exit("OW2026"), "Gebühr CHF 6.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen");
     TEST_ASSERT_TRUE(contains(sys.pay("OW2026", "cash", "10.00").notice.text, "Rückgeld CHF 4.00"));
     assertOpen(sys.exit("OW2026"));
     TEST_ASSERT_EQUAL(SessionStatus::Closed, sys.sessions.findLatest("OW2026")->status);
@@ -572,6 +586,7 @@ void test_tf14_six_safety_stops_logged()
         {
             bool entry = lane == GateLane::Entry;
             (entry ? sys.entryBarrier : sys.exitBarrier).open(sys.nowMs);
+            (entry ? sys.entryBarrier : sys.exitBarrier).vehiclePassed();
             sys.waitMs(BARRIER_MIN_OPEN_MS + 1000); // 1 s into the closing sweep
             TEST_ASSERT_EQUAL(BarrierState::Closing, (entry ? sys.entryBarrier : sys.exitBarrier).state());
             sys.waitMs(100, entry, !entry);
@@ -670,7 +685,7 @@ void test_tf31_remote_opening_at_exit_without_payment()
 {
     System sys;
     assertOpen(sys.entryAgo("ZH98765", 2 * HOUR + 30 * MIN));
-    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen");
+    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 6.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen");
     TEST_ASSERT_EQUAL_STRING("unbezahlt (CHF 6.00)", laneStatus(sys, sys.lastExitPlate).c_str());
 
     RemoteOpenResult r = sys.remote(GateLane::Exit, sys.lastExitPlate, "Kulanz");
@@ -682,7 +697,7 @@ void test_tf31_remote_opening_at_exit_without_payment()
     TEST_ASSERT_EQUAL_STRING("ZH98765", e.plate.c_str());
     TEST_ASSERT_EQUAL_STRING("Kulanz", e.reason.c_str());
     TEST_ASSERT_EQUAL_STRING("ohne Zahlung", e.note.c_str());
-    TEST_ASSERT_TRUE(contains(sys.page(Page::Kasse, "ZH98765"), "<td>ohne Zahlung ausgefahren</td>"));
+    TEST_ASSERT_TRUE(contains(sys.page("ZH98765"), "<td>ohne Zahlung ausgefahren</td>"));
 }
 
 void test_tf05_terminal_feedback_at_entry()
@@ -706,15 +721,15 @@ void test_tf27_car_turns_around()
 {
     System sys;
     assertOpen(sys.entryAgo("ZH98765", 58 * MIN));
-    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 2.00 nicht bezahlt – bitte am Automaten bezahlen");
+    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 2.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen");
     GateResult r = abortAtTerminal(sys.exitTerminal);
     TEST_ASSERT_EQUAL_STRING("Vorgang abgebrochen – Fahrzeug wendet", r.message.c_str());
     const ParkingSession* s = sys.sessions.findActive("ZH98765");
     TEST_ASSERT_EQUAL(SessionStatus::Open, s->status);
     TEST_ASSERT_EQUAL_INT64(0, s->exit);
-    TEST_ASSERT_TRUE(contains(sys.page(Page::Kasse, "ZH98765"), "<td>CHF 2.00</td>"));
+    TEST_ASSERT_TRUE(contains(sys.page("ZH98765"), "<td>CHF 2.00</td>"));
     sys.wait(3 * MIN);
-    std::string html = sys.page(Page::Kasse, "ZH98765");
+    std::string html = sys.page("ZH98765");
     TEST_ASSERT_TRUE(contains(html, "<td>CHF 4.00</td>"));
     TEST_ASSERT_TRUE(contains(html, "<td>offen</td>"));
     TEST_ASSERT_FALSE(contains(html, "<th>Ausfahrt</th><td>"));
@@ -732,6 +747,7 @@ void test_tf28_payment_at_exit_terminal()
     assertOpen(sys.payAtExit("twint"));
     TEST_ASSERT_EQUAL(BarrierState::Open, sys.exitBarrier.state());
     TEST_ASSERT_EQUAL(SessionStatus::Closed, sys.sessions.findLatest("LU123456")->status);
+    sys.driveThrough(GateLane::Exit);
     sys.wait(10);
 
     sys.exit("ZH98765");
@@ -762,6 +778,42 @@ void test_call_button_reaches_operator()
     TEST_ASSERT_EQUAL_STRING("", sys.operatorLane(GateLane::Entry).call.c_str());
 }
 
+void test_barrier_waits_for_drive_through()
+{
+    System sys;
+    assertOpen(sys.entry("LU 123456"));
+    sys.wait(60);
+    TEST_ASSERT_EQUAL(BarrierState::Open, sys.entryBarrier.state());
+    TEST_ASSERT_EQUAL_STRING("LU123456 durchgefahren – Schranke schliesst",
+                             sys.driveThrough(GateLane::Entry).message.c_str());
+    sys.wait(BARRIER_CLOSE_MS / 1000 + 1);
+    TEST_ASSERT_EQUAL(BarrierState::Closed, sys.entryBarrier.state());
+    TEST_ASSERT_EQUAL_STRING("LU123456 durchgefahren – Schranke geschlossen",
+                             closedAfterPass(sys.entryTerminal).message.c_str());
+    assertClosed(sys.driveThrough(GateLane::Entry), "Keine offene Schranke – Fahrzeug kann nicht durchfahren");
+}
+
+void test_new_customer_by_operator_then_kasse_and_exit()
+{
+    System sys;
+    assertClosed(sys.entry("NW 654321"), "NW654321 – nicht registriert, bitte Ruftaste drücken");
+    RemoteOpenResult r = sys.remote(GateLane::Entry, "NW 654321", NEW_CUSTOMER_REASON, "Test Kunde C");
+    TEST_ASSERT_TRUE(r.open);
+    TEST_ASSERT_EQUAL(BarrierState::Open, sys.entryBarrier.state());
+    TEST_ASSERT_TRUE(sys.registrations.contains("NW654321"));
+    TEST_ASSERT_EQUAL_STRING("NW654321 durchgefahren – Schranke schliesst",
+                             sys.driveThrough(GateLane::Entry).message.c_str());
+    sys.wait(2 * HOUR + 30 * MIN);
+    assertClosed(sys.exit("NW654321"), "Gebühr CHF 6.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen");
+    TEST_ASSERT_EQUAL_STRING("Bezahlt – CHF 6.00, Bargeld – Transaktion TX-000001 – Rückgeld CHF 4.00",
+                             sys.pay("NW654321", "cash", "10").notice.text.c_str());
+    assertOpen(sys.exit("NW654321"));
+    // the new customer drives in again later without the operator
+    sys.driveThrough(GateLane::Exit);
+    sys.wait(10);
+    assertOpen(sys.entry("NW654321"));
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -776,10 +828,10 @@ int main()
     RUN_TEST(test_tf10_second_entry_rejected);
     RUN_TEST(test_tf11_kasse_off_at_entry);
     RUN_TEST(test_tf18_reference_fees_via_backdated_entry);
-    RUN_TEST(test_tf19_duration_and_fee_at_kasse_and_automat);
+    RUN_TEST(test_tf19_duration_and_fee_at_kasse);
     RUN_TEST(test_tf20_card_payment_once);
-    RUN_TEST(test_tf21_automat_cash_and_twint);
-    RUN_TEST(test_tf22_automat_without_session);
+    RUN_TEST(test_tf21_kasse_cash_and_twint);
+    RUN_TEST(test_tf22_kasse_without_session);
     RUN_TEST(test_tf23_paid_exit_closes_session);
     RUN_TEST(test_tf24_unpaid_exit_then_pay_then_exit);
     RUN_TEST(test_tf25_free_time_exit);
@@ -799,5 +851,7 @@ int main()
     RUN_TEST(test_tf27_car_turns_around);
     RUN_TEST(test_tf28_payment_at_exit_terminal);
     RUN_TEST(test_call_button_reaches_operator);
+    RUN_TEST(test_barrier_waits_for_drive_through);
+    RUN_TEST(test_new_customer_by_operator_then_kasse_and_exit);
     return UNITY_END();
 }

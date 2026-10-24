@@ -6,14 +6,18 @@
 #include <atomic>
 #include <string>
 
+#include "auth.h"
 #include "barrier.h"
 #include "codec.h"
 #include "event_log.h"
 #include "format.h"
 #include "gate.h"
+#include "kasse_client.h"
+#include "kasse_pages.h"
 #include "net.h"
 #include "operator_view.h"
 #include "pins.h"
+#include "plate.h"
 #include "schranken_view.h"
 #include "secrets.h"
 #include "status_led.h"
@@ -127,8 +131,9 @@ struct Lane
     uint8_t servoPin;
     uint8_t loopPin;
 
-    // core 0 -> core 1: incremented for every open command
+    // core 0 -> core 1: incremented for every open command / «Durchfahren»
     std::atomic<uint32_t> openRequests{0};
+    std::atomic<uint32_t> passRequests{0};
     // core 1 -> core 0
     std::atomic<int> state{static_cast<int>(BarrierState::Closed)};
     std::atomic<bool> fault{false};
@@ -138,6 +143,7 @@ struct Lane
     Servo servo;
     Barrier barrier;
     uint32_t seenOpenRequests = 0;
+    uint32_t seenPassRequests = 0;
     int writtenAngle = -1;
     BarrierState loggedState = BarrierState::Closed;
 
@@ -151,6 +157,7 @@ bool serverStarted = false;
 HttpKasseLink kasse;
 RegistrationList registrations;
 EventLog eventLog;
+LoginSessions logins;
 Lane entryLane{GateLane::Entry, PIN_ENTRY_SERVO, PIN_ENTRY_LOOP};
 Lane exitLane{GateLane::Exit, PIN_EXIT_SERVO, PIN_EXIT_LOOP};
 unsigned long lastReportMs = 0;
@@ -258,6 +265,11 @@ void openBarrier(Lane& lane)
     lane.openRequests.store(lane.openRequests.load() + 1);
 }
 
+BarrierState barrierState(const Lane& lane)
+{
+    return static_cast<BarrierState>(lane.state.load());
+}
+
 // Shows a terminal result (gate decision, payment, call, abort) and opens the barrier if it says so.
 void showOnTerminal(Lane& lane, const GateResult& r)
 {
@@ -303,6 +315,21 @@ void onCallButton()
     redirect("/kamera");
 }
 
+void onDriveThrough()
+{
+    Lane* lane = laneArg();
+    if (lane != nullptr)
+    {
+        bool up = barrierState(*lane) != BarrierState::Closed;
+        if (up)
+        {
+            lane->passRequests.store(lane->passRequests.load() + 1);
+        }
+        showOnTerminal(*lane, driveThrough(lane->terminal, up));
+    }
+    redirect("/kamera");
+}
+
 void onAbort()
 {
     showOnTerminal(exitLane, abortAtTerminal(exitLane.terminal));
@@ -342,17 +369,40 @@ void onExit()
 
 void refreshView(Lane& lane)
 {
-    lane.view.barrier = barrierStateLabel(static_cast<BarrierState>(lane.state.load()));
+    BarrierState state = barrierState(lane);
+    if (state == BarrierState::Closed && lane.terminal.passing)
+    {
+        showOnTerminal(lane, closedAfterPass(lane.terminal));
+    }
+    lane.view.canPass = state == BarrierState::Open && !lane.terminal.passing;
+    lane.view.barrier = barrierStateLabel(state);
     lane.view.fault = lane.fault.load() ? loopFaultMessage(lane.name) : "";
     lane.view.payPlate = lane.terminal.payPlate;
     lane.view.payFee = lane.terminal.payPlate.empty() ? "" : formatChf(lane.terminal.payFeeRappen);
+}
+
+Role role()
+{
+    return logins.valid(server.header("Cookie").c_str()) ? Role::Admin : Role::Public;
+}
+
+// Operator pages: false = not logged in, redirected to the login page, stop handling.
+bool operatorAuthenticated()
+{
+    if (role() == Role::Admin)
+    {
+        return true;
+    }
+    redirect(String("/login?next=") + loginTarget(server.uri().c_str()).c_str());
+    return false;
 }
 
 void showCamera()
 {
     refreshView(entryLane);
     refreshView(exitLane);
-    sendHtml(renderCameraPage(entryLane.view, exitLane.view));
+    KasseSnapshot snap = fetchSessions(kasse);
+    sendHtml(renderCameraPage(entryLane.view, exitLane.view, snap, registrations, role()));
 }
 
 Notice pendingNotice()
@@ -364,35 +414,97 @@ Notice pendingNotice()
     return {};
 }
 
-void redirectWithNotice(const String& path, const Notice& notice)
+// query: extra arguments, e.g. "kz=LU123456&".
+void redirectWithNotice(const String& path, const Notice& notice, const String& query = "")
 {
     lastNotice = notice;
     noticeId++;
-    redirect(path + "?m=" + String(noticeId));
+    redirect(path + "?" + query + "m=" + String(noticeId));
 }
 
 void showRegistration()
 {
+    if (!operatorAuthenticated())
+    {
+        return;
+    }
     sendHtml(renderRegistrationPage(registrations, pendingNotice()));
 }
 
-// HTTP Basic auth, user «betrieb». False = 401 sent, stop handling.
-bool operatorAuthenticated()
+void showLogin()
 {
-    if (server.authenticate(OPERATOR_USER, OPERATOR_PASSWORD))
+    std::string next = loginTarget(argOf("next"));
+    if (role() == Role::Admin)
     {
-        return true;
+        redirect(next.c_str());
+        return;
     }
-    server.requestAuthentication(BASIC_AUTH, "Parkhaus Betrieb");
-    logRequest(401);
-    return false;
+    sendHtml(renderLoginPage(pendingNotice(), next));
+}
+
+void onLogin()
+{
+    std::string next = loginTarget(argOf("next"));
+    if (!credentialsOk(argOf("user"), argOf("password"), OPERATOR_PASSWORD))
+    {
+        Serial.println("[login] rejected");
+        redirectWithNotice("/login", {"err", "Benutzer oder Passwort falsch"}, String("next=") + next.c_str() + "&");
+        return;
+    }
+    uint32_t words[4];
+    for (uint32_t& w : words)
+    {
+        w = rp2040.hwrand32();
+    }
+    std::string token = makeToken(words);
+    logins.add(token);
+    Serial.println("[login] betrieb");
+    server.sendHeader("Set-Cookie", loginCookie(token).c_str());
+    redirect(next.c_str());
+}
+
+void onLogout()
+{
+    logins.remove(cookieValue(server.header("Cookie").c_str(), SESSION_COOKIE));
+    server.sendHeader("Set-Cookie", logoutCookie().c_str());
+    redirect("/kamera");
+}
+
+void showTariff()
+{
+    sendHtml(renderTariffPage(role()));
+}
+
+void showKasse()
+{
+    if (!operatorAuthenticated())
+    {
+        return;
+    }
+    KasseSnapshot snap = fetchSessions(kasse);
+    sendHtml(renderKassePage(snap.sessions, argOf("kz"), pendingNotice(), snap.now, snap.synced, snap.reachable));
+}
+
+void onKassePay()
+{
+    if (!operatorAuthenticated())
+    {
+        return;
+    }
+    FormResult r = payAtKasse(kasse, argOf("kz"), argOf("method"), argOf("amount"));
+    std::string plate = normalizePlate(argOf("kz"));
+    Serial.print("[pay] ");
+    Serial.print(plate.c_str());
+    Serial.print(": ");
+    Serial.println(r.notice.text.c_str());
+    redirectWithNotice("/kasse", r.notice, isValidPlate(plate) ? String("kz=") + plate.c_str() + "&" : String(""));
 }
 
 OperatorLane operatorLane(Lane& lane)
 {
     OperatorLane o;
     o.lane = lane.id;
-    o.barrier = barrierStateLabel(static_cast<BarrierState>(lane.state.load()));
+    o.barrier = barrierStateLabel(barrierState(lane));
     o.lastPlate = lane.terminal.lastPlate;
     o.status = laneStatus(kasse, lane.terminal.lastPlate);
     o.fault = lane.fault.load() ? loopFaultMessage(lane.name) : "";
@@ -419,12 +531,17 @@ void onRemoteOpen()
     }
     GateLane id = GateLane::None;
     gateLaneFromName(argOf("lane"), id);
-    RemoteOpenResult r = remoteOpen(id, argOf("kz"), argOf("reason"), nowUtc(), kasse, eventLog);
+    RemoteOpenResult r =
+        remoteOpen(id, argOf("kz"), argOf("reason"), argOf("name"), nowUtc(), kasse, registrations, eventLog);
+    if (r.registered)
+    {
+        saveRegistrations();
+    }
     if (r.open)
     {
         Lane& lane = id == GateLane::Entry ? entryLane : exitLane;
         openBarrier(lane);
-        recordRemoteOpening(lane.terminal);
+        recordRemoteOpening(lane.terminal, r.plate);
     }
     if (r.logged)
     {
@@ -448,13 +565,24 @@ void finishRegistrationForm(const FormResult& r)
 
 void onReset()
 {
+    if (!operatorAuthenticated())
+    {
+        return;
+    }
     loadDefaultRegistrations(registrations);
     saveRegistrations();
     eventLog.clear();
     saveEvents();
-    Serial.println("registrations + events: test-data reset");
-    finishRegistrationForm(
-        {{"ok", "Testdaten zurückgesetzt – Registrierungen KZ-01, KZ-02, KZ-08, KZ-10, Ereignisprotokoll leer"}, false});
+    Notice notice{"ok", "Testdaten zurückgesetzt – Registrierungen KZ-01, KZ-02, KZ-08, KZ-10, Ereignisprotokoll leer, "
+                        "keine Parkvorgänge"};
+    if (!resetKasse(kasse))
+    {
+        notice = {"err", "Registrierungen und Ereignisprotokoll zurückgesetzt – Kasse nicht erreichbar, Parkvorgänge "
+                         "nicht zurückgesetzt"};
+    }
+    Serial.print("[reset] ");
+    Serial.println(notice.text.c_str());
+    redirectWithNotice("/betrieb", notice);
 }
 
 void onNotFound()
@@ -470,17 +598,34 @@ void setupRoutes()
     server.on("/kamera/einfahrt", HTTP_POST, onEntry);
     server.on("/kamera/ausfahrt", HTTP_POST, onExit);
     server.on("/kamera/ruftaste", HTTP_POST, onCallButton);
+    server.on("/kamera/durchfahren", HTTP_POST, onDriveThrough);
     server.on("/kamera/abbrechen", HTTP_POST, onAbort);
     server.on("/kamera/bezahlen", HTTP_POST, onTerminalPay);
+    server.on("/tarif", HTTP_GET, showTariff);
+    server.on("/login", HTTP_GET, showLogin);
+    server.on("/login", HTTP_POST, onLogin);
+    server.on("/logout", HTTP_POST, onLogout);
+    server.on("/kasse", HTTP_GET, showKasse);
+    server.on("/kasse/pay", HTTP_POST, onKassePay);
     server.on("/registrierung", HTTP_GET, showRegistration);
-    server.on("/registrierung/add", HTTP_POST,
-              []() { finishRegistrationForm(handleRegistrationForm(registrations, argOf("name"), argOf("kz"))); });
-    server.on("/registrierung/delete", HTTP_POST,
-              []() { finishRegistrationForm(handleDeleteForm(registrations, argOf("kz"))); });
+    server.on("/registrierung/add", HTTP_POST, []() {
+        if (operatorAuthenticated())
+        {
+            finishRegistrationForm(handleRegistrationForm(registrations, argOf("name"), argOf("kz")));
+        }
+    });
+    server.on("/registrierung/delete", HTTP_POST, []() {
+        if (operatorAuthenticated())
+        {
+            finishRegistrationForm(handleDeleteForm(registrations, argOf("kz")));
+        }
+    });
     server.on("/reset", HTTP_POST, onReset);
     server.on("/betrieb", HTTP_GET, showOperator);
     server.on("/betrieb/oeffnen", HTTP_POST, onRemoteOpen);
     server.onNotFound(onNotFound);
+    const char* headers[] = {"Cookie"};
+    server.collectHeaders(headers, 1);
 }
 
 void beginLane(Lane& lane)
@@ -497,6 +642,12 @@ void updateLane(Lane& lane, uint32_t nowMs)
     {
         lane.seenOpenRequests = requests;
         lane.barrier.open(nowMs);
+    }
+    uint32_t passes = lane.passRequests.load();
+    if (passes != lane.seenPassRequests)
+    {
+        lane.seenPassRequests = passes;
+        lane.barrier.vehiclePassed();
     }
     bool occupied = digitalRead(lane.loopPin) == LOW;
     BarrierEvent event = lane.barrier.update(nowMs, occupied);

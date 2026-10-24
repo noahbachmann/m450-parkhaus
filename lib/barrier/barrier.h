@@ -24,13 +24,17 @@ enum class BarrierEvent
 };
 
 // One barrier with its safety loop. Times are millis() values; differences are wrap-safe.
-//   Closed --open()--> Open --min time over, loop free--> Closing --sweep done--> Closed
+//   Closed --open()--> Open --vehicle passed, min time over, loop free--> Closing --sweep done--> Closed
 //   Closing --loop occupied--> Open (SafetyStop), min time restarts
+// The vehicle has passed after vehiclePassed() («Durchfahren» on the camera page) or when the loop goes
+// from occupied to free while the barrier is up.
 class Barrier
 {
 public:
-    // Opens (or keeps open) and restarts the minimum open time.
+    // Opens (or keeps open) for a new vehicle and restarts the minimum open time.
     void open(uint32_t nowMs);
+    // The vehicle drove through. False if the barrier is closed.
+    bool vehiclePassed();
     // Call every loop() with the loop input; returns what happened in this call.
     BarrierEvent update(uint32_t nowMs, bool loopOccupied);
 
@@ -41,6 +45,8 @@ public:
     bool loopFault() const;
 
 private:
+    void reopen(uint32_t nowMs);
+
     BarrierState current = BarrierState::Closed;
     uint32_t openedAtMs = 0;
     uint32_t closingSinceMs = 0;
@@ -48,6 +54,7 @@ private:
     bool occupied = false;
     uint32_t occupiedSinceMs = 0;
     bool fault = false;
+    bool passed = false;
 };
 
 // «offen», «schliesst», «geschlossen»

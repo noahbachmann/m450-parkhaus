@@ -5,6 +5,8 @@
 
 #include "session.h"
 
+constexpr uint32_t MAX_CASH_RAPPEN = 100000; // CHF 1000.00 per insertion
+
 // Simulated payment methods ZM-01..ZM-04 from the test concept.
 enum class PayMethod
 {
@@ -37,7 +39,8 @@ struct PaymentResult
 };
 
 // Pays the open session of the plate with the fee at now.
-// Cash: cashInsertedRappen accumulates until the fee is covered, then change = inserted total - fee.
+// Cash: cashInsertedRappen (1..MAX_CASH_RAPPEN, else InvalidAmount) accumulates until the fee is covered,
+// then change = inserted total - fee.
 // Card/TWINT charge whatever is still outstanding after earlier partial cash.
 PaymentResult pay(SessionStore& store, const std::string& rawPlate, PayMethod method, int64_t now,
                   uint32_t cashInsertedRappen = 0);

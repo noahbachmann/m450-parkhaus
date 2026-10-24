@@ -26,9 +26,5 @@ std::string dataDir();
 
 HttpResponse redirect(const std::string& location);
 HttpResponse notFound();
-// HTTP Basic auth check; false -> answer with basicAuthChallenge().
-bool basicAuthOk(const HttpRequest& req, const std::string& user, const std::string& password);
-HttpResponse basicAuthChallenge(const char* realm);
-
-// HTML page with the simulator link bar inserted after <body>.
-HttpResponse simPage(const std::string& html);
+// 200 text/html.
+HttpResponse htmlPage(const std::string& html);

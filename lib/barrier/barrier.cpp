@@ -2,9 +2,25 @@
 
 void Barrier::open(uint32_t nowMs)
 {
+    reopen(nowMs);
+    passed = false;
+}
+
+void Barrier::reopen(uint32_t nowMs)
+{
     current = BarrierState::Open;
     openedAtMs = nowMs;
     currentAngle = BARRIER_OPEN_ANGLE;
+}
+
+bool Barrier::vehiclePassed()
+{
+    if (current == BarrierState::Closed)
+    {
+        return false;
+    }
+    passed = true;
+    return true;
 }
 
 BarrierEvent Barrier::update(uint32_t nowMs, bool loopOccupied)
@@ -14,6 +30,10 @@ BarrierEvent Barrier::update(uint32_t nowMs, bool loopOccupied)
     if (loopOccupied && !occupied)
     {
         occupiedSinceMs = nowMs;
+    }
+    if (!loopOccupied && occupied && current != BarrierState::Closed)
+    {
+        passed = true;
     }
     occupied = loopOccupied;
     if (!occupied)
@@ -31,7 +51,7 @@ BarrierEvent Barrier::update(uint32_t nowMs, bool loopOccupied)
     case BarrierState::Closed:
         break;
     case BarrierState::Open:
-        if (!occupied && nowMs - openedAtMs >= BARRIER_MIN_OPEN_MS)
+        if (passed && !occupied && nowMs - openedAtMs >= BARRIER_MIN_OPEN_MS)
         {
             current = BarrierState::Closing;
             closingSinceMs = nowMs;
@@ -40,7 +60,7 @@ BarrierEvent Barrier::update(uint32_t nowMs, bool loopOccupied)
     case BarrierState::Closing:
         if (occupied)
         {
-            open(nowMs);
+            reopen(nowMs);
             return BarrierEvent::SafetyStop;
         }
         uint32_t elapsed = nowMs - closingSinceMs;

@@ -15,7 +15,7 @@ struct HttpRequest
     std::string path;   // without the query string
     std::map<std::string, std::string> args; // query string + urlencoded form fields, decoded
     std::string body;   // raw body (JSON API)
-    std::string authorization; // Authorization header, e.g. "Basic YmV0cmllYjpwYXJraGF1cw=="
+    std::string cookie; // Cookie header, e.g. "parkhaus_session=ab12"
 
     bool hasArg(const std::string& name) const;
     std::string arg(const std::string& name) const;
@@ -27,7 +27,7 @@ struct HttpResponse
     std::string contentType = "text/html; charset=utf-8";
     std::string body;
     std::string location; // Location header, for redirects
-    std::string wwwAuthenticate; // WWW-Authenticate header, for 401
+    std::string setCookie; // Set-Cookie header value
 };
 
 using HttpHandler = std::function<HttpResponse(const HttpRequest&)>;

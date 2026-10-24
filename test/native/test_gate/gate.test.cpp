@@ -163,7 +163,7 @@ void test_exit_unpaid_and_errors_tf24_tf26_tf30()
     fake.reply = {402, "{\"error\":\"unpaid\",\"fee\":600}"};
     GateResult unpaid = exitRequest("ZH98765", fake);
     TEST_ASSERT_FALSE(unpaid.open);
-    TEST_ASSERT_EQUAL_STRING("Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen", unpaid.message.c_str());
+    TEST_ASSERT_EQUAL_STRING("Gebühr CHF 6.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen", unpaid.message.c_str());
     TEST_ASSERT_TRUE(unpaid.unpaid);
     TEST_ASSERT_EQUAL_UINT32(600, unpaid.feeRappen);
     fake.reply = {404, "{\"error\":\"no_session\"}"};
@@ -200,7 +200,7 @@ void test_against_real_kasse_handlers()
     TEST_ASSERT_FALSE(entryRequest(regs, "ZH98765", "", kasse).open);
     kasse.now += 3600 - REPEAT_ENTRY_SECONDS;
     GateResult unpaid = exitRequest("ZH98765", kasse);
-    TEST_ASSERT_EQUAL_STRING("Gebühr CHF 2.00 nicht bezahlt – bitte am Automaten bezahlen", unpaid.message.c_str());
+    TEST_ASSERT_EQUAL_STRING("Gebühr CHF 2.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen", unpaid.message.c_str());
     TEST_ASSERT_TRUE(entryRequest(regs, "AG1", "", kasse).open);
     kasse.now += 5 * 60;
     TEST_ASSERT_TRUE(exitRequest("AG1", kasse).open);

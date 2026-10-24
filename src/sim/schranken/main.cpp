@@ -1,6 +1,8 @@
 #include <cstdio>
+#include <random>
 #include <string>
 
+#include "auth.h"
 #include "barrier.h"
 #include "codec.h"
 #include "event_log.h"
@@ -9,17 +11,21 @@
 #include "html.h"
 #include "http_client.h"
 #include "http_server.h"
+#include "kasse_client.h"
+#include "kasse_pages.h"
 #include "operator_view.h"
+#include "plate.h"
 #include "registration.h"
 #include "schranken_view.h"
 #include "sim_common.h"
 #include "terminal.h"
 #include "testdata.h"
 
-// Simulated Pico 2 "Schranken": registration and camera pages, barriers, real HTTP calls to the Kasse
-// at KASSE_URL (default http://localhost:8081). Same routes as src/schranken/main.cpp, plus /sim, which
-// stands in for the safety loop buttons. Pico 1 off = stop the Kasse program or container.
-// Operator view /betrieb: user «betrieb», password OPERATOR_PASSWORD (default "parkhaus").
+// Simulated Pico 2 "Schranken": all pages (camera, Tarif; after login Kasse, registration, Betrieb), barriers,
+// real HTTP calls to the Kasse at KASSE_URL (default http://localhost:8081). Same routes as
+// src/schranken/main.cpp. No safety loops: «Durchfahren» on the camera page stands in for them.
+// Pico 1 off = stop the Kasse program or container. Login: user «betrieb», password OPERATOR_PASSWORD
+// (default "parkhaus").
 
 namespace
 {
@@ -50,7 +56,6 @@ struct Lane
     GateLane id;
     const char* name;
     Barrier barrier;
-    bool loopOccupied = false;
     LaneView view;
     LaneTerminal terminal;
 };
@@ -58,8 +63,10 @@ struct Lane
 HttpKasseLink kasse;
 RegistrationList registrations;
 EventLog eventLog;
-Lane entryLane{GateLane::Entry, "Einfahrt", {}, false, {}, {}};
-Lane exitLane{GateLane::Exit, "Ausfahrt", {}, false, {}, {}};
+LoginSessions logins;
+std::random_device randomSource;
+Lane entryLane{GateLane::Entry, "Einfahrt", {}, {}, {}};
+Lane exitLane{GateLane::Exit, "Ausfahrt", {}, {}, {}};
 
 // Result of the last registration / operator POST, shown once after the redirect.
 uint32_t noticeId = 0;
@@ -75,11 +82,22 @@ Notice pendingNotice(const HttpRequest& req)
     return req.arg("m") == std::to_string(noticeId) ? lastNotice : Notice{};
 }
 
-HttpResponse redirectWithNotice(const std::string& path, const Notice& notice)
+// query: extra arguments, e.g. "kz=LU123456&".
+HttpResponse redirectWithNotice(const std::string& path, const Notice& notice, const std::string& query = "")
 {
     lastNotice = notice;
     noticeId++;
-    return redirect(path + "?m=" + std::to_string(noticeId));
+    return redirect(path + "?" + query + "m=" + std::to_string(noticeId));
+}
+
+Role roleOf(const HttpRequest& req)
+{
+    return logins.valid(req.cookie) ? Role::Admin : Role::Public;
+}
+
+HttpResponse loginRequired(const HttpRequest& req)
+{
+    return redirect("/login?next=" + loginTarget(req.path));
 }
 
 void saveRegistrations()
@@ -109,8 +127,20 @@ void applyGate(Lane& lane, const GateResult& r)
     showOnTerminal(lane, r);
 }
 
+Lane* laneOf(const HttpRequest& req)
+{
+    GateLane id = GateLane::None;
+    gateLaneFromName(req.arg("lane"), id);
+    return id == GateLane::Entry ? &entryLane : id == GateLane::Exit ? &exitLane : nullptr;
+}
+
 void refreshView(Lane& lane)
 {
+    if (lane.barrier.state() == BarrierState::Closed && lane.terminal.passing)
+    {
+        showOnTerminal(lane, closedAfterPass(lane.terminal));
+    }
+    lane.view.canPass = lane.barrier.state() == BarrierState::Open && !lane.terminal.passing;
     lane.view.barrier = barrierStateLabel(lane.barrier.state());
     lane.view.fault = lane.barrier.loopFault() ? loopFaultMessage(lane.name) : "";
     lane.view.payPlate = lane.terminal.payPlate;
@@ -139,26 +169,21 @@ OperatorLane operatorLane(Lane& lane)
     return o;
 }
 
-HttpResponse operatorRoute(const HttpRequest& req)
+HttpResponse onRemoteOpen(const HttpRequest& req)
 {
-    if (!basicAuthOk(req, OPERATOR_USER, operatorPassword))
-    {
-        return basicAuthChallenge("Parkhaus Betrieb");
-    }
-    if (req.method == "GET")
-    {
-        OperatorLane entry = operatorLane(entryLane);
-        OperatorLane exit = operatorLane(exitLane);
-        return simPage(renderOperatorPage(entry, exit, eventLog, req.arg("filter"), pendingNotice(req)));
-    }
     GateLane id = GateLane::None;
     gateLaneFromName(req.arg("lane"), id);
-    RemoteOpenResult r = remoteOpen(id, req.arg("kz"), req.arg("reason"), nowUtc(), kasse, eventLog);
+    RemoteOpenResult r =
+        remoteOpen(id, req.arg("kz"), req.arg("reason"), req.arg("name"), nowUtc(), kasse, registrations, eventLog);
+    if (r.registered)
+    {
+        saveRegistrations();
+    }
     if (r.open)
     {
         Lane& lane = id == GateLane::Entry ? entryLane : exitLane;
         lane.barrier.open(nowMs());
-        recordRemoteOpening(lane.terminal);
+        recordRemoteOpening(lane.terminal, r.plate);
     }
     if (r.logged)
     {
@@ -168,43 +193,104 @@ HttpResponse operatorRoute(const HttpRequest& req)
     return redirectWithNotice("/betrieb", r.notice);
 }
 
-void appendLoopControl(std::string& html, const char* field, const Lane& lane)
+HttpResponse onLogin(const HttpRequest& req)
 {
-    html += "<tr><th>Sicherungsschleife ";
-    html += lane.name;
-    html += "</th><td>";
-    html += lane.loopOccupied ? "<strong>belegt</strong>" : "frei";
-    html += "</td><td><form method=\"post\" action=\"/sim/set\" class=\"inline\"><input type=\"hidden\" name=\"";
-    html += field;
-    html += "\" value=\"";
-    html += lane.loopOccupied ? "0" : "1";
-    html += "\"><button type=\"submit\">";
-    html += lane.loopOccupied ? "freigeben" : "belegen";
-    html += "</button></form></td><td>Schranke: ";
-    html += barrierStateLabel(lane.barrier.state());
-    html += "</td></tr>";
+    std::string next = loginTarget(req.arg("next"));
+    if (!credentialsOk(req.arg("user"), req.arg("password"), operatorPassword))
+    {
+        std::printf("[login] rejected\n");
+        return redirectWithNotice("/login", {"err", "Benutzer oder Passwort falsch"}, "next=" + next + "&");
+    }
+    uint32_t words[4];
+    for (uint32_t& w : words)
+    {
+        w = randomSource();
+    }
+    std::string token = makeToken(words);
+    logins.add(token);
+    std::printf("[login] %s\n", OPERATOR_USER);
+    HttpResponse r = redirect(next);
+    r.setCookie = loginCookie(token);
+    return r;
 }
 
-HttpResponse simControl()
+HttpResponse onLogout(const HttpRequest& req)
 {
-    std::string html;
-    appendPageStart(html, "Simulator",
-                    "<a href=\"/kamera\">Kamerasimulation</a><a href=\"/registrierung\">Registrierung</a>",
-                    "Simulator-Steuerung");
-    html += "<p class=\"muted\">Ersetzt die Taster der Sicherungsschleifen.</p><div class=\"card\"><table>";
-    appendLoopControl(html, "entryLoop", entryLane);
-    appendLoopControl(html, "exitLoop", exitLane);
-    html += "</table></div><p>Kasse: <code>" + htmlEscape(kasseUrl) +
-            "</code>. Pico 1 «ausschalten»: Kasse-Programm beenden bzw. <code>docker compose stop kasse</code>.</p>"
-            "<p><a href=\"/sim\">Aktualisieren</a></p>";
-    appendPageEnd(html);
-    return simPage(html);
+    logins.remove(cookieValue(req.cookie, SESSION_COOKIE));
+    HttpResponse r = redirect("/kamera");
+    r.setCookie = logoutCookie();
+    return r;
+}
+
+HttpResponse onReset()
+{
+    loadDefaultRegistrations(registrations);
+    saveRegistrations();
+    eventLog.clear();
+    saveEvents();
+    Notice notice{"ok", "Testdaten zurückgesetzt – Registrierungen KZ-01, KZ-02, KZ-08, KZ-10, Ereignisprotokoll leer, "
+                        "keine Parkvorgänge"};
+    if (!resetKasse(kasse))
+    {
+        notice = {"err", "Registrierungen und Ereignisprotokoll zurückgesetzt – Kasse nicht erreichbar, Parkvorgänge "
+                         "nicht zurückgesetzt"};
+    }
+    std::printf("[reset] %s\n", notice.text.c_str());
+    return redirectWithNotice("/betrieb", notice);
+}
+
+// Pages and forms only for the logged-in operator; status 0 = not an admin route.
+HttpResponse adminRoute(const HttpRequest& req)
+{
+    bool get = req.method == "GET";
+    bool post = req.method == "POST";
+    if (get && req.path == "/kasse")
+    {
+        KasseSnapshot snap = fetchSessions(kasse);
+        return htmlPage(renderKassePage(snap.sessions, req.arg("kz"), pendingNotice(req), snap.now, snap.synced,
+                                        snap.reachable));
+    }
+    if (post && req.path == "/kasse/pay")
+    {
+        FormResult r = payAtKasse(kasse, req.arg("kz"), req.arg("method"), req.arg("amount"));
+        std::string plate = normalizePlate(req.arg("kz"));
+        std::printf("[pay] %s: %s\n", plate.c_str(), r.notice.text.c_str());
+        return redirectWithNotice("/kasse", r.notice, isValidPlate(plate) ? "kz=" + plate + "&" : "");
+    }
+    if (get && req.path == "/registrierung")
+    {
+        return htmlPage(renderRegistrationPage(registrations, pendingNotice(req)));
+    }
+    if (post && req.path == "/registrierung/add")
+    {
+        return finishRegistrationForm(handleRegistrationForm(registrations, req.arg("name"), req.arg("kz")));
+    }
+    if (post && req.path == "/registrierung/delete")
+    {
+        return finishRegistrationForm(handleDeleteForm(registrations, req.arg("kz")));
+    }
+    if (get && req.path == "/betrieb")
+    {
+        OperatorLane entry = operatorLane(entryLane);
+        OperatorLane exit = operatorLane(exitLane);
+        return htmlPage(renderOperatorPage(entry, exit, eventLog, req.arg("filter"), pendingNotice(req)));
+    }
+    if (post && req.path == "/betrieb/oeffnen")
+    {
+        return onRemoteOpen(req);
+    }
+    if (post && req.path == "/reset")
+    {
+        return onReset();
+    }
+    return {0, "", "", "", ""};
 }
 
 HttpResponse route(const HttpRequest& req)
 {
     bool get = req.method == "GET";
     bool post = req.method == "POST";
+    Role role = roleOf(req);
     if (get && req.path == "/")
     {
         return redirect("/kamera");
@@ -213,7 +299,8 @@ HttpResponse route(const HttpRequest& req)
     {
         refreshView(entryLane);
         refreshView(exitLane);
-        return simPage(renderCameraPage(entryLane.view, exitLane.view));
+        KasseSnapshot snap = fetchSessions(kasse);
+        return htmlPage(renderCameraPage(entryLane.view, exitLane.view, snap, registrations, role));
     }
     if (post && req.path == "/kamera/einfahrt")
     {
@@ -225,11 +312,23 @@ HttpResponse route(const HttpRequest& req)
         applyGate(exitLane, exitRequest(req.arg("kz"), kasse));
         return redirect("/kamera");
     }
+    if (post && req.path == "/kamera/durchfahren")
+    {
+        Lane* lane = laneOf(req);
+        if (lane != nullptr)
+        {
+            showOnTerminal(*lane, driveThrough(lane->terminal, lane->barrier.vehiclePassed()));
+        }
+        return redirect("/kamera");
+    }
     if (post && req.path == "/kamera/ruftaste")
     {
-        Lane& lane = req.arg("lane") == "exit" ? exitLane : entryLane;
-        showOnTerminal(lane, pressCallButton(lane.terminal, nowUtc(), eventLog));
-        saveEvents();
+        Lane* lane = laneOf(req);
+        if (lane != nullptr)
+        {
+            showOnTerminal(*lane, pressCallButton(lane->terminal, nowUtc(), eventLog));
+            saveEvents();
+        }
         return redirect("/kamera");
     }
     if (post && req.path == "/kamera/abbrechen")
@@ -247,47 +346,37 @@ HttpResponse route(const HttpRequest& req)
         }
         return redirect("/kamera");
     }
-    if (get && req.path == "/registrierung")
+    if (get && req.path == "/tarif")
     {
-        return simPage(renderRegistrationPage(registrations, pendingNotice(req)));
+        return htmlPage(renderTariffPage(role));
     }
-    if ((get && req.path == "/betrieb") || (post && req.path == "/betrieb/oeffnen"))
+    if (get && req.path == "/login")
     {
-        return operatorRoute(req);
-    }
-    if (post && req.path == "/registrierung/add")
-    {
-        return finishRegistrationForm(handleRegistrationForm(registrations, req.arg("name"), req.arg("kz")));
-    }
-    if (post && req.path == "/registrierung/delete")
-    {
-        return finishRegistrationForm(handleDeleteForm(registrations, req.arg("kz")));
-    }
-    if (post && req.path == "/reset")
-    {
-        loadDefaultRegistrations(registrations);
-        saveRegistrations();
-        eventLog.clear();
-        saveEvents();
-        return finishRegistrationForm(
-            {{"ok", "Testdaten zurückgesetzt – Registrierungen KZ-01, KZ-02, KZ-08, KZ-10, Ereignisprotokoll leer"},
-             false});
-    }
-    if (get && req.path == "/sim")
-    {
-        return simControl();
-    }
-    if (post && req.path == "/sim/set")
-    {
-        if (req.hasArg("entryLoop"))
+        if (role == Role::Admin)
         {
-            entryLane.loopOccupied = req.arg("entryLoop") == "1";
+            return redirect(loginTarget(req.arg("next")));
         }
-        if (req.hasArg("exitLoop"))
-        {
-            exitLane.loopOccupied = req.arg("exitLoop") == "1";
-        }
-        return redirect("/sim");
+        return htmlPage(renderLoginPage(pendingNotice(req), loginTarget(req.arg("next"))));
+    }
+    if (post && req.path == "/login")
+    {
+        return onLogin(req);
+    }
+    if (post && req.path == "/logout")
+    {
+        return onLogout(req);
+    }
+    HttpResponse admin = role == Role::Admin ? adminRoute(req) : HttpResponse{0, "", "", "", ""};
+    if (admin.status != 0)
+    {
+        return admin;
+    }
+    bool adminPath = req.path == "/kasse" || req.path == "/kasse/pay" || req.path == "/registrierung" ||
+                     req.path == "/registrierung/add" || req.path == "/registrierung/delete" ||
+                     req.path == "/betrieb" || req.path == "/betrieb/oeffnen" || req.path == "/reset";
+    if (adminPath)
+    {
+        return loginRequired(req);
     }
     return notFound();
 }
@@ -295,7 +384,7 @@ HttpResponse route(const HttpRequest& req)
 void updateLane(Lane& lane, uint32_t ms)
 {
     BarrierState before = lane.barrier.state();
-    BarrierEvent event = lane.barrier.update(ms, lane.loopOccupied);
+    BarrierEvent event = lane.barrier.update(ms, false);
     if (logBarrierEvent(eventLog, lane.id, event, nowUtc()))
     {
         saveEvents();
@@ -352,10 +441,9 @@ int main()
     std::string host = listenHost();
     std::printf("Simulator Pico 2 «Schranken», %s, Daten in %s/, Kasse unter %s\n", formatDateTime(nowUtc()).c_str(),
                 dataDir().c_str(), kasseUrl.c_str());
-    std::printf("  http://localhost:%u/kamera   http://localhost:%u/registrierung   http://localhost:%u/sim"
-                "   (lauscht auf %s)\n",
-                SCHRANKEN_PORT, SCHRANKEN_PORT, SCHRANKEN_PORT, host.c_str());
-    std::printf("  http://localhost:%u/betrieb   (Benutzer «betrieb», Passwort aus OPERATOR_PASSWORD)\n", SCHRANKEN_PORT);
+    std::printf("  http://localhost:%u/kamera   (lauscht auf %s)\n", SCHRANKEN_PORT, host.c_str());
+    std::printf("  Anmelden: http://localhost:%u/login   (Benutzer «betrieb», Passwort aus OPERATOR_PASSWORD)\n",
+                SCHRANKEN_PORT);
     std::printf("Beenden mit Ctrl+C\n");
     std::fflush(stdout);
     return runHttpServers(host, {{SCHRANKEN_PORT, route}}, tick) ? 0 : 1;

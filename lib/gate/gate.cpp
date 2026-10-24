@@ -167,7 +167,7 @@ GateResult exitRequest(const std::string& rawPlate, KasseLink& kasse)
     if (reply.status == 402 && code == "unpaid" && doc["fee"].is<uint32_t>())
     {
         GateResult r = closed(plate, "Gebühr " + formatChf(doc["fee"].as<uint32_t>()) +
-                                         " nicht bezahlt – bitte am Automaten bezahlen");
+                                         " nicht bezahlt – bitte hier oder an der Kasse bezahlen");
         r.unpaid = true;
         r.feeRappen = doc["fee"].as<uint32_t>();
         return r;
