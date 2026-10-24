@@ -52,7 +52,7 @@ Kamerasimulation und Tarif (🔒 «Anmelden»). Nach der Anmeldung als «betrieb
 
 | Pico | Adresse | Zugang | Inhalt |
 |---|---|---|---|
-| Pico 2 | `/kamera` (Startseite) | alle | Kamerasimulation: Kennzeichen bei Ein- und Ausfahrt eingeben, optional rückdatierte Einfahrtszeit; «Durchfahren», Ruftaste, «Fahrzeug wendet», Bezahlen am Ausfahrtsterminal; darunter alle Parkvorgänge (offene zuerst) als Testhilfe |
+| Pico 2 | `/kamera` (Startseite) | alle | Kamerasimulation: Kennzeichen bei Ein- und Ausfahrt eingeben, optional rückdatierte Einfahrtszeit; «Durchfahren», «Fahrzeug bleibt stehen», Ruftaste, «Fahrzeug wendet», Bezahlen am Ausfahrtsterminal; darunter alle Parkvorgänge (offene zuerst) als Testhilfe |
 | Pico 2 | `/tarif` | alle | Gültiger Tarif mit Beispielen |
 | Pico 2 | `/login` | alle | Anmeldung Betriebspersonal |
 | Pico 2 | `/kasse` | Betrieb | Kennzeichen suchen, Dauer und Gebühr, bezahlen (Karte, TWINT, Bargeld); Liste aller Parkvorgänge, offene zuerst |
@@ -65,6 +65,12 @@ Die Schranke schliesst erst, wenn das Fahrzeug durchgefahren ist: Auf der Kamera
 der Knopf «Durchfahren» (er ersetzt die Sicherungsschleife). Er führt zu «LU123456 durchgefahren – Schranke
 schliesst», nach dem Schliessen zu «… – Schranke geschlossen». Ist eine Schleife angeschlossen, zählt auch
 das Freiwerden der Schleife als Durchfahrt.
+
+«Fahrzeug bleibt stehen» belegt die Sicherungsschleife von der Webseite aus (Anzeige «Sicherungsschleife:
+belegt»), «Fahrzeug fährt weiter» gibt sie wieder frei und zählt als Durchfahrt. Damit lassen sich TF-12,
+TF-13/14 und TF-15 im Simulator von Hand prüfen. Sicherheitsabschaltung (TF-13): Schranke öffnen, nach
+mindestens 5 s «Durchfahren» klicken – die Schranke schliesst jetzt 2 s lang – und sofort «Fahrzeug bleibt
+stehen» klicken. Die Schranke ist wieder «offen», im Ereignisprotokoll steht «Sicherheitsabschaltung».
 
 Hardware-Aufbau, Pinbelegung und WLAN-Einrichtung: [docs/aufbau-anleitung.md](docs/aufbau-anleitung.md)
 
@@ -108,8 +114,6 @@ Danach im Browser:
   Parkvorgänge zeigen «Kasse nicht erreichbar».
 - Die Schranken werden als Text angezeigt («offen», «schliesst», «geschlossen»); Seite neu laden, um
   den aktuellen Stand zu sehen. Die Konsole zeigt alle Anfragen, Entscheide und Schrankenbewegungen.
-- Die Sicherheitsabschaltung (Schleife beim Schliessen belegt, TF-13/14) lässt sich im Simulator nicht
-  mehr von Hand auslösen; sie ist mit den Unit- und Systemtests geprüft.
 - Daten liegen in `sim-data/kasse/` und `sim-data/schranken/` (gleiches JSON-Format wie im Flash der
   Picos). Ordner löschen = Testdaten.
 - Die Uhr ist die Uhr des PCs.

@@ -428,7 +428,7 @@ Weboberflächen im Browser:
 
 | Adresse | Inhalt |
 |---|---|
-| `http://<SCHRANKEN_IP>/kamera` | Kamera-Simulation (Einfahrt mit optionaler Einfahrtszeit, Ausfahrt, «Durchfahren») |
+| `http://<SCHRANKEN_IP>/kamera` | Kamera-Simulation (Einfahrt mit optionaler Einfahrtszeit, Ausfahrt, «Durchfahren», «Fahrzeug bleibt stehen» – wirkt wie ein gedrückter Taster) |
 | `http://<SCHRANKEN_IP>/login` | Anmeldung «betrieb»; danach Kasse, Registrierung und Betrieb in der Navigation |
 | `http://<KASSE_IP>/` | nur ein Hinweis mit Link auf Pico 2 (Pico 1 hat keine eigenen Bedienseiten) |
 
