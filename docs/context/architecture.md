@@ -1,16 +1,16 @@
 # Architecture
 
-Facts from the PDFs plus design decisions (settled 2026-10-15). Mark new undecided items **(open)** and
-record the decision here when it's made.
+How the system is built now. Mark new undecided items **(open)** and record the decision here when it's made.
 
 ## Hardware
 
-- 2 × **Raspberry Pi Pico W** (WiFi needed) → PlatformIO `board = rpipicow`.
+- 2 × **Raspberry Pi Pico W** (WiFi needed) → PlatformIO `board = rpipicow`, earlephilhower core.
 - Pico 2 drives 2 × SG90 servos (entry, exit) and reads 2 safety loops (push button or IR sensor).
   The loops are **optional hardware**: with nothing connected, `INPUT_PULLUP` reads HIGH = free, so the
-  firmware runs unchanged without them (decided 2026-10-22).
+  firmware runs unchanged without them. The loop pins are debounced (stable for 50 ms).
 - Onboard LED on **both** Picos shows status: solid = ready, blinking = WLAN or NTP not ready.
   (On the Pico W the LED is on the CYW43 chip: `LED_BUILTIN` works through the core.)
+- Pico 1 has no external hardware.
 
 ### Pin map Pico 2 (user may change it)
 
@@ -27,284 +27,210 @@ table change.
 | GND | GND | 33 / 23 | brown wire of entry / exit servo (next to its signal pin) |
 | GND (buttons, optional) | GND | 18 | other leg of both buttons |
 
-Pico 1 has no external hardware.
+`pio run -e hwtest -t upload` flashes a wiring check (`src/hwtest/`): both servos move every 2 s, the console
+shows the loops.
 
 ### WLAN credentials and IPs
 
-- `include/secrets.h` (**gitignored**) holds SSID, password and the fixed IPs of both Picos
-  (`KASSE_IP`, `SCHRANKEN_IP`, gateway, subnet).
-- `include/secrets.example.h` (committed) shows the format. Copy it to `secrets.h` and fill it in.
+- `include/secrets.h` (**gitignored**) holds SSID, password, the fixed IPs of both Picos (`KASSE_IP`,
+  `SCHRANKEN_IP`, gateway, subnet) and `OPERATOR_PASSWORD`; the board build stops without it.
+- `include/secrets.example.h` (committed) shows the format.
 - Separate test WLAN (phone hotspot). It needs internet access for NTP.
 
 ## Responsibilities
 
 | Pico 1 "Kasse" (env `kasse`) | Pico 2 "Schranken" (env `schranken`) |
 |---|---|
-| Payments by plate: card/TWINT/cash + change (logic; the Kasse page is served by Pico 2, step 8) | All web pages (step 8): camera simulation, Tarif, login; operator: Kasse, registration, Betrieb |
-| Session list for Pico 2 (`GET /api/sessions`) | Registration list (name + plate), persistent |
-| Tariff calculation ([tariff.md](tariff.md)) | Barrier control: 2 servos, open/close |
-| Parking sessions, **persisted in flash** (survive reboot) | Safety loops + safety logic (step 7a) |
-| Payment-status endpoint for Pico 2 | Event log (step 7b): remote openings, safety stops, faults |
-| Endpoint to open a session at entry (and close at exit) | Operator view, user «betrieb» (step 7b) |
+| Parking sessions, **persisted in flash** | **All web pages**: camera simulation, Automat, Tarif, login; for the operator Kasse, Registrierung, Betrieb |
+| Tariff calculation ([tariff.md](tariff.md)) | Registration list (name + plate), persistent |
+| Payments by plate: card / TWINT / cash + change | Barrier control: 2 servos + safety loops (core 1) |
+| JSON API for Pico 2 (status, entry, exit, pay, sessions, reset) | Event log: remote openings, safety stops, faults |
+| `GET /` = link page to Pico 2 | Operator view, user «betrieb» |
 
-The registration list lives on Pico 2 (Testkonzept test object 01). Sessions live on Pico 1.
+The registration list lives on Pico 2 (Testkonzept test object 01). Sessions live on Pico 1; Pico 2 renders the
+Kasse and Automat pages from `GET /api/sessions` and pays through `POST /api/pay`.
+
+## Code layout
+
+One PlatformIO project; envs `kasse`, `schranken`, `hwtest` (boards), `native` (tests), `sim_kasse`,
+`sim_schranken` (PC simulator).
+
+- `lib/` — all logic, no Arduino headers, native-tested. Time is a parameter.
+- `src/kasse/`, `src/schranken/`, `src/common/` — board adapters (WebServer, HTTPClient, LittleFS, Servo, WLAN,
+  NTP, LED). `src/sim/` — the same adapters for the PC (own socket HTTP server/client, files).
+- **Routes exist only once, in `lib/`:** `routeKasse` (`lib/kasse_api`) for Pico 1 and `SchrankenApp`
+  (`lib/schranken_app`) for Pico 2. Board and simulator mains only translate their web server into
+  `WebRequest` / `WebResponse` (`lib/web`) and provide storage, clock and barriers.
+
+Libraries:
+
+| Library | Contents |
+|---|---|
+| `plate` | normalization, validation, invalid-plate text |
+| `tariff` | `feeBreakdown`, `calculateFee` (integer Rappen) |
+| `format` | CHF, Zurich date/time (EU DST rule, no `TZ`), durations, `trim`, `utf8Length` |
+| `registration`, `session` | registration list; session store, state machine, payment (`payment.*`) |
+| `codec` | JSON file formats |
+| `event_log` | event log (max. 100) |
+| `kasse_api` | Pico 1 API handlers + `routeKasse` |
+| `web` | platform-neutral request/response, URL decoding |
+| `html` | page skeleton, nav, notices |
+| `auth` | login tokens and cookies |
+| `gate` | entry/exit decisions on Pico 2, `KasseLink` (the HTTP link to Pico 1) |
+| `barrier` | barrier state machine, `BarrierDriver` (core-1 side), `BarrierEventQueue`, `Debouncer` |
+| `terminal` | call button, «Fahrzeug wendet», payment at the exit terminal |
+| `kasse_client` | Pico 2 side of the Kasse: session list, payments, reset through the API |
+| `kasse_view` | Kasse/Automat/Tarif texts and pages |
+| `schranken_view`, `operator_view` | camera, registration, login pages; operator view, remote opening, logging |
+| `schranken_app` | Pico 2 app: route table, login check, notices, saving; `BarrierPort`, `AppPlatform`, `LocalBarrier` |
+| `testdata` | test-data defaults (KZ table) |
+| `test_support` | header-only test fixtures and the system-test rig (not in the firmware) |
+
+### Pico 2 app (`lib/schranken_app`)
+
+- One `ROUTES[]` table `{method, path, admin, handler}`. `admin` routes redirect to `/login?next=…` without a
+  valid cookie; the same table is the whitelist for `next` (admin GET pages, default `/betrieb`). An unknown
+  method/path is 404 for everyone.
+- After every handler the app saves what changed: `RegistrationList::revision()` and `EventLog::revision()`
+  are compared before and after (works with a full log too).
+- One-time notices after a POST: redirect to `<page>?m=<id>`, the page shows the notice only for that id.
+- Ports:
+  - `BarrierPort` (state, loop fault, loop held, `requestOpen`, `requestPass` → `vehiclePassed()` result,
+    `setLoopHeld`).
+  - `AppPlatform` (read/write file, random words for tokens, log line).
+- **Board (`src/schranken/lane.*`):** `CoreLane` runs servo + loop on **core 1** (`setup1`/`loop1`), so a blocking
+  HTTP call on core 0 never delays a safety stop. Core 0 → core 1: open/pass request counters and the held flag;
+  core 1 → core 0: state, fault, pass acknowledgement, events through a lock-free queue (8 entries, drops are
+  counted). `requestPass` waits up to 20 ms for core 1's answer. Core 0 logs and saves the events; core 1 never
+  touches LittleFS or `Serial`.
+- **Simulator:** `LocalBarrier` (no loop pin; the held flag is the loop), updated every ≤ 20 ms.
 
 ## Flows
 
-**Entry** (Pico 2): normalize plate → validate → registered? (no → stay closed, «… nicht registriert,
-bitte Ruftaste drücken») → ask Pico 1 to open a session with timestamp (optional backdated entry time)
-→ Pico 1 rejects if a session is already open («Parkvorgang bereits offen – bitte Ruftaste drücken»)
-→ success → servo opens (≤ 2 s total) → closes once the minimum open time (`BARRIER_MIN_OPEN_MS` = 5 s)
-has passed, the vehicle has passed («Durchfahren» on the camera page, or the loop going occupied → free)
-**and** the loop is free (step 8). «Fahrzeug bleibt stehen» / «Fahrzeug fährt weiter» (`POST /kamera/schleife`,
-`lane`, `held=1|0`) occupies / frees the loop from the web page, ORed with the loop pin on the board; freeing it
-while the barrier is up counts as the pass (`leftLoop`). Hold only while the barrier is up; while held,
-«Durchfahren» is hidden. Same for the exit barrier.
-Pico 1 unreachable → stay closed, show fault, **no buffered session**.
+**Entry** (Pico 2): normalize plate → validate → registered? (no → stay closed, «… nicht registriert, bitte
+Ruftaste drücken») → `POST /api/entry` (optional backdated entry time) → Pico 1 rejects if a session is already
+open («Parkvorgang bereits offen – bitte Ruftaste drücken») → success → barrier opens in the same request.
+Pico 1 unreachable → stay closed, «Kasse nicht erreichbar – bitte Ruftaste drücken», logged, **no buffered
+session**.
 
-**Payment** (Pico 1): look up open session by plate → compute fee → simulated method → mark paid with
-method, amount and transaction reference (≤ 3 s). Cash accumulates partial amounts until the fee is covered, then
-returns change. Already paid → «bereits bezahlt». No open session → «Kein offener Parkvorgang für <PLATE>».
+**Barrier:** open → closing once `BARRIER_MIN_OPEN_MS` (5 s) has passed, the vehicle has passed («Durchfahren»,
+or the loop going occupied → free) **and** the loop is free. Closing = 2 s sweep 90° → 0°. Loop occupied while
+closing → stop and fully open in the same update, event «Sicherheitsabschaltung», minimum open time restarts.
+Loop occupied 5 min → fault «Sicherungsschleife <Einfahrt|Ausfahrt> länger als 5 min belegt», once per
+occupation, barrier stays open. Loop occupied at boot → barrier starts open. «Fahrzeug bleibt stehen» /
+«Fahrzeug fährt weiter» (`POST /kamera/schleife`) holds the loop from the web page (ORed with the pin), only
+while the barrier is up; freeing it counts as the pass.
 
-**Exit** (Pico 2): normalize → query Pico 1 → `bezahlt`, or fee CHF 0.00 within free time → open
-servo, Pico 1 closes the session with the exit time (clock stops). `unbezahlt` → closed,
-«Gebühr CHF x.xx nicht bezahlt – bitte hier oder an der Kasse bezahlen». `unbekannt` → closed. Timeout/error →
+**Payment** (Pico 1, from the Automat, the Kasse or the exit terminal): open session by plate → fee → simulated
+method → paid with method, amount and transaction reference. Cash accumulates until the fee is covered, then
+change = inserted − fee. Card/TWINT after partial cash charges only the rest; the session books the whole fee
+(method card/TWINT, the cash part kept). Already paid → «bereits bezahlt». No open session → «Kein offener
+Parkvorgang für <PLATE>».
+
+**Exit** (Pico 2): normalize → `POST /api/exit` → closed (paid) or closed_free (fee 0) → barrier opens, the clock
+stops. Unpaid → closed, «Gebühr CHF x.xx nicht bezahlt – bitte am Automaten bezahlen», payment offered at the
+exit terminal (card/TWINT). No session → «Kein Parkvorgang gefunden – bitte Ruftaste drücken». Timeout/error →
 closed, «Kasse nicht erreichbar – bitte Ruftaste drücken». **Fail-safe: anything unexpected = closed.**
+
+## Web pages (all on Pico 2)
+
+Server-rendered HTML forms, no JavaScript. Nav: «Kamerasimulation», «Automat», «Tarif» for everyone; «Kasse»,
+«Registrierung», «Betrieb» after login; right side «🔒 Anmelden» or «👤 betrieb (Admin)» + «Abmelden».
+
+| Route | Access | Contents |
+|---|---|---|
+| `GET /` | all | 303 to `/kamera` |
+| `GET /kamera` | all | per lane: barrier state, terminal text, plate field (+ optional `datetime-local` entry time at the entry), «Erfassen», «Durchfahren», «Fahrzeug bleibt stehen», «Ruftaste»; exit: «Fahrzeug wendet» and the payment form; below all sessions (testing aid) and plate suggestions |
+| `POST /kamera/einfahrt`, `/kamera/ausfahrt`, `/kamera/durchfahren`, `/kamera/schleife`, `/kamera/ruftaste`, `/kamera/abbrechen`, `/kamera/bezahlen` | all | the actions above (field `kz`, `entry`, `lane`, `held`, `method`), 303 to `/kamera` |
+| `GET /automat?kz=`, `POST /automat/pay` | all | Automat: tariff, search by plate (**active session only**, nothing about other cars), pay with Karte OK / Karte abgelehnt / TWINT / Bargeld (CHF amount) |
+| `GET /tarif` | all | tariff sentence and example fees from `lib/tariff` |
+| `GET /login`, `POST /login`, `POST /logout` | all | login form (`user`, `password`, `next`); cookie `parkhaus_session` (`HttpOnly; SameSite=Strict`), 128-bit random token, max. 4 logins in RAM |
+| `GET /kasse?kz=`, `POST /kasse/pay` | operator | Kasse: any plate (latest session, also closed), pay, list of all sessions |
+| `GET /registrierung`, `POST /registrierung/add`, `/registrierung/delete` | operator | registrations |
+| `GET /betrieb?filter=`, `POST /betrieb/oeffnen` | operator | lanes (barrier, last plate, payment status, call, fault), remote opening with reason, event log with type filter, test-data reset |
+| `POST /reset` | operator | test-data reset: default registrations, empty log, Pico 1 `/api/reset` |
+
+Remote opening: reason «Kennzeichen nicht erkannt», «Kulanz» or «Technische Störung» (else «Bitte Grund
+auswählen»); at the entry also «Neuer Kunde registrieren» (+ name: registers the plate, then opens). Opens only
+when Pico 1 confirms (entry: session opened or already open; exit: closed, unpaid → «ohne Zahlung ausgefahren»,
+or no session). Pico 1 not answering → stays closed, logged «Kasse nicht erreichbar».
+
+## Interface Pico 2 → Pico 1 (OP-01)
+
+JSON over HTTP on Pico 1, port 80. Requests with a body use `Content-Type: application/json`.
+All times are Unix epoch seconds, amounts integer **Rappen**. Plates may be sent unnormalized: Pico 1 normalizes
+and validates them. Every error is `{"error":"<code>"}` with the given HTTP status. A body that is not a JSON object
+with a string `kz` → 400 `bad_request`. Pico 2 client timeout: **1000 ms**; timeout or connection error = Pico 1
+unreachable. **POST routes only from `SCHRANKEN_IP`** (others: 403 `forbidden`); GET routes are open.
+
+- **`GET /api/status?kz=<plate>`** (TF-29) — 200 `{"kz","status":"bezahlt"|"unbezahlt"|"unbekannt","fee","entry"}`
+  (`unbekannt` = no open session, without `fee`/`entry`) · 400 `invalid_plate` · 503 `time_not_synced` if the
+  clock is before an open session's entry.
+- **`POST /api/entry`** `{"kz"}` or `{"kz","entry":<epoch>}` (backdated) — 201 `{"kz","entry"}`, also for a repeated
+  entry (see domain rules) · 409 `already_open` · 400 `invalid_plate` / `entry_in_future` · 503 `time_not_synced` /
+  `store_full`.
+- **`POST /api/exit`** `{"kz"}`; operator: `{"kz","override":true}` — 200 `{"kz","status":"closed"|"closed_free"|"closed_unpaid","exit","fee"}` ·
+  402 `{"error":"unpaid","fee"}` · 404 `no_session` · 400 `invalid_plate` · 503 `time_not_synced`.
+- **`POST /api/pay`** `{"kz","method":"card_ok"|"card_declined"|"twint"}` or `{"kz","method":"cash","amount":<Rappen>}`
+  (1 … 100000) — 200 `{"kz","status":"bezahlt","amount","method":"card"|"twint"|"cash","tx"}` + `change` (cash) or
+  `cash` (card/TWINT after partial cash: the cash part) · 200 `{"kz","status":"unbezahlt","amount","remaining"}`
+  (partial cash) · 402 `declined` · 409 `already_paid` / `nothing_to_pay` · 404 `no_session` · 400
+  `invalid_plate` / `invalid_amount` / `bad_request` · 503 `time_not_synced`.
+- **`GET /api/sessions`** — the `/sessions.json` format plus `"now"` (Pico 1 time) and `"synced"`.
+- **`POST /api/reset`** — no sessions, tx counter 1; 200 `{"status":"reset"}`.
+
+An exit attempt without success (or abort) changes nothing: the session stays open and the clock keeps running.
 
 ## Data
 
-- **Plate:** normalize = uppercase and remove all whitespace. Valid = `^[A-Z]{2}[0-9]{1,6}$` after
-  normalization. Shared pure function in `lib/` (Pico 2 validates input; Pico 1 validates API params).
-- **Registration:** name, normalized plate (unique).
-- **Parking session:** plate, entry time, exit time, amount, payment method, transaction ref, status.
-  Status: `open` → `paid` → `closed`. Also `closed_free` («abgeschlossen (Freizeit)») and
-  `closed_unpaid` («ohne Zahlung ausgefahren», operator remote opening at the exit, step 7b). At most one open/paid (not closed) session per plate.
-  Unpaid exit attempt or abort leaves it `open`.
-- **Time:** **NTP over WLAN** at boot on both Picos. Internally Unix epoch seconds (UTC); displayed in
-  Europe/Zurich (`TZ = "CET-1CEST,M3.5.0,M10.5.0/3"`) as `TT.MM.JJJJ HH:MM:SS`. **Pico 1 is
-  authoritative for session timestamps** (entry and exit time are stamped by Pico 1 on receiving the
-  request). Pico 2 sends a time only for a backdated entry. As long as NTP hasn't synced, entry/exit are
-  rejected (barrier closed) and the LED blinks. Logic in `lib/` gets the time as a parameter.
-- **Storage:** **LittleFS + JSON (ArduinoJson)**. All data is held in RAM (structs) and loaded at boot.
-  On every change the file is written to `<name>.tmp`, then renamed over `<name>.json` (atomic, survives
-  a power cut during a write; TF-11/TF-30 pull the power on purpose).
-  Pico 1: `/sessions.json`. Pico 2: `/registrations.json`, `/events.json`.
-  A **test-data reset** (button/endpoint on each Pico) rewrites the files from built-in defaults
-  matching the KZ table in test-concept.md. No database: a Pico W has no room for one and the data is
-  tiny (tens of records).
+- **Plate:** normalize = uppercase, remove all whitespace. Valid = `^[A-Z]{2}[0-9]{1,6}$` after normalization.
+- **Registration:** name (trimmed, 1–40 characters), normalized plate (unique); at most 50.
+- **Parking session:** plate, entry, exit, amount, cash inserted, payment method, transaction ref, status
+  `open` → `paid` → `closed`; also `closed_free` («abgeschlossen (Freizeit)») and `closed_unpaid` («ohne Zahlung
+  ausgefahren»). At most one open/paid session per plate; at most 50 sessions (oldest closed one dropped).
+- **Time:** NTP at boot on both Picos. Unix epoch seconds (UTC) internally, shown in Europe/Zurich as
+  `TT.MM.JJJJ HH:MM:SS`. **Pico 1 stamps entry and exit times**; Pico 2 sends a time only for a backdated entry.
+  Without NTP, entry/exit/payment are rejected and the LED blinks.
+- **Storage:** LittleFS + JSON; data in RAM, loaded at boot; on every change written to `<name>.tmp`, then renamed
+  over `<name>.json` (survives a power cut; the simulator does the same). Pico 1: `/sessions.json`. Pico 2:
+  `/registrations.json`, `/events.json`. An invalid file is rejected as a whole and replaced by the defaults.
+  - `/registrations.json`: `{"registrations":[{"name":"Test Kunde A","kz":"LU123456"}]}`
+  - `/sessions.json`: `{"nextTx":2,"sessions":[{"kz":"LU123456","entry":1760525200,"exit":0,"amount":400,"cash":0,"method":"card","tx":"TX-000001","status":"paid"}]}`
+    (method `none|card|twint|cash`); on load `nextTx` is raised above every stored `TX-` number.
+  - `/events.json`: `{"events":[{"t":1760530000,"type":"remote_opening","lane":"entry","kz":"BE4711","user":"betrieb","reason":"Kennzeichen nicht erkannt","note":"Parkvorgang eröffnet"}]}`
+    (type `safety_stop|loop_fault|remote_opening|kasse_unreachable|call_button|payment_alert`).
 
-## Interface Pico 2 → Pico 1 (OP-01, decided)
+## Domain rules
 
-JSON over HTTP on Pico 1, port 80. Requests with a body use `Content-Type: application/json`.
-All times are Unix epoch seconds, amounts are integer **Rappen**. Plates may be sent unnormalized:
-Pico 1 normalizes and validates them. Every error is `{"error":"<code>"}` with the given HTTP status.
-A body that is not a JSON object with a string `kz` (or a non-integer `entry`) → 400 `bad_request`.
-Pico 2 client timeout: **1000 ms** (keeps the entry ≤ 2 s). Timeout or connection error = Pico 1 unreachable.
-
-**`GET /api/status?kz=<plate>`** — payment status (TF-29, < 1 s)
-- 200 `{"kz":"LU123456","status":"bezahlt"|"unbezahlt"|"unbekannt","fee":400,"entry":1760530000}`
-  (`unbekannt` = no open session; then `fee`/`entry` are omitted)
-- 400 `invalid_plate` (empty or bad format)
-
-**`POST /api/entry`** — open a session
-- body `{"kz":"LU123456"}` or `{"kz":"LU123456","entry":1760521000}` (backdated entry time)
-- 201 `{"kz":"LU123456","entry":1760530000}`; also for a **repeated entry** (see domain rules), then with the
-  existing session's entry time
-- 409 `already_open` · 400 `invalid_plate` · 400 `entry_in_future` · 503 `time_not_synced` ·
-  503 `store_full` (50 sessions, none closed to drop)
-
-**`POST /api/pay`** — payment at the exit terminal (step 7c), card or TWINT only (no cash at the barrier)
-- body `{"kz":"LU123456","method":"card_ok"|"card_declined"|"twint"}`
-- 200 `{"kz":"LU123456","status":"bezahlt","amount":400,"method":"card"|"twint","tx":"TX-000001"}`
-- 402 `declined` · 409 `already_paid` / `nothing_to_pay` · 404 `no_session` · 400 `invalid_plate` /
-  `bad_request` (unknown method) · 503 `time_not_synced`
-
-**`POST /api/exit`** — try to close the session; Pico 2 opens the barrier only on 200
-- body `{"kz":"LU123456"}`; operator remote opening: `{"kz":"LU123456","override":true}` (non-bool → 400)
-- 200 `{"kz":"LU123456","status":"closed"|"closed_free","exit":1760533600,"fee":400}`; with `override` an
-  unpaid session (or clock before entry) closes as `"closed_unpaid"`, `fee` = the unpaid amount
-- 402 `{"error":"unpaid","fee":400}` → «Gebühr CHF 4.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen»
-- 404 `no_session` · 400 `invalid_plate` · 503 `time_not_synced` (also when the clock is before the
-  session's entry time)
-
-Exit attempt without success (or abort) changes nothing: the session stays open and the clock keeps
-running. The registration check happens on Pico 2 before `/api/entry`. Pico 1 doesn't know registrations.
-
-**`GET /api/sessions`** (step 8) — all sessions for the Kasse page and the camera page on Pico 2
-- 200: the `/sessions.json` format plus `"now"` (Pico 1 time, used for durations and fees) and `"synced"`
-
-**`POST /api/reset`** (step 8) — test-data reset (no sessions, tx counter 1), 200 `{"status":"reset"}`
-
-**`POST /api/pay` with cash** (step 8, Kasse page): `{"kz":"…","method":"cash","amount":<Rappen inserted>}`
-(1 … 100000, else 400 `invalid_amount`); paid → 200 as above with `"method":"cash","change":<Rappen>`;
-not covered yet → 200 `{"kz","status":"unbezahlt","amount":<fee>,"remaining":<Rappen>}`.
-
-**Superseded by step 8:** Pico 1 serves no pages any more except `GET /` (link to Pico 2). The step-4
-description below is kept for the Kasse page content, which Pico 2 now renders from `/api/sessions`
-(routes `/kasse`, `/kasse/pay` on Pico 2; no `/automat`; reset on `/betrieb`).
-
-**Pico 1 web pages (step 4, decided 2026-10-22):** server-rendered HTML forms, no JavaScript.
-- `GET /` → 303 to `/kasse`.
-- `GET /kasse?kz=` — search: active session, else the latest closed one; list of all sessions; reset button.
-- `GET /automat?kz=` — search: active session only; none → «Kein offener Parkvorgang für <PLATE>».
-- `POST /kasse/pay`, `POST /automat/pay` — form fields `kz`, `method` (`card_ok|card_declined|twint|cash`),
-  `amount` (CHF, cash only). Post/redirect/get: the result is kept in RAM and shown once after a 303 to
-  `<page>?kz=<PLATE>&m=<id>`, so a reload doesn't pay twice. The pay form stays visible on a paid session so
-  a second attempt shows «bereits bezahlt» (TF-20).
-- `POST /reset` — test-data reset (no sessions, tx counter 1), 303 to `/kasse`.
-- `GET /tarif` (step 7d) — tariff summary sentence and example fees, generated from `lib/tariff`; linked in
-  the navigation and below every session card on Kasse and Automat.
-- Sessions are written to flash after every successful entry, exit and payment (incl. partial cash).
-- The JSON API reads the request body from WebServer's `plain` argument, which is only set for a
-  non-form content type: clients must send `Content-Type: application/json`.
-
-**Pico 2 web pages (step 5, decided 2026-10-23):** server-rendered HTML forms, same style as Pico 1.
-- `GET /` → 303 to `/kamera`.
-- `GET /kamera` — one card per lane: barrier state, last terminal text, plate field, «Erfassen»; the entry
-  card also has an optional `datetime-local` entry time (Europe/Zurich, empty = now).
-- `POST /kamera/einfahrt` (fields `kz`, `entry`), `POST /kamera/ausfahrt` (`kz`) → decision, 303 to `/kamera`.
-- `GET /registrierung`, `POST /registrierung/add` (`name`, `kz`), `POST /registrierung/delete` (`kz`),
-  `POST /reset` (default registrations); post/redirect/get with a one-time notice like Pico 1.
-- Entry/exit decisions are pure functions in `lib/gate` behind a `KasseLink` interface (firmware:
-  `HTTPClient`, 1000 ms timeout; tests: fakes or the real `kasse_api` handlers). Only a well-formed
-  201 (entry) or 200 with `closed`/`closed_free` (exit) opens; everything else keeps the barrier closed.
-- `lib/barrier` holds the barrier state machine (servo angles 0° closed, 90° open); the firmware writes
-  the angle to the servo whenever it changes.
-
-**Barrier safety (step 7a, decided 2026-10-23):**
-- Closed → open immediately on a positive decision. Open → closing once `BARRIER_MIN_OPEN_MS` (5 s) has
-  passed, the vehicle has passed (step 8) and the loop is free. Closing = linear 2 s sweep 90° → 0° (`BARRIER_CLOSE_MS`).
-- Loop occupied while closing → stop and back to fully open in the same update (TF-13 < 0.5 s), event
-  «Sicherheitsabschaltung»; the 5 s minimum open time restarts.
-- Loop occupied for 5 min without a break → fault «Sicherungsschleife <Einfahrt|Ausfahrt> länger als 5 min
-  belegt», reported once per occupation, shown on the camera page until the loop is free. The barrier
-  stays open.
-- Pico 2 runs barriers and loops on **core 1** (`setup1`/`loop1`); web server and HTTP client stay on
-  core 0. Core 0 → core 1: an open-request counter; core 1 → core 0: state and fault flag. All are
-  `std::atomic` written by one core only (plain loads/stores, lock-free on the RP2040).
-
-**Event log + operator view (step 7b, decided 2026-10-23):**
-- `lib/event_log`: at most 100 events, oldest dropped; types «Sicherheitsabschaltung», «Störung
-  Sicherungsschleife», «Fernöffnung», «Kasse nicht erreichbar», «Ruftaste» (7c). Each with time (Pico 2
-  NTP), lane, plate, user, reason, note. Written to `/events.json` after every new event. The test-data
-  reset on Pico 2 also clears the log.
-- `GET /betrieb` (step 8: login form instead of HTTP Basic auth; user «betrieb», password `OPERATOR_PASSWORD` in `secrets.h`; missing →
-  build warning and example password `parkhaus`): per lane barrier state, last plate typed there, its
-  status from `GET /api/status` («kein Parkvorgang», «bezahlt», «unbezahlt (CHF x.xx)», «Kasse nicht
-  erreichbar»), loop fault; «Schranke öffnen» (`<details>`) → plate + reason → «Bestätigen»; event log
-  with a type filter (`?filter=safety_stop`).
-- `POST /betrieb/oeffnen` (`lane`, `kz`, `reason`): reason must be one of «Kennzeichen nicht erkannt»,
-  «Kulanz», «Technische Störung», else «Bitte Grund auswählen» and nothing happens; the plate must be
-  valid («Bitte gültiges Kennzeichen eingeben»). Entry: `/api/entry` (201 or 409 already open). Exit:
-  `/api/exit` with `override` (unpaid → `closed_unpaid`, note «ohne Zahlung»; 404 = no session, opens).
-- **Fail-safe (decided by the user 2026-10-23):** the barrier opens only when Pico 1 confirms the session
-  outcome. Pico 1 not answering → stays closed, «Kasse nicht erreichbar – Schranke bleibt zu», logged as
-  «Kasse nicht erreichbar» with user and reason. Any other reply → stays closed, not logged.
-- Firmware: core 1 hands barrier events to core 0 through a per-lane single-producer/single-consumer
-  queue; core 0 timestamps, logs and writes them (core 1 never touches LittleFS).
-
-**Exit terminal (step 7c, decided 2026-10-23):** `lib/terminal`, one `LaneTerminal` per lane in RAM.
-- Camera page per lane: «Ruftaste» (`POST /kamera/ruftaste`, `lane`) → «Leitstelle wurde gerufen – bitte
-  warten», event «Ruftaste» (lane, last plate), open call shown in the operator view until the barrier
-  opens (gate or remote opening).
-- Exit lane: «Fahrzeug wendet» (`POST /kamera/abbrechen`) → «Vorgang abgebrochen – Fahrzeug wendet»;
-  Pico 1 is not called, the session stays open and the fee keeps growing (TF-27).
-- After an unpaid exit attempt the exit card offers payment for that plate (`POST /kamera/bezahlen`,
-  `method` = `card_ok|card_declined|twint`) → `/api/pay`. Declined → «Zahlung abgelehnt – anderes
-  Zahlungsmittel wählen»; the 5th decline in a row for the plate → «Zahlung abgelehnt – Leitstelle wurde
-  benachrichtigt», event «Zahlung 5× abgelehnt», call in the operator view (TF-28). Paid (or already paid /
-  nothing to pay) → exit retried automatically, opens on success («Bezahlt – CHF x.xx, TWINT – …»).
-  A new plate or an opening resets the decline counter.
-
-**UI rework after TF-34 round 1 (step 8, decided by the user 2026-10-23):**
-- **One UI on Pico 2**, one nav (`appendPageStart(…, Role, …)` in `lib/html`): «Kamerasimulation»,
-  «Tarif» for everyone; «Kasse», «Registrierung», «Betrieb» only for the logged-in operator. Right side:
-  «🔒 Anmelden» or «👤 betrieb (Admin)» + «Abmelden». `/` and the default page = `/kamera`. The simulator's
-  link bar and `/sim` are gone.
-- **Login** (`lib/auth`): `GET/POST /login` (fields `user`, `password`, `next`), `POST /logout`. Success →
-  random 128-bit token (sim: `std::random_device`, board: `rp2040.hwrand32()`) in RAM (max. 4, oldest
-  dropped) and cookie `parkhaus_session` (`Path=/; HttpOnly; SameSite=Strict`). Admin routes without a
-  valid cookie → 303 `/login?next=<page>`; `next` only to `/kasse`, `/registrierung`, `/betrieb`. Replaces
-  HTTP Basic auth. Wrong password → «Benutzer oder Passwort falsch».
-- **Kasse page on Pico 2** (`lib/kasse_client`): `GET /api/sessions` → `renderKassePage`; `POST /kasse/pay`
-  → `/api/pay` (CHF parsed on Pico 2, sent in Rappen), notice after PRG as before. Pico 1 down →
-  «Kasse nicht erreichbar – …». **No Automat**: the Kasse takes its role (TF-21/22/24/32).
-- **Camera page:** below the lanes, «Parkvorgänge (Kasse)» from `/api/sessions` (read-only testing aid);
-  plate fields get a `<datalist>` of registered plates and plates in the car park.
-- **Session lists** (Kasse, camera page): active (open/paid) first, then closed, newest first in each group.
-- **«Durchfahren»** (`POST /kamera/durchfahren`, `lane`), shown while the barrier is open → «<PLATE>
-  durchgefahren – Schranke schliesst»; when the page sees the barrier closed → «… – Schranke geschlossen».
-  Barrier closed → «Keine offene Schranke – Fahrzeug kann nicht durchfahren». Firmware: core 0 → core 1
-  pass-request counter like the open requests. Without a click (and without a loop) the barrier stays open.
-- **«Neuer Kunde registrieren»** (remote opening, entry only, extra field `name`): registers name + plate
-  (errors from the registration, barrier stays closed), then `/api/entry` and opens like any remote
-  opening; event note «Neukunde registriert – Parkvorgang eröffnet». Pico 1 down: the registration stays,
-  barrier closed, logged.
-- **Test-data reset** only on `/betrieb` (`POST /reset`): registrations, event log, and Pico 1 via
-  `/api/reset`.
-- **UI text change:** «Gebühr CHF x.xx nicht bezahlt – bitte hier oder an der Kasse bezahlen» (was «… am
-  Automaten …» in test-concept.md TF-24).
-
-## Domain rules (decided 2026-10-19, step 2)
-
-- **Fee 0 (free time):** payment is refused («nothing to pay»), the session stays `open`; exit closes
-  it as `closed_free`. `/api/status` reports such a session as `unbezahlt` with `fee: 0`.
-- **Repeated entry (decided 2026-10-23):** if Pico 1 answers an entry only after Pico 2's 1000 ms timeout,
-  the session exists although the barrier stayed closed. A retry for the same plate therefore succeeds
-  (`Repeated`, 201, nothing changes) if the session is open and unpaid (no cash inserted) and it is the same
-  entry: without backdating opened less than 30 s ago (`REPEAT_ENTRY_SECONDS`), with backdating the same
-  entry time. Otherwise `already_open` (TF-10: a second entry after ≥ 30 s is rejected).
+- **Fee 0 (free time):** payment is refused («nothing to pay»), the session stays `open`; exit closes it as
+  `closed_free`. `/api/status` reports it as `unbezahlt` with `fee: 0`.
+- **Repeated entry:** if Pico 1 answers an entry only after Pico 2's 1000 ms timeout, the session exists although
+  the barrier stayed closed. A retry for the same plate succeeds (201, nothing changes) if the session is open and
+  unpaid (no cash inserted) and it is the same entry: without backdating opened less than 30 s ago
+  (`REPEAT_ENTRY_SECONDS`), with backdating the same entry time. Otherwise `already_open` (TF-10).
 - **Paid = may leave:** a paid session closes at any later exit. No grace period, no extra fee.
-- **Session history:** at most 50 sessions in RAM/flash. When full, the oldest closed one is dropped;
-  open/paid sessions are never dropped.
-- **Payment:** Karte abgelehnt changes nothing. Cash accumulates until the fee is covered, then
-  change = inserted − fee. Card/TWINT after partial cash charges the rest. The amount booked is the
-  fee at payment time. Transaction ref `TX-000001`, … from a counter stored with the sessions.
-- **Registrations:** at most 50; name trimmed, 1–40 bytes; plate unique after normalization.
-- **Formats:** duration always `<h> h <m> min` (hours unbounded, minutes rounded down): `0 h 5 min`,
-  `26 h 3 min`. Europe/Zurich offset is computed by a pure function (EU rule), not via `TZ`.
+- **Payment:** «Karte abgelehnt» changes nothing. The amount booked is the fee at payment time. Transaction ref
+  `TX-000001`, … from a counter stored with the sessions. 5 declines in a row at the exit terminal → «Zahlung
+  abgelehnt – Leitstelle wurde benachrichtigt», event «Zahlung 5× abgelehnt», call in the operator view.
+- **Formats:** duration `<h> h <m> min` (hours unbounded, minutes rounded down).
 
-Libraries: `lib/registration`, `lib/session` (store, state machine, payment), `lib/format`,
-`lib/codec` (JSON files), `lib/kasse_api` (API handlers → status + body), `lib/kasse_view` (Kasse and
-Tarif page texts and HTML, CHF input parsing), `lib/kasse_client` (Pico 2 side: sessions, payment, reset via
-the API), `lib/auth` (login tokens and cookies), `lib/html` (shared page building blocks),
-`lib/barrier` (barrier state machine), `lib/gate` (entry/exit decisions on Pico 2), `lib/schranken_view`
-(registration and camera pages), `lib/event_log` (event log), `lib/operator_view` (operator view, remote
-opening, logging helpers), `lib/terminal` (call button, exit abort, payment at the exit terminal).
+## PC simulator
 
-File formats (LittleFS):
-- `/registrations.json`: `{"registrations":[{"name":"Test Kunde A","kz":"LU123456"}]}`
-- `/sessions.json`: `{"nextTx":2,"sessions":[{"kz":"LU123456","entry":1760525200,"exit":0,"amount":400,
-  "cash":0,"method":"card","tx":"TX-000001","status":"paid"}]}` (method `none|card|twint|cash`,
-  status `open|paid|closed|closed_free|closed_unpaid`). An invalid file is rejected as a whole.
-- `/events.json`: `{"events":[{"t":1760530000,"type":"remote_opening","lane":"entry","kz":"BE4711",
-  "user":"betrieb","reason":"Kennzeichen nicht erkannt","note":"Parkvorgang eröffnet"}]}` (type
-  `safety_stop|loop_fault|remote_opening|kasse_unreachable|call_button|payment_alert`, lane `entry|exit|""`).
+Two native programs with the same `lib/` code, talking HTTP like the boards:
+- `src/sim/kasse/` (env `sim_kasse`, `localhost:8081`): Pico 1 through `routeKasse` (always synced, no client
+  check).
+- `src/sim/schranken/` (env `sim_schranken`, `localhost:8082`): Pico 2 through `SchrankenApp` with two
+  `LocalBarrier`s; calls the Kasse at `KASSE_URL` (default `http://localhost:8081`), 1000 ms timeout.
+- `src/sim/common/`: minimal HTTP server (Cookie / Set-Cookie) + client (Winsock/POSIX), data files.
+- Config by environment: `SIM_HOST` (default `127.0.0.1`), `SIM_DATA` (default `sim-data`), `KASSE_URL`,
+  `SCHRANKEN_PUBLIC_URL` (link on Pico 1's `/`), `OPERATOR_PASSWORD` (default `parkhaus`).
+- Docker: `Dockerfile` (g++ 13, ArduinoJson 7.4.3 single header with checksum, static libstdc++; runtime
+  `debian:bookworm-slim`), `docker-compose.yml` with `kasse` (builds the image) and `schranken`, ports bound to
+  127.0.0.1, data in `./sim-data/<service>`. Pico 1 off = `docker compose stop kasse`.
 
-## PC simulator (decided 2026-10-23)
+## Tests
 
-Two native programs with the same `lib/` code as the firmware, talking HTTP like the boards:
-- `src/sim/kasse/` (env `sim_kasse`, `localhost:8081`): Pico 1 — API, sessions, `/` link page.
-- `src/sim/schranken/` (env `sim_schranken`, `localhost:8082`): Pico 2 — all pages, barriers (no loops:
-  «Durchfahren» only). Calls the Kasse at `KASSE_URL` (default `http://localhost:8081`) with a 1000 ms total
-  timeout.
-- `src/sim/common/`: own minimal HTTP server (with Cookie / Set-Cookie) + client (Winsock/POSIX, no
-  dependency), data files.
-- Config by environment: `SIM_HOST` (listen address, default `127.0.0.1`), `SIM_DATA` (default
-  `sim-data`), `KASSE_URL`, `SCHRANKEN_PUBLIC_URL` (link on Pico 1's `/`, default `http://localhost:8082`),
-  `OPERATOR_PASSWORD`.
-- Docker: `Dockerfile` (build stage `gcc:13-bookworm`, ArduinoJson single header 7.4.3, static libstdc++;
-  runtime `debian:bookworm-slim`), `docker-compose.yml` with services `kasse` and `schranken`, ports bound
-  to 127.0.0.1, data in `./sim-data/<service>`. Pico 1 off = `docker compose stop kasse`.
-- Only the glue differs from the firmware. Routes and texts must stay identical; when a route is added to
-  a `src/<board>/main.cpp`, add it to `src/sim/<board>/main.cpp` too.
-
-## Code layout (decided)
-
-One PlatformIO project:
-- `[env:kasse]` and `[env:schranken]`: `board = rpipicow`, earlephilhower core, each with a
-  `build_src_filter` selecting its own `src/` subfolder (e.g. `src/kasse/`, `src/schranken/`).
-- `[env:native]` for host tests of `lib/` (tariff, plate, session state machine, change calculation).
-- Libraries: ArduinoJson (`lib_deps`), core's WiFi, WebServer, HTTPClient, LittleFS, Servo.
-- `lib/` stays free of Arduino headers. Hardware, WiFi, web server and storage glue live in `src/`.
-- Hardware test suites run only on the board envs (`test_filter` / `test_ignore`).
+- Unit suites per library in `test/native/test_<name>/` (Unity, `pio test -e native`).
+- System test through the real routes (`lib/test_support/system_rig.h`): `test_system_entry` (Testkonzept 8.1–8.2),
+  `test_system_safety` (8.3–8.4), `test_system_payment` (8.5–8.7). A "reboot" rebuilds a Pico from its files.
+- No board test suites (`test_ignore = *` on the board envs).

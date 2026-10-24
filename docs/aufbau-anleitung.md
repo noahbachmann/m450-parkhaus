@@ -3,12 +3,8 @@
 Schritt-für-Schritt-Anleitung für den Hardware-Aufbau mit **2 × Raspberry Pi Pico W** und
 **2 × Servo SG90**, die Einrichtung des WLANs und das erste Flashen.
 
-> **Stand:** Verdrahtung, Pins und WLAN-Konfiguration sind festgelegt. WLAN/NTP (Schritt 3) und die
-> Kasse-Firmware auf Pico 1 (Schritt 4, Test: [anleitung-schritt-4-kasse.md](anleitung-schritt-4-kasse.md))
-> und die Schranken-Firmware auf Pico 2 (Schritt 5) sind umgesetzt. Ab Schritt 4 wurde nur noch mit den
-> Unit-Tests auf dem PC geprüft (keine Picos mehr verfügbar); Abschnitt 8 ist auf Hardware ungetestet.
-> Mit dem Schnelltest in [Abschnitt 7.3](#73-hardware-schnelltest-optional) lässt sich die Verdrahtung
-> aber schon jetzt prüfen.
+> **Hinweis:** Die Firmware ist gebaut und auf dem PC getestet, lief aber noch nie auf den Picos.
+> Zuerst die Verdrahtung mit dem [Hardware-Schnelltest](#73-hardware-schnelltest-optional) prüfen.
 
 ---
 
@@ -294,6 +290,9 @@ Die Zugangsdaten stehen in `include/secrets.h`. Diese Datei ist **gitignored** u
    #define SCHRANKEN_IP 192, 168, 43, 202
    #define GATEWAY_IP 192, 168, 43, 1
    #define SUBNET_MASK 255, 255, 255, 0
+
+   // Passwort für die Anmeldung «betrieb» auf Pico 2 (ohne diese Zeile bricht der Build ab)
+   #define OPERATOR_PASSWORD "parkhaus"
    ```
 3. Kontrolle: `git status` darf `include/secrets.h` **nicht** anzeigen.
 
@@ -352,56 +351,20 @@ Hier erscheinen Statusmeldungen (z. B. die IP-Adresse). Beenden mit `Ctrl + C`.
 
 ### 7.3 Hardware-Schnelltest (optional)
 
-Damit lässt sich die Verdrahtung prüfen, bevor die richtige Firmware fertig ist. Den Inhalt
-**vorübergehend** in `src/schranken/main.cpp` einfügen und auf Pico 2 flashen:
+Prüft die Verdrahtung von Pico 2 ohne die richtige Firmware (Programm in `src/hwtest/main.cpp`):
 
-```cpp
-#include <Arduino.h>
-#include <Servo.h>
-
-#include "pins.h"
-
-Servo entryServo;
-Servo exitServo;
-
-void setup()
-{
-    Serial.begin(115200);
-    pinMode(PIN_ENTRY_LOOP, INPUT_PULLUP);
-    pinMode(PIN_EXIT_LOOP, INPUT_PULLUP);
-    entryServo.attach(PIN_ENTRY_SERVO);
-    exitServo.attach(PIN_EXIT_SERVO);
-}
-
-void loop()
-{
-    // Beide Schranken alle 2 s auf (90°) und zu (0°); Taster werden nur angezeigt
-    static bool open = false;
-    open = !open;
-    entryServo.write(open ? 90 : 0);
-    exitServo.write(open ? 90 : 0);
-
-    bool entryPressed = digitalRead(PIN_ENTRY_LOOP) == LOW;
-    bool exitPressed = digitalRead(PIN_EXIT_LOOP) == LOW;
-    Serial.printf("Schranken: %s  Schleife Einfahrt: %s  Ausfahrt: %s\n", open ? "offen" : "zu",
-                  entryPressed ? "belegt" : "frei", exitPressed ? "belegt" : "frei");
-    delay(2000);
-}
+```
+pio run -e hwtest -t upload
+pio device monitor -b 115200
 ```
 
 Erwartung: Beide Servos fahren alle 2 s auf und zu. Ohne Taster zeigt die Konsole immer «frei»; mit
-Tastern wechselt die Anzeige beim Drücken auf «belegt».
-Danach die Originaldatei zurückholen:
-
-```
-git checkout src/schranken/main.cpp
-```
+Tastern wechselt die Anzeige beim Drücken auf «belegt». Danach die richtige Firmware flashen
+(`pio run -e schranken -t upload`).
 
 ---
 
 ## 8. Inbetriebnahme und Test
-
-> Stand nach Roadmap-Schritt 5. Auf Hardware nicht getestet.
 
 ### 8.1 Startreihenfolge
 
@@ -429,6 +392,7 @@ Weboberflächen im Browser:
 | Adresse | Inhalt |
 |---|---|
 | `http://<SCHRANKEN_IP>/kamera` | Kamera-Simulation (Einfahrt mit optionaler Einfahrtszeit, Ausfahrt, «Durchfahren», «Fahrzeug bleibt stehen» – wirkt wie ein gedrückter Taster) |
+| `http://<SCHRANKEN_IP>/automat` | Automat: per Kennzeichen bezahlen (ohne Anmeldung) |
 | `http://<SCHRANKEN_IP>/login` | Anmeldung «betrieb»; danach Kasse, Registrierung und Betrieb in der Navigation |
 | `http://<KASSE_IP>/` | nur ein Hinweis mit Link auf Pico 2 (Pico 1 hat keine eigenen Bedienseiten) |
 
@@ -442,12 +406,12 @@ Antwort zum Beispiel: `{"kz":"LU123456","status":"unbekannt"}` – die Kasse ist
 
 ### 8.3 Ablauf einmal durchspielen
 
-- [ ] Auf Pico 2 ein Kennzeichen registrieren (z. B. `LU 123456`).
+- [ ] Anmelden («betrieb») und unter «Registrierung» ein Kennzeichen registrieren (z. B. `NW 654321`).
 - [ ] In der Kamera-Simulation bei der **Einfahrt** eingeben → Servo 1 öffnet.
 - [ ] Schranke schliesst wieder: nach «Durchfahren» auf der Kamera-Simulation oder, mit Taster, nach
   Drücken und Loslassen von Taster 1 (frühestens 5 s nach dem Öffnen).
 - [ ] **Ausfahrt** ohne Bezahlung → Servo 2 bleibt zu, Meldung zur offenen Gebühr.
-- [ ] Anmelden und an der Kasse (`/kasse` auf Pico 2) bezahlen.
+- [ ] Am Automaten (`/automat` auf Pico 2) bezahlen.
 - [ ] **Ausfahrt** erneut → Servo 2 öffnet.
 
 ---
@@ -460,6 +424,8 @@ Antwort zum Beispiel: `{"kz":"LU123456","status":"unbekannt"}` – die Kasse ist
 | Upload unter Windows schlägt fehl | Pico im BOOTSEL-Modus neu anschliessen. Falls «RP2 Boot» ohne Treiber erscheint: mit **Zadig** den WinUSB-Treiber dafür installieren. |
 | Build bricht mit Pfad-Fehlern ab (Windows) | `git config --system core.longpaths true` (Abschnitt 5). |
 | `secrets.h: No such file` | `include/secrets.example.h` nach `include/secrets.h` kopieren (Abschnitt 6.3). |
+| `OPERATOR_PASSWORD missing in include/secrets.h` | Zeile `#define OPERATOR_PASSWORD "…"` aus `secrets.example.h` in `secrets.h` übernehmen. |
+| curl auf `POST /api/…` von Pico 1 antwortet `403 forbidden` | Gewollt: Änderungen nimmt Pico 1 nur von Pico 2 (`SCHRANKEN_IP`) an. `GET /api/status` geht von überall. |
 | LED blinkt dauernd | Hotspot auf 5 GHz → auf 2.4 GHz stellen. Passwort falsch. Hotspot ohne Internet → NTP schlägt fehl. Serielle Konsole zeigt mehr. |
 | Ping geht nicht | IPs in `secrets.h` passen nicht zum Subnetz des Hotspots (Abschnitt 6.2). Laptop im falschen WLAN. |
 | «Kasse nicht erreichbar – bitte Ruftaste drücken» | Pico 1 aus, noch nicht bereit (LED blinkt) oder falsche `KASSE_IP`. |

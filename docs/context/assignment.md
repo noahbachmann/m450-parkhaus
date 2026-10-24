@@ -1,6 +1,6 @@
 # Assignment — "Implementierung Parkhaus mit Schranke"
 
-Source: `aufgabe-umsetzung-parksystem.pdf` (3 pages).
+Source: `A01-03-umsetzung-parksystem.pdf` (3 pages, untracked in the repo root).
 
 - Duration 180 min, group size 1–2, submission as a **git repository**.
 - Task: implement the parking system defined in the earlier task "Anforderungen suchen und definieren"
