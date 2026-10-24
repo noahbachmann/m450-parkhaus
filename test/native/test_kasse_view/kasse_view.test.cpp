@@ -333,6 +333,67 @@ void test_tariff_linked_from_kasse_tf19()
     TEST_ASSERT_TRUE(contains(html, "<a href=\"/tarif\">Tarif anzeigen</a>"));
 }
 
+void test_automat_page_tf19()
+{
+    SessionStore store;
+    store.openEntry("LU 123456", NOW - 80 * MIN);
+    std::string html = renderAutomatPage(store, "lu 123456", Notice{}, NOW, true, "", Role::Public);
+    TEST_ASSERT_TRUE(contains(html, "<h1>Automat</h1>"));
+    TEST_ASSERT_TRUE(contains(html, "1 h 20 min"));
+    TEST_ASSERT_TRUE(contains(html, "CHF 4.00"));
+    TEST_ASSERT_TRUE(contains(html, "2 angefangene Stunden à CHF 2.00 ab Einfahrt (15 Freiminuten überschritten)"));
+    TEST_ASSERT_TRUE(contains(html, "15 Freiminuten; wird die Freizeit überschritten"));
+    TEST_ASSERT_TRUE(contains(html, "href=\"/tarif\""));
+    TEST_ASSERT_TRUE(contains(html, "action=\"/automat/pay\""));
+    TEST_ASSERT_TRUE(contains(html, "value=\"cash\""));
+    TEST_ASSERT_FALSE(contains(html, "href=\"/kasse"));
+    TEST_ASSERT_TRUE(contains(html, "&#128274; <a href=\"/login\">Anmelden</a>"));
+}
+
+void test_automat_hides_other_sessions()
+{
+    SessionStore store;
+    store.openEntry("LU123456", NOW - 80 * MIN);
+    store.openEntry("ZH98765", NOW - 150 * MIN);
+    std::string html = renderAutomatPage(store, "LU123456", Notice{}, NOW, true, "", Role::Public);
+    TEST_ASSERT_FALSE(contains(html, "ZH98765"));
+    TEST_ASSERT_FALSE(contains(html, "Parkvorgänge</h2>"));
+    std::string empty = renderAutomatPage(store, "", Notice{}, NOW, true, "", Role::Public);
+    TEST_ASSERT_FALSE(contains(empty, "LU123456"));
+    TEST_ASSERT_FALSE(contains(empty, "ZH98765"));
+}
+
+void test_automat_without_session_tf22()
+{
+    SessionStore store;
+    std::string html = renderAutomatPage(store, "SZ 555", Notice{}, NOW, true, "", Role::Public);
+    TEST_ASSERT_TRUE(contains(html, "Kein offener Parkvorgang für SZ555"));
+    TEST_ASSERT_FALSE(contains(html, "action=\"/automat/pay\""));
+}
+
+void test_automat_closed_session_not_shown()
+{
+    SessionStore store;
+    store.openEntry("LU123456", NOW - 80 * MIN);
+    pay(store, "LU123456", PayMethod::CardOk, NOW - MIN);
+    store.tryExit("LU123456", NOW);
+    std::string html = renderAutomatPage(store, "LU123456", Notice{}, NOW, true, "", Role::Public);
+    TEST_ASSERT_TRUE(contains(html, "Kein offener Parkvorgang für LU123456"));
+    TEST_ASSERT_FALSE(contains(html, "action=\"/automat/pay\""));
+}
+
+void test_automat_without_kasse_or_time()
+{
+    SessionStore store;
+    store.openEntry("LU123456", NOW - 80 * MIN);
+    std::string down = renderAutomatPage(store, "LU123456", Notice{}, 0, false, "Kasse nicht erreichbar", Role::Public);
+    TEST_ASSERT_TRUE(contains(down, "Kasse nicht erreichbar – Parkvorgänge können nicht angezeigt werden"));
+    TEST_ASSERT_FALSE(contains(down, "action=\"/automat/pay\""));
+    std::string noTime = renderAutomatPage(store, "LU123456", Notice{}, NOW, false, "", Role::Public);
+    TEST_ASSERT_TRUE(contains(noTime, "Uhrzeit nicht synchronisiert"));
+    TEST_ASSERT_FALSE(contains(noTime, "action=\"/automat/pay\""));
+}
+
 void test_kasse_server_page_links_to_pico2()
 {
     std::string html = renderKasseServerPage("http://192.168.1.51");
@@ -366,6 +427,11 @@ int main()
     RUN_TEST(test_tariff_summary_matches_tariff_md);
     RUN_TEST(test_tariff_page_us14_tf19);
     RUN_TEST(test_tariff_linked_from_kasse_tf19);
+    RUN_TEST(test_automat_page_tf19);
+    RUN_TEST(test_automat_hides_other_sessions);
+    RUN_TEST(test_automat_without_session_tf22);
+    RUN_TEST(test_automat_closed_session_not_shown);
+    RUN_TEST(test_automat_without_kasse_or_time);
     RUN_TEST(test_kasse_server_page_links_to_pico2);
     return UNITY_END();
 }

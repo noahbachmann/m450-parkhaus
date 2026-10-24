@@ -100,6 +100,8 @@ private:
     WebResponse loop(const WebRequest& req, const Ctx& ctx);
     WebResponse abortExit(const WebRequest& req, const Ctx& ctx);
     WebResponse terminalPay(const WebRequest& req, const Ctx& ctx);
+    WebResponse automatPage(const WebRequest& req, const Ctx& ctx);
+    WebResponse automatPay(const WebRequest& req, const Ctx& ctx);
     WebResponse tariff(const WebRequest& req, const Ctx& ctx);
     WebResponse loginPage(const WebRequest& req, const Ctx& ctx);
     WebResponse login(const WebRequest& req, const Ctx& ctx);
@@ -123,6 +125,8 @@ private:
     Notice pendingNotice(const WebRequest& req) const;
     // query: extra arguments, e.g. "kz=LU123456&".
     WebResponse redirectWithNotice(const std::string& path, const Notice& notice, const std::string& query = "");
+    // Kasse and Automat: POST /api/pay, then back to page with the result and the plate.
+    WebResponse payAndShow(const std::string& page, const WebRequest& req);
     WebResponse registrationDone(const FormResult& r);
     void saveIfChanged(uint32_t registrationsBefore, uint32_t eventsBefore);
 

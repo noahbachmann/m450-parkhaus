@@ -23,9 +23,11 @@ void appendSession(std::string& html, const SessionView& v)
     html += "</table></div>";
 }
 
-void appendPayForm(std::string& html, const std::string& plate)
+void appendPayForm(std::string& html, const std::string& plate, const char* action)
 {
-    html += "<form method=\"post\" action=\"/kasse/pay\" class=\"card methods\"><input type=\"hidden\" name=\"kz\" value=\"" + htmlEscape(plate) + "\">"
+    html += "<form method=\"post\" action=\"";
+    html += action;
+    html += "\" class=\"card methods\"><input type=\"hidden\" name=\"kz\" value=\"" + htmlEscape(plate) + "\">"
             "<strong>Zahlungsmittel</strong>";
     appendPaymentMethods(html, true);
     html += "<label>Eingeworfener Betrag in CHF (nur Bargeld): "
@@ -134,12 +136,30 @@ std::string renderTariffPage(Role role)
     return html;
 }
 
-std::string renderKassePage(const SessionStore& store, const std::string& query, const Notice& notice, int64_t now,
-                            bool timeOk, const std::string& kasseError)
+namespace
+{
+// The Kasse (operator) and the Automat (customer) share the page; they differ in what they show.
+struct PayPage
+{
+    const char* title;
+    const char* path;      // search form
+    const char* payAction; // pay form
+    Role role;
+    bool operatorView; // Kasse: any session (latest if none active), list of all sessions; Automat: only the
+                       // typed plate's active session, tariff on top
+};
+
+std::string renderPayPage(const PayPage& page, const SessionStore& store, const std::string& query,
+                          const Notice& notice, int64_t now, bool timeOk, const std::string& kasseError)
 {
     std::string html;
     html.reserve(4096);
-    appendPageStart(html, "Kasse", Role::Admin, "Kasse");
+    appendPageStart(html, page.title, page.role, page.title);
+    if (!page.operatorView)
+    {
+        html += "<p>Kennzeichen eingeben und Parkgebühr bezahlen. Tarif: " + htmlEscape(tariffSummary()) +
+                " <a href=\"/tarif\">Tarif anzeigen</a></p>";
+    }
 
     if (!kasseError.empty())
     {
@@ -154,8 +174,9 @@ std::string renderKassePage(const SessionStore& store, const std::string& query,
         appendNotice(html, notice.cls, notice.text);
     }
 
-    html += "<form method=\"get\" action=\"/kasse\"><label>Kennzeichen <input name=\"kz\" value=\"" +
-            htmlEscape(query) +
+    html += "<form method=\"get\" action=\"";
+    html += page.path;
+    html += "\"><label>Kennzeichen <input name=\"kz\" value=\"" + htmlEscape(query) +
             "\" placeholder=\"LU 123456\" autocomplete=\"off\" autofocus></label> "
             "<button type=\"submit\">Suchen</button></form>";
     if (!kasseError.empty())
@@ -168,7 +189,7 @@ std::string renderKassePage(const SessionStore& store, const std::string& query,
     if (!plate.empty())
     {
         const ParkingSession* s = store.findActive(plate);
-        if (s == nullptr)
+        if (s == nullptr && page.operatorView)
         {
             s = store.findLatest(plate);
         }
@@ -188,22 +209,43 @@ std::string renderKassePage(const SessionStore& store, const std::string& query,
         {
             SessionView v = describeSession(*s, now);
             appendSession(html, v);
-            html += "<p class=\"muted\"><a href=\"/tarif\">Tarif anzeigen</a></p>";
+            if (page.operatorView)
+            {
+                html += "<p class=\"muted\"><a href=\"/tarif\">Tarif anzeigen</a></p>";
+            }
             // Also offered when paid, so a second attempt answers «bereits bezahlt» (TF-20).
             if (timeOk && (v.payable || s->status == SessionStatus::Paid))
             {
-                appendPayForm(html, v.plate);
+                appendPayForm(html, v.plate, page.payAction);
             }
         }
     }
 
-    appendSessionList(html, store, now);
+    if (page.operatorView)
+    {
+        appendSessionList(html, store, now);
+    }
     if (timeOk)
     {
         html += "<p class=\"muted\">Stand: " + formatDateTime(now) + "</p>";
     }
     appendPageEnd(html);
     return html;
+}
+}
+
+std::string renderKassePage(const SessionStore& store, const std::string& query, const Notice& notice, int64_t now,
+                            bool timeOk, const std::string& kasseError)
+{
+    return renderPayPage({"Kasse", "/kasse", "/kasse/pay", Role::Admin, true}, store, query, notice, now, timeOk,
+                         kasseError);
+}
+
+std::string renderAutomatPage(const SessionStore& store, const std::string& query, const Notice& notice,
+                              int64_t now, bool timeOk, const std::string& kasseError, Role role)
+{
+    return renderPayPage({"Automat", "/automat", "/automat/pay", role, false}, store, query, notice, now, timeOk,
+                         kasseError);
 }
 
 std::string renderKasseServerPage(const std::string& uiUrl)

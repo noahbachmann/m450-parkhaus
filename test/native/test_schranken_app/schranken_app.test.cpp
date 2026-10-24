@@ -209,9 +209,10 @@ void test_public_routes()
     TEST_ASSERT_EQUAL_STRING("/kamera", rig.get("/").location.c_str());
     TEST_ASSERT_EQUAL_INT(200, rig.get("/kamera").status);
     TEST_ASSERT_EQUAL_INT(200, rig.get("/tarif").status);
+    TEST_ASSERT_EQUAL_INT(200, rig.get("/automat").status);
     TEST_ASSERT_EQUAL_INT(200, rig.get("/login").status);
     for (const char* path : {"/kamera/einfahrt", "/kamera/ausfahrt", "/kamera/ruftaste", "/kamera/durchfahren",
-                             "/kamera/schleife", "/kamera/abbrechen", "/kamera/bezahlen", "/logout"})
+                             "/kamera/schleife", "/kamera/abbrechen", "/kamera/bezahlen", "/automat/pay", "/logout"})
     {
         WebResponse r = rig.post(path);
         TEST_ASSERT_EQUAL_INT_MESSAGE(303, r.status, path);
@@ -304,6 +305,20 @@ void test_kasse_pay_redirect_keeps_valid_plate()
     TEST_ASSERT_TRUE(contains(rig.follow(paid), "Bezahlt – CHF 4.00, Karte"));
     WebResponse bad = rig.post("/kasse/pay", {{"kz", "L1"}, {"method", "card_ok"}});
     TEST_ASSERT_EQUAL_STRING("/kasse?m=2", bad.location.c_str());
+}
+
+void test_automat_is_public_tf21()
+{
+    Rig rig;
+    TEST_ASSERT_FALSE(SchrankenApp::isAdminRoute("GET", "/automat"));
+    TEST_ASSERT_FALSE(SchrankenApp::isAdminRoute("POST", "/automat/pay"));
+    rig.kasse.store.openEntry("AG1", NOW - 30 * MIN);
+    WebResponse partial = rig.post("/automat/pay", {{"kz", "ag 1"}, {"method", "cash"}, {"amount", "1"}});
+    TEST_ASSERT_EQUAL_STRING("/automat?kz=AG1&m=1", partial.location.c_str());
+    TEST_ASSERT_TRUE(contains(rig.follow(partial), "Restbetrag CHF 1.00 – unbezahlt"));
+    WebResponse paid = rig.post("/automat/pay", {{"kz", "AG1"}, {"method", "cash"}, {"amount", "1.00"}});
+    TEST_ASSERT_TRUE(contains(rig.follow(paid), "Rückgeld CHF 0.00"));
+    TEST_ASSERT_TRUE(SessionStatus::Paid == rig.kasse.store.findActive("AG1")->status);
 }
 
 void test_entry_opens_and_terminal_shows_plate()
@@ -461,6 +476,7 @@ int main()
     RUN_TEST(test_login_logout_and_wrong_password);
     RUN_TEST(test_notice_is_shown_once_per_post);
     RUN_TEST(test_kasse_pay_redirect_keeps_valid_plate);
+    RUN_TEST(test_automat_is_public_tf21);
     RUN_TEST(test_entry_opens_and_terminal_shows_plate);
     RUN_TEST(test_drive_through_uses_the_barrier_answer);
     RUN_TEST(test_loop_hold_only_while_barrier_up);

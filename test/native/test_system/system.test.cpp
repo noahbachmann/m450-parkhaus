@@ -121,7 +121,7 @@ namespace
             return r;
         }
 
-        // Kasse page on Pico 2 → POST /api/pay.
+        // Kasse or Automat page on Pico 2 → POST /api/pay (both send the same request).
         FormResult pay(const std::string& kz, const char* method, const char* amount = "")
         {
             return payAtKasse(*this, kz, method, amount);
@@ -132,6 +132,13 @@ namespace
         {
             KasseSnapshot snap = fetchSessions(*this);
             return renderKassePage(snap.sessions, kz, Notice{}, snap.now, snap.synced, snap.error);
+        }
+
+        // Automat page on Pico 2 (public), sessions read from Pico 1.
+        std::string automat(const std::string& kz)
+        {
+            KasseSnapshot snap = fetchSessions(*this);
+            return renderAutomatPage(snap.sessions, kz, Notice{}, snap.now, snap.synced, snap.error, Role::Public);
         }
 
         // «Durchfahren» on the camera page.
@@ -418,7 +425,7 @@ void test_tf18_reference_fees_via_backdated_entry()
     TEST_ASSERT_EQUAL_UINT(0, sys.sessions.all().size());
 }
 
-void test_tf19_duration_and_fee_at_kasse()
+void test_tf19_duration_and_fee_at_kasse_and_automat()
 {
     System sys;
     assertOpen(sys.entryAgo("LU123456", 80 * MIN));
@@ -426,6 +433,11 @@ void test_tf19_duration_and_fee_at_kasse()
     TEST_ASSERT_TRUE(contains(html, "<td>1 h 20 min</td>"));
     TEST_ASSERT_TRUE(contains(html, "<td>CHF 4.00</td>"));
     TEST_ASSERT_TRUE(contains(html, "2 angefangene Stunden à CHF 2.00 ab Einfahrt (15 Freiminuten überschritten)"));
+    std::string automat = sys.automat("LU123456");
+    TEST_ASSERT_TRUE(contains(automat, "<td>1 h 20 min</td>"));
+    TEST_ASSERT_TRUE(contains(automat, "<td>CHF 4.00</td>"));
+    TEST_ASSERT_TRUE(contains(automat, "2 angefangene Stunden à CHF 2.00 ab Einfahrt (15 Freiminuten überschritten)"));
+    TEST_ASSERT_TRUE(contains(automat, "href=\"/tarif\""));
 }
 
 void test_tf20_card_payment_once()
@@ -439,7 +451,7 @@ void test_tf20_card_payment_once()
     TEST_ASSERT_EQUAL_UINT32(2, sys.sessions.nextTxNumber());
 }
 
-void test_tf21_kasse_cash_and_twint()
+void test_tf21_automat_cash_and_twint()
 {
     System sys;
     assertOpen(sys.entryAgo("LU123456", 2 * HOUR + 30 * MIN));
@@ -457,12 +469,12 @@ void test_tf21_kasse_cash_and_twint()
     TEST_ASSERT_TRUE(contains(sys.status("AG1").body, "\"status\":\"bezahlt\""));
 }
 
-void test_tf22_kasse_without_session()
+void test_tf22_automat_without_session()
 {
     System sys;
-    std::string html = sys.page("SZ 555");
+    std::string html = sys.automat("SZ 555");
     TEST_ASSERT_TRUE(contains(html, "Kein offener Parkvorgang für SZ555"));
-    TEST_ASSERT_FALSE(contains(html, "/kasse/pay"));
+    TEST_ASSERT_FALSE(contains(html, "/automat/pay"));
     TEST_ASSERT_EQUAL_STRING("Kein offener Parkvorgang für SZ555", sys.pay("SZ555", "card_ok").notice.text.c_str());
     TEST_ASSERT_EQUAL_UINT32(1, sys.sessions.nextTxNumber());
 }
@@ -494,7 +506,7 @@ void test_tf24_unpaid_exit_then_pay_then_exit()
 {
     System sys;
     assertOpen(sys.entryAgo("ZH98765", 2 * HOUR + 30 * MIN));
-    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 6.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen");
+    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen");
     sys.wait(10);
     TEST_ASSERT_EQUAL(BarrierState::Closed, sys.exitBarrier.state());
     TEST_ASSERT_EQUAL(SessionStatus::Open, sys.sessions.findActive("ZH98765")->status);
@@ -562,7 +574,7 @@ void test_tf30_kasse_off_at_exit_paid_status_persisted()
     sys.kasseOn = true;
     TEST_ASSERT_EQUAL(SessionStatus::Paid, sys.sessions.findActive("LU123456")->status);
     assertOpen(sys.exit("LU123456"));
-    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 6.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen");
+    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen");
 }
 
 void test_tf32_whole_system()
@@ -570,8 +582,8 @@ void test_tf32_whole_system()
     System sys;
     TEST_ASSERT_TRUE(handleRegistrationForm(sys.registrations, "Test Kunde F", "OW 2026").changed);
     assertOpen(sys.entryAgo("OW 2026", 2 * HOUR + 30 * MIN));
-    TEST_ASSERT_TRUE(contains(sys.page("OW2026"), "<td>CHF 6.00</td>"));
-    assertClosed(sys.exit("OW2026"), "Gebühr CHF 6.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen");
+    TEST_ASSERT_TRUE(contains(sys.automat("OW2026"), "<td>CHF 6.00</td>"));
+    assertClosed(sys.exit("OW2026"), "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen");
     TEST_ASSERT_TRUE(contains(sys.pay("OW2026", "cash", "10.00").notice.text, "Rückgeld CHF 4.00"));
     assertOpen(sys.exit("OW2026"));
     TEST_ASSERT_EQUAL(SessionStatus::Closed, sys.sessions.findLatest("OW2026")->status);
@@ -685,7 +697,7 @@ void test_tf31_remote_opening_at_exit_without_payment()
 {
     System sys;
     assertOpen(sys.entryAgo("ZH98765", 2 * HOUR + 30 * MIN));
-    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 6.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen");
+    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen");
     TEST_ASSERT_EQUAL_STRING("unbezahlt (CHF 6.00)", laneStatus(sys, sys.lastExitPlate).c_str());
 
     RemoteOpenResult r = sys.remote(GateLane::Exit, sys.lastExitPlate, "Kulanz");
@@ -721,7 +733,7 @@ void test_tf27_car_turns_around()
 {
     System sys;
     assertOpen(sys.entryAgo("ZH98765", 58 * MIN));
-    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 2.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen");
+    assertClosed(sys.exit("ZH98765"), "Gebühr CHF 2.00 nicht bezahlt – bitte am Automaten bezahlen");
     GateResult r = abortAtTerminal(sys.exitTerminal);
     TEST_ASSERT_EQUAL_STRING("Vorgang abgebrochen – Fahrzeug wendet", r.message.c_str());
     const ParkingSession* s = sys.sessions.findActive("ZH98765");
@@ -804,7 +816,7 @@ void test_new_customer_by_operator_then_kasse_and_exit()
     TEST_ASSERT_EQUAL_STRING("NW654321 durchgefahren – Schranke schliesst",
                              sys.driveThrough(GateLane::Entry).message.c_str());
     sys.wait(2 * HOUR + 30 * MIN);
-    assertClosed(sys.exit("NW654321"), "Gebühr CHF 6.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen");
+    assertClosed(sys.exit("NW654321"), "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen");
     TEST_ASSERT_EQUAL_STRING("Bezahlt – CHF 6.00, Bargeld – Transaktion TX-000001 – Rückgeld CHF 4.00",
                              sys.pay("NW654321", "cash", "10").notice.text.c_str());
     assertOpen(sys.exit("NW654321"));
@@ -828,10 +840,10 @@ int main()
     RUN_TEST(test_tf10_second_entry_rejected);
     RUN_TEST(test_tf11_kasse_off_at_entry);
     RUN_TEST(test_tf18_reference_fees_via_backdated_entry);
-    RUN_TEST(test_tf19_duration_and_fee_at_kasse);
+    RUN_TEST(test_tf19_duration_and_fee_at_kasse_and_automat);
     RUN_TEST(test_tf20_card_payment_once);
-    RUN_TEST(test_tf21_kasse_cash_and_twint);
-    RUN_TEST(test_tf22_kasse_without_session);
+    RUN_TEST(test_tf21_automat_cash_and_twint);
+    RUN_TEST(test_tf22_automat_without_session);
     RUN_TEST(test_tf23_paid_exit_closes_session);
     RUN_TEST(test_tf24_unpaid_exit_then_pay_then_exit);
     RUN_TEST(test_tf25_free_time_exit);

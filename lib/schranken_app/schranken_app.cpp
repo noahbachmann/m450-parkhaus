@@ -18,6 +18,8 @@ const SchrankenApp::Route SchrankenApp::ROUTES[] = {
     {"POST", "/kamera/schleife", false, &SchrankenApp::loop},
     {"POST", "/kamera/abbrechen", false, &SchrankenApp::abortExit},
     {"POST", "/kamera/bezahlen", false, &SchrankenApp::terminalPay},
+    {"GET", "/automat", false, &SchrankenApp::automatPage},
+    {"POST", "/automat/pay", false, &SchrankenApp::automatPay},
     {"GET", "/tarif", false, &SchrankenApp::tariff},
     {"GET", "/login", false, &SchrankenApp::loginPage},
     {"POST", "/login", false, &SchrankenApp::login},
@@ -217,6 +219,18 @@ WebResponse SchrankenApp::terminalPay(const WebRequest& req, const Ctx& ctx)
     return redirect("/kamera");
 }
 
+WebResponse SchrankenApp::automatPage(const WebRequest& req, const Ctx& ctx)
+{
+    KasseSnapshot snap = fetchSessions(kasse);
+    return htmlPage(renderAutomatPage(snap.sessions, req.arg("kz"), pendingNotice(req), snap.now, snap.synced,
+                                      snap.error, ctx.role));
+}
+
+WebResponse SchrankenApp::automatPay(const WebRequest& req, const Ctx&)
+{
+    return payAndShow("/automat", req);
+}
+
 WebResponse SchrankenApp::tariff(const WebRequest&, const Ctx& ctx)
 {
     return htmlPage(renderTariffPage(ctx.role));
@@ -270,10 +284,7 @@ WebResponse SchrankenApp::kassePage(const WebRequest& req, const Ctx&)
 
 WebResponse SchrankenApp::kassePay(const WebRequest& req, const Ctx&)
 {
-    FormResult r = payAtKasse(kasse, req.arg("kz"), req.arg("method"), req.arg("amount"));
-    std::string plate = normalizePlate(req.arg("kz"));
-    platform.log("[pay] " + plate + ": " + r.notice.text);
-    return redirectWithNotice("/kasse", r.notice, isValidPlate(plate) ? "kz=" + plate + "&" : "");
+    return payAndShow("/kasse", req);
 }
 
 WebResponse SchrankenApp::registrationPage(const WebRequest& req, const Ctx&)
@@ -392,6 +403,14 @@ WebResponse SchrankenApp::redirectWithNotice(const std::string& path, const Noti
     lastNotice = notice;
     noticeId++;
     return redirect(path + "?" + query + "m=" + std::to_string(noticeId));
+}
+
+WebResponse SchrankenApp::payAndShow(const std::string& page, const WebRequest& req)
+{
+    FormResult r = payAtKasse(kasse, req.arg("kz"), req.arg("method"), req.arg("amount"));
+    std::string plate = normalizePlate(req.arg("kz"));
+    platform.log("[pay] " + page + " " + plate + ": " + r.notice.text);
+    return redirectWithNotice(page, r.notice, isValidPlate(plate) ? "kz=" + plate + "&" : "");
 }
 
 WebResponse SchrankenApp::registrationDone(const FormResult& r)

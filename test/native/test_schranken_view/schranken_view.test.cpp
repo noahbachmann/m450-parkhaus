@@ -97,7 +97,7 @@ void test_registration_page_escapes_names()
 void test_camera_page()
 {
     LaneView entry{"offen", "ok", "LU123456 – Willkommen, Einfahrt frei", "", "", ""};
-    LaneView exit{"geschlossen", "err", "Gebühr CHF 6.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen", "", "", ""};
+    LaneView exit{"geschlossen", "err", "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen", "", "", ""};
     std::string html = camera(entry, exit);
     TEST_ASSERT_TRUE(contains(html, "action=\"/kamera/einfahrt\""));
     TEST_ASSERT_TRUE(contains(html, "action=\"/kamera/ausfahrt\""));
@@ -154,14 +154,14 @@ void test_no_loop_toggle_while_closed()
 void test_nav_public_hides_admin_pages()
 {
     std::string html = camera(LaneView{}, LaneView{});
-    TEST_ASSERT_TRUE(contains(html, "<a href=\"/kamera\">Kamerasimulation</a><a href=\"/tarif\">Tarif</a>"));
+    TEST_ASSERT_TRUE(contains(html, "<a href=\"/kamera\">Kamerasimulation</a><a href=\"/automat\">Automat</a>"
+                                    "<a href=\"/tarif\">Tarif</a>"));
     TEST_ASSERT_FALSE(contains(html, "href=\"/kasse\""));
     TEST_ASSERT_FALSE(contains(html, "href=\"/registrierung\""));
     TEST_ASSERT_FALSE(contains(html, "href=\"/betrieb\""));
     TEST_ASSERT_TRUE(contains(html, "&#128274; <a href=\"/login\">Anmelden</a>"));
     TEST_ASSERT_FALSE(contains(html, "/logout"));
     TEST_ASSERT_FALSE(contains(html, "/sim"));
-    TEST_ASSERT_FALSE(contains(html, "Automat"));
 }
 
 void test_nav_admin_shows_badge_and_admin_pages()
@@ -210,7 +210,7 @@ void test_login_page()
 
 void test_exit_terminal_payment_form_tf28()
 {
-    LaneView exit{"geschlossen", "err", "Gebühr CHF 6.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen", "", "ZH98765",
+    LaneView exit{"geschlossen", "err", "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen", "", "ZH98765",
                   "CHF 6.00"};
     std::string html = camera(LaneView{}, exit);
     TEST_ASSERT_TRUE(contains(html, "action=\"/kamera/bezahlen\""));

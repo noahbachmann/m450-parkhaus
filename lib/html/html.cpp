@@ -66,7 +66,8 @@ void appendPageStart(std::string& html, const char* title, Role role, const char
     html += title;
     html += " – Parkhaus</title><style>";
     html += STYLE;
-    html += "</style></head><body><nav><a href=\"/kamera\">Kamerasimulation</a><a href=\"/tarif\">Tarif</a>";
+    html += "</style></head><body><nav><a href=\"/kamera\">Kamerasimulation</a><a href=\"/automat\">Automat</a>"
+            "<a href=\"/tarif\">Tarif</a>";
     if (role == Role::Admin)
     {
         html += "<a href=\"/kasse\">Kasse</a><a href=\"/registrierung\">Registrierung</a>"

@@ -24,5 +24,10 @@ void appendPaymentMethods(std::string& html, bool withCash);
 // column is added; otherwise (camera page) open sessions are marked «(unbezahlt)».
 void appendSessionTable(std::string& html, const SessionStore& store, int64_t now, bool kasseLinks);
 
+// /automat (everyone, US-17): search by plate, pay with Karte, TWINT or Bargeld. Shows only the typed plate's
+// active session (no list, nothing about other cars) and the tariff with a link to /tarif.
+std::string renderAutomatPage(const SessionStore& store, const std::string& query, const Notice& notice,
+                              int64_t now, bool timeOk, const std::string& kasseError, Role role);
+
 // GET / on Pico 1: it only serves the API; the pages are on Pico 2 at uiUrl.
 std::string renderKasseServerPage(const std::string& uiUrl);

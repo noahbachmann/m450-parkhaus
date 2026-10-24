@@ -134,7 +134,7 @@ void test_tf27_abort_keeps_session_open()
     kasse.store.openEntry("ZH98765", NOW - 58 * MIN);
     LaneTerminal t = exitTerminal();
     GateResult unpaid = exitRequest("ZH98765", kasse);
-    TEST_ASSERT_EQUAL_STRING("Gebühr CHF 2.00 nicht bezahlt – bitte hier oder an der Kasse bezahlen", unpaid.message.c_str());
+    TEST_ASSERT_EQUAL_STRING("Gebühr CHF 2.00 nicht bezahlt – bitte am Automaten bezahlen", unpaid.message.c_str());
     recordGate(t, unpaid);
     GateResult r = abortAtTerminal(t);
     TEST_ASSERT_FALSE(r.open);
