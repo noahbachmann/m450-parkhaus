@@ -4,13 +4,9 @@
 
 #include "payment.h"
 #include "session.h"
+#include "test_fixtures.h"
 
-namespace
-{
-    constexpr int64_t NOW = 1760530000;
-    constexpr int64_t MIN = 60;
-    constexpr int64_t HOUR = 3600;
-}
+using namespace fixtures;
 
 void setUp()
 {

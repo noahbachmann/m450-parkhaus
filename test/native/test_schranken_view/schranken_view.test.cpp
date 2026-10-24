@@ -4,18 +4,13 @@
 #include "payment.h"
 #include "registration.h"
 #include "schranken_view.h"
+#include "test_fixtures.h"
 #include "testdata.h"
+
+using namespace fixtures;
 
 namespace
 {
-    bool contains(const std::string& html, const char* text)
-    {
-        return html.find(text) != std::string::npos;
-    }
-
-    constexpr int64_t NOW = 1760530000; // 15.10.2025 14:06:40 Zurich (CEST)
-    constexpr int64_t MIN = 60;
-
     RegistrationList regs;
 
     std::string camera(const LaneView& entry, const LaneView& exit, Role role = Role::Public)
@@ -33,7 +28,7 @@ void tearDown()
 {
 }
 
-void test_register_tf01()
+void test_tf01_register()
 {
     FormResult r = handleRegistrationForm(regs, "Test Kunde C", "NW 654321");
     TEST_ASSERT_TRUE(r.changed);
@@ -43,7 +38,7 @@ void test_register_tf01()
     TEST_ASSERT_TRUE(contains(html, "<td>NW654321</td><td>Test Kunde C</td>"));
 }
 
-void test_invalid_plates_rejected_tf02()
+void test_tf02_invalid_plates_rejected()
 {
     const char* invalid[] = {"", "LU-12#45", "LU 1234567", "L 123"};
     for (const char* kz : invalid)
@@ -57,7 +52,7 @@ void test_invalid_plates_rejected_tf02()
     TEST_ASSERT_TRUE(handleRegistrationForm(regs, "Test Kunde C", "UR 1").changed);
 }
 
-void test_duplicates_rejected_tf03()
+void test_tf03_duplicates_rejected()
 {
     FormResult a = handleRegistrationForm(regs, "Test Kunde B", "LU 123456");
     FormResult b = handleRegistrationForm(regs, "Test Kunde B", "lu123456");
@@ -125,7 +120,7 @@ void test_drive_through_button_only_while_open()
     TEST_ASSERT_FALSE(contains(html, "value=\"exit\"><button type=\"submit\"><strong>Durchfahren"));
 }
 
-void test_loop_toggle_tf13()
+void test_loop_toggle_buttons_follow_lane_view()
 {
     LaneView entry{"offen", "ok", "LU123456 – Willkommen, Einfahrt frei", "", "", ""};
     entry.canPass = true;
@@ -208,7 +203,7 @@ void test_login_page()
     TEST_ASSERT_TRUE(contains(html, "notice err\">Benutzer oder Passwort falsch"));
 }
 
-void test_exit_terminal_payment_form_tf28()
+void test_tf28_exit_terminal_payment_form()
 {
     LaneView exit{"geschlossen", "err", "Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen", "", "ZH98765",
                   "CHF 6.00"};
@@ -220,7 +215,7 @@ void test_exit_terminal_payment_form_tf28()
     TEST_ASSERT_FALSE(contains(html, "value=\"cash\""));
 }
 
-void test_camera_page_shows_loop_fault_tf15()
+void test_tf15_camera_page_shows_loop_fault()
 {
     LaneView entry{"offen", "", "", "Sicherungsschleife Einfahrt länger als 5 min belegt", "", ""};
     std::string html = camera(entry, LaneView{});
@@ -230,17 +225,17 @@ void test_camera_page_shows_loop_fault_tf15()
 int main()
 {
     UNITY_BEGIN();
-    RUN_TEST(test_register_tf01);
-    RUN_TEST(test_invalid_plates_rejected_tf02);
-    RUN_TEST(test_duplicates_rejected_tf03);
+    RUN_TEST(test_tf01_register);
+    RUN_TEST(test_tf02_invalid_plates_rejected);
+    RUN_TEST(test_tf03_duplicates_rejected);
     RUN_TEST(test_name_required);
     RUN_TEST(test_delete);
     RUN_TEST(test_registration_page_escapes_names);
     RUN_TEST(test_camera_page);
-    RUN_TEST(test_camera_page_shows_loop_fault_tf15);
-    RUN_TEST(test_exit_terminal_payment_form_tf28);
+    RUN_TEST(test_tf15_camera_page_shows_loop_fault);
+    RUN_TEST(test_tf28_exit_terminal_payment_form);
     RUN_TEST(test_drive_through_button_only_while_open);
-    RUN_TEST(test_loop_toggle_tf13);
+    RUN_TEST(test_loop_toggle_buttons_follow_lane_view);
     RUN_TEST(test_no_loop_toggle_while_closed);
     RUN_TEST(test_nav_public_hides_admin_pages);
     RUN_TEST(test_nav_admin_shows_badge_and_admin_pages);

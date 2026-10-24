@@ -64,6 +64,8 @@ public:
     const RegistrationList& registrations() const;
     const EventLog& events() const;
     const LaneTerminal& terminal(GateLane lane) const;
+    // What the lane's terminal shows (text updated with every result, the rest on GET /kamera).
+    const LaneView& view(GateLane lane) const;
 
     // The route needs the operator login.
     static bool isAdminRoute(const std::string& method, const std::string& path);

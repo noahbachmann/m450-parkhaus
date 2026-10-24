@@ -1,6 +1,9 @@
 #include <unity.h>
 
+#include "test_fixtures.h"
 #include "testdata.h"
+
+using namespace fixtures;
 
 void setUp()
 {
@@ -16,12 +19,16 @@ void test_default_registrations_match_kz_table()
     list.add("Vorher", "OW 2026");
     loadDefaultRegistrations(list);
     TEST_ASSERT_EQUAL(4, list.all().size());
-    TEST_ASSERT_TRUE(list.contains("LU123456"));
-    TEST_ASSERT_TRUE(list.contains("ZH98765"));
-    TEST_ASSERT_TRUE(list.contains("AG1"));
-    TEST_ASSERT_TRUE(list.contains("SZ555"));
-    TEST_ASSERT_FALSE(list.contains("OW2026"));
-    TEST_ASSERT_FALSE(list.contains("BE4711"));
+    for (const char* kz : {KZ_01, KZ_02, KZ_08, KZ_10})
+    {
+        TEST_ASSERT_TRUE_MESSAGE(list.contains(kz), kz);
+    }
+    for (const char* kz : {KZ_03, KZ_11, KZ_12, KZ_13})
+    {
+        TEST_ASSERT_FALSE_MESSAGE(list.contains(kz), kz);
+    }
+    TEST_ASSERT_EQUAL_STRING("Test Kunde A", list.all()[0].name.c_str()); // KZ-01, TF-03
+    TEST_ASSERT_EQUAL_STRING("Test Kunde B", list.all()[1].name.c_str()); // KZ-02
 }
 
 void test_default_sessions_are_empty()

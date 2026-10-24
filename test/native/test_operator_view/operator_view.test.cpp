@@ -4,47 +4,14 @@
 #include "operator_view.h"
 #include "payment.h"
 #include "session.h"
+#include "test_fixtures.h"
+
+using namespace fixtures;
 
 namespace
 {
-    constexpr int64_t NOW = 1760530000; // 15.10.2025 14:06:40 Zurich (CEST)
-    constexpr int64_t MIN = 60;
-
     RegistrationList regs; // only touched by «Neuer Kunde registrieren»
 
-    bool contains(const std::string& text, const std::string& part)
-    {
-        return text.find(part) != std::string::npos;
-    }
-
-    // Pico 1's real API handlers on a real store; online switch for "Pico 1 off".
-    class LocalKasse : public KasseLink
-    {
-    public:
-        SessionStore store;
-        bool online = true;
-
-        HttpReply postJson(const char* path, const std::string& body) override
-        {
-            if (!online)
-            {
-                return {};
-            }
-            ApiResponse r = std::string(path) == "/api/entry" ? handleEntry(store, body, NOW, true)
-                                                               : handleExit(store, body, NOW, true);
-            return {r.status, r.body};
-        }
-
-        HttpReply getJson(const std::string& pathAndQuery) override
-        {
-            if (!online)
-            {
-                return {};
-            }
-            ApiResponse r = handleStatus(store, pathAndQuery.substr(pathAndQuery.find('=') + 1), NOW);
-            return {r.status, r.body};
-        }
-    };
 }
 
 void setUp()
@@ -56,7 +23,7 @@ void tearDown()
 {
 }
 
-void test_lane_status_us08()
+void test_us08_lane_status()
 {
     LocalKasse kasse;
     kasse.store.openEntry("LU123456", NOW - 80 * MIN);
@@ -70,7 +37,7 @@ void test_lane_status_us08()
     TEST_ASSERT_EQUAL_STRING("Kasse nicht erreichbar", laneStatus(kasse, "LU123456").c_str());
 }
 
-void test_remote_open_entry_opens_session_tf16()
+void test_tf16_remote_open_entry_opens_session()
 {
     LocalKasse kasse;
     EventLog log;
@@ -89,7 +56,7 @@ void test_remote_open_entry_opens_session_tf16()
     TEST_ASSERT_EQUAL_STRING("Kennzeichen nicht erkannt", e.reason.c_str());
 }
 
-void test_remote_open_without_reason_tf17()
+void test_tf17_remote_open_without_reason()
 {
     LocalKasse kasse;
     EventLog log;
@@ -104,7 +71,7 @@ void test_remote_open_without_reason_tf17()
     TEST_ASSERT_EQUAL_UINT(0, kasse.store.all().size());
 }
 
-void test_remote_open_exit_unpaid_tf31()
+void test_tf31_remote_open_exit_unpaid()
 {
     LocalKasse kasse;
     EventLog log;
@@ -136,7 +103,7 @@ void test_remote_open_exit_paid_and_without_session()
     TEST_ASSERT_EQUAL_UINT(2, log.all().size());
 }
 
-void test_remote_open_with_kasse_off_stays_closed()
+void test_remote_open_kasse_off_is_logged_and_stays_closed()
 {
     LocalKasse kasse;
     kasse.online = false;
@@ -191,7 +158,7 @@ void test_remote_open_unexpected_reply_stays_closed()
     TEST_ASSERT_EQUAL_STRING("Unerwartete Antwort der Kasse (503) – Schranke bleibt zu", r.notice.text.c_str());
 }
 
-void test_log_helpers_tf14_tf15_tf30()
+void test_tf14_tf15_tf30_log_helpers()
 {
     EventLog log;
     TEST_ASSERT_FALSE(logBarrierEvent(log, GateLane::Entry, BarrierEvent::None, NOW));
@@ -211,7 +178,7 @@ void test_log_helpers_tf14_tf15_tf30()
     TEST_ASSERT_EQUAL_STRING("ZH98765", log.all()[2].plate.c_str());
 }
 
-void test_operator_page_filter_tf14()
+void test_tf14_operator_page_filter()
 {
     EventLog log;
     for (int i = 0; i < 6; ++i)
@@ -319,16 +286,16 @@ void test_operator_page_offers_new_customer_at_entry_only()
 int main()
 {
     UNITY_BEGIN();
-    RUN_TEST(test_lane_status_us08);
-    RUN_TEST(test_remote_open_entry_opens_session_tf16);
-    RUN_TEST(test_remote_open_without_reason_tf17);
-    RUN_TEST(test_remote_open_exit_unpaid_tf31);
+    RUN_TEST(test_us08_lane_status);
+    RUN_TEST(test_tf16_remote_open_entry_opens_session);
+    RUN_TEST(test_tf17_remote_open_without_reason);
+    RUN_TEST(test_tf31_remote_open_exit_unpaid);
     RUN_TEST(test_remote_open_exit_paid_and_without_session);
-    RUN_TEST(test_remote_open_with_kasse_off_stays_closed);
+    RUN_TEST(test_remote_open_kasse_off_is_logged_and_stays_closed);
     RUN_TEST(test_remote_open_needs_valid_plate);
     RUN_TEST(test_remote_open_unexpected_reply_stays_closed);
-    RUN_TEST(test_log_helpers_tf14_tf15_tf30);
-    RUN_TEST(test_operator_page_filter_tf14);
+    RUN_TEST(test_tf14_tf15_tf30_log_helpers);
+    RUN_TEST(test_tf14_operator_page_filter);
     RUN_TEST(test_new_customer_registers_and_opens);
     RUN_TEST(test_new_customer_rejected_registration_stays_closed);
     RUN_TEST(test_new_customer_kasse_down_keeps_registration);

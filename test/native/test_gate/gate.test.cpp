@@ -4,12 +4,13 @@
 #include "kasse_api.h"
 #include "registration.h"
 #include "session.h"
+#include "test_fixtures.h"
 #include "testdata.h"
+
+using namespace fixtures;
 
 namespace
 {
-    constexpr int64_t NOW = 1760530000; // 15.10.2025 14:06:40 Zurich (CEST)
-
     class FakeKasse : public KasseLink
     {
     public:
@@ -34,27 +35,6 @@ namespace
         }
     };
 
-    // Pico 1's real API handlers on a real store.
-    class LocalKasse : public KasseLink
-    {
-    public:
-        SessionStore store;
-        int64_t now = NOW;
-
-        HttpReply postJson(const char* path, const std::string& body) override
-        {
-            ApiResponse r = std::string(path) == "/api/entry" ? handleEntry(store, body, now, true)
-                                                               : handleExit(store, body, now, true);
-            return {r.status, r.body};
-        }
-
-        HttpReply getJson(const std::string& pathAndQuery) override
-        {
-            ApiResponse r = handleStatus(store, pathAndQuery.substr(pathAndQuery.find('=') + 1), now);
-            return {r.status, r.body};
-        }
-    };
-
     RegistrationList regs;
     FakeKasse fake;
 }
@@ -69,7 +49,7 @@ void tearDown()
 {
 }
 
-void test_entry_registered_opens_tf04_tf05()
+void test_tf04_tf05_entry_registered_opens()
 {
     fake.reply = {201, "{\"kz\":\"LU123456\",\"entry\":1760530000}"};
     GateResult r = entryRequest(regs, "lu 123 456", "", fake);
@@ -80,7 +60,7 @@ void test_entry_registered_opens_tf04_tf05()
     TEST_ASSERT_EQUAL_STRING("{\"kz\":\"LU123456\"}", fake.lastBody.c_str());
 }
 
-void test_entry_unregistered_stays_closed_without_request_tf07()
+void test_tf07_entry_unregistered_stays_closed_without_request()
 {
     fake.reply = {201, "{\"kz\":\"BE4711\",\"entry\":1760530000}"};
     GateResult r = entryRequest(regs, "BE 4711", "", fake);
@@ -111,7 +91,7 @@ void test_entry_backdated_sends_epoch()
     TEST_ASSERT_EQUAL_INT(1, fake.calls);
 }
 
-void test_entry_error_replies_tf10_tf11()
+void test_tf10_tf11_entry_error_replies()
 {
     fake.reply = {409, "{\"error\":\"already_open\"}"};
     TEST_ASSERT_EQUAL_STRING("Parkvorgang bereits offen – bitte Ruftaste drücken",
@@ -146,7 +126,7 @@ void test_entry_fail_safe_on_odd_replies()
     }
 }
 
-void test_exit_paid_opens_tf23()
+void test_tf23_exit_paid_opens()
 {
     fake.reply = {200, "{\"kz\":\"LU123456\",\"status\":\"closed\",\"exit\":1760533600,\"fee\":400}"};
     GateResult r = exitRequest(" LU123456 ", fake);
@@ -158,7 +138,7 @@ void test_exit_paid_opens_tf23()
     TEST_ASSERT_TRUE(exitRequest("LU123456", fake).open);
 }
 
-void test_exit_unpaid_and_errors_tf24_tf26_tf30()
+void test_tf24_tf26_tf30_exit_unpaid_and_errors()
 {
     fake.reply = {402, "{\"error\":\"unpaid\",\"fee\":600}"};
     GateResult unpaid = exitRequest("ZH98765", fake);
@@ -210,14 +190,14 @@ void test_against_real_kasse_handlers()
 int main()
 {
     UNITY_BEGIN();
-    RUN_TEST(test_entry_registered_opens_tf04_tf05);
-    RUN_TEST(test_entry_unregistered_stays_closed_without_request_tf07);
+    RUN_TEST(test_tf04_tf05_entry_registered_opens);
+    RUN_TEST(test_tf07_entry_unregistered_stays_closed_without_request);
     RUN_TEST(test_entry_invalid_plate_no_request);
     RUN_TEST(test_entry_backdated_sends_epoch);
-    RUN_TEST(test_entry_error_replies_tf10_tf11);
+    RUN_TEST(test_tf10_tf11_entry_error_replies);
     RUN_TEST(test_entry_fail_safe_on_odd_replies);
-    RUN_TEST(test_exit_paid_opens_tf23);
-    RUN_TEST(test_exit_unpaid_and_errors_tf24_tf26_tf30);
+    RUN_TEST(test_tf23_exit_paid_opens);
+    RUN_TEST(test_tf24_tf26_tf30_exit_unpaid_and_errors);
     RUN_TEST(test_exit_fail_safe_on_odd_replies);
     RUN_TEST(test_against_real_kasse_handlers);
     return UNITY_END();

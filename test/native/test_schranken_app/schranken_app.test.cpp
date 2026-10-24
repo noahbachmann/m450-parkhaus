@@ -6,17 +6,12 @@
 
 #include "kasse_api.h"
 #include "schranken_app.h"
+#include "test_fixtures.h"
+
+using namespace fixtures;
 
 namespace
 {
-    constexpr int64_t NOW = 1760530000;
-    constexpr int64_t MIN = 60;
-
-    bool contains(const std::string& text, const std::string& part)
-    {
-        return text.find(part) != std::string::npos;
-    }
-
     class FakeBarrier : public BarrierPort
     {
     public:
@@ -52,82 +47,6 @@ namespace
         void setLoopHeld(bool h) override
         {
             held = h;
-        }
-    };
-
-    class MemoryPlatform : public AppPlatform
-    {
-    public:
-        std::map<std::string, std::string> files;
-        std::map<std::string, int> writes;
-        uint32_t nextRandom = 0x1000;
-
-        bool readFile(const char* name, std::string& json) override
-        {
-            auto it = files.find(name);
-            if (it == files.end())
-            {
-                return false;
-            }
-            json = it->second;
-            return true;
-        }
-        void writeFile(const char* name, const std::string& json) override
-        {
-            files[name] = json;
-            writes[name]++;
-        }
-        uint32_t random32() override
-        {
-            return nextRandom++;
-        }
-        void log(const std::string&) override
-        {
-        }
-    };
-
-    // Pico 1 through its real router.
-    class LocalKasse : public KasseLink
-    {
-    public:
-        SessionStore store;
-        int64_t now = NOW;
-        bool online = true;
-
-        HttpReply postJson(const char* path, const std::string& body) override
-        {
-            return call("POST", path, body);
-        }
-        HttpReply getJson(const std::string& pathAndQuery) override
-        {
-            size_t q = pathAndQuery.find('?');
-            WebRequest req;
-            req.method = "GET";
-            req.path = pathAndQuery.substr(0, q);
-            if (q != std::string::npos)
-            {
-                parseQuery(pathAndQuery.substr(q + 1), req.args);
-            }
-            return send(req);
-        }
-
-    private:
-        HttpReply call(const char* method, const char* path, const std::string& body)
-        {
-            WebRequest req;
-            req.method = method;
-            req.path = path;
-            req.body = body;
-            return send(req);
-        }
-        HttpReply send(const WebRequest& req)
-        {
-            if (!online)
-            {
-                return {};
-            }
-            WebResponse r = routeKasse(req, store, now, true, "http://ui", true).response;
-            return {r.status, r.body};
         }
     };
 
@@ -307,7 +226,7 @@ void test_kasse_pay_redirect_keeps_valid_plate()
     TEST_ASSERT_EQUAL_STRING("/kasse?m=2", bad.location.c_str());
 }
 
-void test_automat_is_public_tf21()
+void test_tf21_automat_is_public()
 {
     Rig rig;
     TEST_ASSERT_FALSE(SchrankenApp::isAdminRoute("GET", "/automat"));
@@ -478,7 +397,7 @@ int main()
     RUN_TEST(test_login_logout_and_wrong_password);
     RUN_TEST(test_notice_is_shown_once_per_post);
     RUN_TEST(test_kasse_pay_redirect_keeps_valid_plate);
-    RUN_TEST(test_automat_is_public_tf21);
+    RUN_TEST(test_tf21_automat_is_public);
     RUN_TEST(test_entry_opens_and_terminal_shows_plate);
     RUN_TEST(test_drive_through_uses_the_barrier_answer);
     RUN_TEST(test_loop_hold_only_while_barrier_up);

@@ -124,6 +124,11 @@ const LaneTerminal& SchrankenApp::terminal(GateLane id) const
     return id == GateLane::Exit ? exitLane.terminal : entryLane.terminal;
 }
 
+const LaneView& SchrankenApp::view(GateLane id) const
+{
+    return id == GateLane::Exit ? exitLane.view : entryLane.view;
+}
+
 bool SchrankenApp::isAdminRoute(const std::string& method, const std::string& path)
 {
     for (const Route& route : ROUTES)

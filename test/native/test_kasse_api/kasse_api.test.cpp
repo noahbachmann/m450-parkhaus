@@ -5,13 +5,12 @@
 
 #include "kasse_api.h"
 #include "payment.h"
+#include "test_fixtures.h"
+
+using namespace fixtures;
 
 namespace
 {
-    constexpr int64_t NOW = 1760530000;
-    constexpr int64_t MIN = 60;
-    constexpr int64_t HOUR = 3600;
-
     void assertResponse(int status, const char* body, const ApiResponse& r)
     {
         TEST_ASSERT_EQUAL_INT_MESSAGE(status, r.status, r.body.c_str());
@@ -47,7 +46,7 @@ void tearDown()
 {
 }
 
-void test_status_tf29()
+void test_tf29_status()
 {
     SessionStore store = testData();
     assertResponse(200, "{\"kz\":\"LU123456\",\"status\":\"bezahlt\",\"fee\":400,\"entry\":1760525200}",
@@ -134,7 +133,7 @@ void test_exit_errors()
     TEST_ASSERT_TRUE(SessionStatus::Paid == store.findActive("LU123456")->status);
 }
 
-void test_exit_override_tf31()
+void test_tf31_exit_override()
 {
     SessionStore store = testData();
     assertResponse(200, "{\"kz\":\"ZH98765\",\"status\":\"closed_unpaid\",\"exit\":1760530000,\"fee\":600}",
@@ -149,7 +148,7 @@ void test_exit_override_tf31()
     TEST_ASSERT_TRUE(SessionStatus::Open == store.findActive("UR1")->status);
 }
 
-void test_pay_at_exit_terminal_tf28()
+void test_tf28_pay_at_exit_terminal()
 {
     SessionStore store = testData();
     assertResponse(402, "{\"error\":\"declined\"}",
@@ -174,7 +173,7 @@ void test_pay_at_exit_terminal_tf28()
                    handlePay(store, "{\"kz\":\"AG1\",\"method\":\"twint\"}", NOW, false));
 }
 
-void test_pay_cash_at_kasse_tf21()
+void test_tf21_pay_cash_at_kasse()
 {
     SessionStore store = testData();
     assertResponse(200, "{\"kz\":\"ZH98765\",\"status\":\"unbezahlt\",\"amount\":600,\"remaining\":500}",
@@ -295,7 +294,7 @@ void test_route_kasse_root_and_unknown()
 int main()
 {
     UNITY_BEGIN();
-    RUN_TEST(test_status_tf29);
+    RUN_TEST(test_tf29_status);
     RUN_TEST(test_status_open_in_free_time_is_unpaid_with_fee_zero);
     RUN_TEST(test_status_after_exit_is_unknown);
     RUN_TEST(test_entry);
@@ -303,9 +302,9 @@ int main()
     RUN_TEST(test_entry_errors);
     RUN_TEST(test_exit);
     RUN_TEST(test_exit_errors);
-    RUN_TEST(test_exit_override_tf31);
-    RUN_TEST(test_pay_at_exit_terminal_tf28);
-    RUN_TEST(test_pay_cash_at_kasse_tf21);
+    RUN_TEST(test_tf31_exit_override);
+    RUN_TEST(test_tf28_pay_at_exit_terminal);
+    RUN_TEST(test_tf21_pay_cash_at_kasse);
     RUN_TEST(test_pay_card_after_partial_cash_reports_cash_part);
     RUN_TEST(test_status_with_clock_before_entry);
     RUN_TEST(test_pay_cash_invalid_amount);

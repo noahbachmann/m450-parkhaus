@@ -3,39 +3,12 @@
 #include "kasse_api.h"
 #include "session.h"
 #include "terminal.h"
+#include "test_fixtures.h"
+
+using namespace fixtures;
 
 namespace
 {
-    constexpr int64_t NOW = 1760530000; // 15.10.2025 14:06:40 Zurich (CEST)
-    constexpr int64_t MIN = 60;
-
-    // Pico 1's real API handlers on a real store.
-    class LocalKasse : public KasseLink
-    {
-    public:
-        SessionStore store;
-        int64_t now = NOW;
-        bool online = true;
-
-        HttpReply postJson(const char* path, const std::string& body) override
-        {
-            if (!online)
-            {
-                return {};
-            }
-            std::string p = path;
-            ApiResponse r = p == "/api/exit"  ? handleExit(store, body, now, true)
-                            : p == "/api/pay" ? handlePay(store, body, now, true)
-                                              : handleEntry(store, body, now, true);
-            return {r.status, r.body};
-        }
-
-        HttpReply getJson(const std::string&) override
-        {
-            return {};
-        }
-    };
-
     LaneTerminal exitTerminal()
     {
         LaneTerminal t;

@@ -4,18 +4,9 @@
 #include "kasse_view.h"
 #include "payment.h"
 #include "session.h"
+#include "test_fixtures.h"
 
-namespace
-{
-    constexpr int64_t NOW = 1760530000; // 15.10.2025 14:06:40 Zurich (CEST)
-    constexpr int64_t MIN = 60;
-    constexpr int64_t HOUR = 3600;
-
-    bool contains(const std::string& html, const char* text)
-    {
-        return html.find(text) != std::string::npos;
-    }
-}
+using namespace fixtures;
 
 void setUp()
 {
@@ -25,7 +16,7 @@ void tearDown()
 {
 }
 
-void test_open_session_tf19()
+void test_tf19_open_session()
 {
     SessionStore store;
     store.openEntry("LU 123456", NOW - 80 * MIN);
@@ -121,7 +112,7 @@ void test_paid_session_has_no_running_tariff_note()
     TEST_ASSERT_EQUAL_STRING("", v.tariffNote.c_str());
 }
 
-void test_payment_messages_tf20_tf21_tf22()
+void test_tf20_tf21_tf22_payment_messages()
 {
     SessionStore store;
     store.openEntry("LU123456", NOW - 80 * MIN);
@@ -212,7 +203,7 @@ void test_session_list_order_active_first()
     TEST_ASSERT_FALSE(isActive(list[4]->status));
 }
 
-void test_kasse_page_tf19()
+void test_tf19_kasse_page()
 {
     SessionStore store;
     store.openEntry("LU123456", NOW - 80 * MIN);
@@ -241,7 +232,7 @@ void test_kasse_list_shows_active_before_closed()
     TEST_ASSERT_TRUE(open < closed);
 }
 
-void test_paid_session_keeps_pay_form_tf20()
+void test_tf20_paid_session_keeps_pay_form()
 {
     SessionStore store;
     store.openEntry("LU123456", NOW - 80 * MIN);
@@ -252,7 +243,7 @@ void test_paid_session_keeps_pay_form_tf20()
     TEST_ASSERT_TRUE(contains(html, "action=\"/kasse/pay\""));
 }
 
-void test_kasse_without_session_tf22()
+void test_tf22_kasse_without_session()
 {
     SessionStore store;
     std::string html = renderKassePage(store, "SZ 555", Notice{}, NOW, true, "");
@@ -305,7 +296,7 @@ void test_tariff_summary_matches_tariff_md()
                              tariffSummary().c_str());
 }
 
-void test_tariff_page_us14_tf19()
+void test_tf19_us14_tariff_page()
 {
     std::string html = renderTariffPage(Role::Public);
     TEST_ASSERT_TRUE(contains(html, "15 Freiminuten; wird die Freizeit überschritten"));
@@ -324,7 +315,7 @@ void test_tariff_page_us14_tf19()
     TEST_ASSERT_FALSE(contains(html, "href=\"/kasse\"")); // public nav
 }
 
-void test_tariff_linked_from_kasse_tf19()
+void test_tf19_tariff_linked_from_kasse()
 {
     SessionStore store;
     store.openEntry("LU123456", NOW - 80 * MIN);
@@ -333,7 +324,7 @@ void test_tariff_linked_from_kasse_tf19()
     TEST_ASSERT_TRUE(contains(html, "<a href=\"/tarif\">Tarif anzeigen</a>"));
 }
 
-void test_automat_page_tf19()
+void test_tf19_automat_page()
 {
     SessionStore store;
     store.openEntry("LU 123456", NOW - 80 * MIN);
@@ -363,7 +354,7 @@ void test_automat_hides_other_sessions()
     TEST_ASSERT_FALSE(contains(empty, "ZH98765"));
 }
 
-void test_automat_without_session_tf22()
+void test_tf22_automat_without_session()
 {
     SessionStore store;
     std::string html = renderAutomatPage(store, "SZ 555", Notice{}, NOW, true, "", Role::Public);
@@ -404,7 +395,7 @@ void test_kasse_server_page_links_to_pico2()
 int main()
 {
     UNITY_BEGIN();
-    RUN_TEST(test_open_session_tf19);
+    RUN_TEST(test_tf19_open_session);
     RUN_TEST(test_free_time_is_not_payable);
     RUN_TEST(test_paid_and_closed_session);
     RUN_TEST(test_partial_cash_is_shown);
@@ -412,24 +403,24 @@ int main()
     RUN_TEST(test_tariff_note_daily_max);
     RUN_TEST(test_tariff_note_beyond_one_day);
     RUN_TEST(test_paid_session_has_no_running_tariff_note);
-    RUN_TEST(test_payment_messages_tf20_tf21_tf22);
+    RUN_TEST(test_tf20_tf21_tf22_payment_messages);
     RUN_TEST(test_parse_chf);
     RUN_TEST(test_html_escape);
     RUN_TEST(test_session_list_order_active_first);
-    RUN_TEST(test_kasse_page_tf19);
+    RUN_TEST(test_tf19_kasse_page);
     RUN_TEST(test_kasse_list_shows_active_before_closed);
-    RUN_TEST(test_paid_session_keeps_pay_form_tf20);
-    RUN_TEST(test_kasse_without_session_tf22);
+    RUN_TEST(test_tf20_paid_session_keeps_pay_form);
+    RUN_TEST(test_tf22_kasse_without_session);
     RUN_TEST(test_kasse_shows_closed_session_without_payment);
     RUN_TEST(test_page_escapes_query_and_flags_invalid_plate);
     RUN_TEST(test_page_without_time_offers_no_payment);
     RUN_TEST(test_page_without_kasse_shows_fault_only);
     RUN_TEST(test_tariff_summary_matches_tariff_md);
-    RUN_TEST(test_tariff_page_us14_tf19);
-    RUN_TEST(test_tariff_linked_from_kasse_tf19);
-    RUN_TEST(test_automat_page_tf19);
+    RUN_TEST(test_tf19_us14_tariff_page);
+    RUN_TEST(test_tf19_tariff_linked_from_kasse);
+    RUN_TEST(test_tf19_automat_page);
     RUN_TEST(test_automat_hides_other_sessions);
-    RUN_TEST(test_automat_without_session_tf22);
+    RUN_TEST(test_tf22_automat_without_session);
     RUN_TEST(test_automat_closed_session_not_shown);
     RUN_TEST(test_automat_without_kasse_or_time);
     RUN_TEST(test_kasse_server_page_links_to_pico2);

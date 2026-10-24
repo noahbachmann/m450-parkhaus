@@ -6,62 +6,9 @@
 #include "kasse_client.h"
 #include "payment.h"
 #include "session.h"
+#include "test_fixtures.h"
 
-namespace
-{
-    constexpr int64_t NOW = 1760530000; // 15.10.2025 14:06:40 Zurich (CEST)
-    constexpr int64_t MIN = 60;
-
-    // Pico 1's real API handlers on a real store.
-    class LocalKasse : public KasseLink
-    {
-    public:
-        SessionStore store;
-        int64_t now = NOW;
-        bool online = true;
-        bool synced = true;
-
-        HttpReply postJson(const char* path, const std::string& body) override
-        {
-            if (!online)
-            {
-                return {};
-            }
-            std::string p = path;
-            ApiResponse r = p == "/api/pay"     ? handlePay(store, body, now, synced)
-                            : p == "/api/reset" ? handleReset(store)
-                                                : ApiResponse{404, "{\"error\":\"not_found\"}"};
-            return {r.status, r.body};
-        }
-
-        HttpReply getJson(const std::string& pathAndQuery) override
-        {
-            if (!online)
-            {
-                return {};
-            }
-            ApiResponse r = pathAndQuery == "/api/sessions" ? handleSessions(store, now, synced)
-                                                            : ApiResponse{404, "{\"error\":\"not_found\"}"};
-            return {r.status, r.body};
-        }
-    };
-
-    class FixedReply : public KasseLink
-    {
-    public:
-        HttpReply reply;
-
-        HttpReply postJson(const char*, const std::string&) override
-        {
-            return reply;
-        }
-
-        HttpReply getJson(const std::string&) override
-        {
-            return reply;
-        }
-    };
-}
+using namespace fixtures;
 
 void setUp()
 {
@@ -105,7 +52,7 @@ void test_fetch_sessions_unreachable_or_garbage()
     TEST_ASSERT_EQUAL_STRING("Unerwartete Antwort der Kasse", fetchSessions(garbage).error.c_str());
 }
 
-void test_pay_tf20_card_then_already_paid()
+void test_tf20_pay_card_then_already_paid()
 {
     LocalKasse kasse;
     kasse.store.openEntry("LU123456", NOW - 80 * MIN);
@@ -122,7 +69,7 @@ void test_pay_tf20_card_then_already_paid()
     TEST_ASSERT_EQUAL_UINT32(2, kasse.store.nextTxNumber());
 }
 
-void test_pay_tf21_cash()
+void test_tf21_pay_cash()
 {
     LocalKasse kasse;
     kasse.store.openEntry("LU123456", NOW - 150 * MIN);
@@ -196,8 +143,8 @@ int main()
     UNITY_BEGIN();
     RUN_TEST(test_fetch_sessions);
     RUN_TEST(test_fetch_sessions_unreachable_or_garbage);
-    RUN_TEST(test_pay_tf20_card_then_already_paid);
-    RUN_TEST(test_pay_tf21_cash);
+    RUN_TEST(test_tf20_pay_card_then_already_paid);
+    RUN_TEST(test_tf21_pay_cash);
     RUN_TEST(test_pay_rejects_bad_input);
     RUN_TEST(test_pay_kasse_unreachable_or_unexpected);
     RUN_TEST(test_reset);
