@@ -7,7 +7,7 @@ Nach Testkonzept «Parkhaus-Schranken (Raspberry Pi Pico)» v1.0, Kapitel 6.2 (M
 |---|---|
 | Datum | 24.10.2026 |
 | Tester | N. Bachmann (automatisierte Tests mit `pio test -e native`; TF-34 Runde 1 von Hand im PC-Simulator) |
-| Software-Version | Commit `a09a3a2` (Branch `main`) |
+| Software-Version | Branch `main`, Stand des letzten grünen CI-Laufs (GitHub Actions, `.github/workflows/ci.yml`) |
 | Testumgebung | **TU-1** (PC). TU-2/TU-3 (Aufbau mit den Picos) nicht möglich: Die Hardware stand nicht mehr zur Verfügung. Zusätzlich von Hand im PC-Simulator (Docker). |
 | Testdaten | Kennzeichen KZ-01 bis KZ-13, Tarif R-01 bis R-12, Zahlungsmittel ZM-01 bis ZM-04 gemäss Testkonzept 11.2 (`lib/testdata`, `lib/test_support/test_fixtures.h`) |
 
@@ -109,6 +109,7 @@ Klassen nach Testkonzept 6.2: 1 belanglos, 2 leicht, 3 schwer, 4 kritisch.
 | M-12 | 4 | Review | Pico 1 nahm Zahlungen, Ausfahrten und Reset von jedem Gerät im WLAN an (Ausfahrt ohne Zahlung möglich) | behoben 24.10.2026: POST nur von Pico 2; auf Hardware ungeprüft |
 | M-13 | 2 | Review | «Durchfahren» entschied auf dem Board nach einem möglicherweise veralteten Schrankenzustand, im Simulator nach dem echten (Board und Simulator wichen ab) | behoben 24.10.2026: eine gemeinsame Anwendung für Board und Simulator, Antwort vom Schrankenkern |
 | M-14 | 2 | Review | Ein prellender Taster bzw. verrauschter IR-Sensor konnte Sicherheitsabschaltungen oder eine vorzeitige «Durchfahrt» auslösen | behoben 24.10.2026: Schleife muss 50 ms stabil sein; auf Hardware ungeprüft |
+| M-15 | 1 | Review | Die Meldung nach einem Formular (z. B. «Bezahlt …») gibt es nur einmal für alle Browser: Schickt ein zweiter Browser dazwischen ein Formular ab, sieht der erste seine Bestätigung nicht (die Buchung selbst stimmt) | offen, in TF-34 Runde 2 mit zwei Browsern prüfen |
 
 ## Nicht geprüft (nur mit Hardware möglich)
 
@@ -119,7 +120,7 @@ Klassen nach Testkonzept 6.2: 1 belanglos, 2 leicht, 3 schwer, 4 kritisch.
 | Stopp < 0.5 s, Servo fährt wirklich hoch | TF-13 | Logik reagiert im nächsten Durchlauf auf dem zweiten Prozessorkern, die echte Zeit ist ungemessen |
 | Uhrzeit per NTP (±2 s) | TF-09, TF-23 | im Test simulierte Uhr |
 | Servos, Taster als Schleife, Start mit belegter Schleife | TF-04, TF-12, TF-13 | keine Hardware |
-| WLAN, feste IPs, HTTP-Timeout 1000 ms, Zugriff nur von Pico 2 | TF-11, TF-29, TF-30 | im Test durch «keine Antwort» ersetzt |
+| WLAN, feste IPs, HTTP-Timeout 1000 ms, Zugriff nur von Pico 2 | TF-11, TF-29, TF-30 | im Test durch «keine Antwort» ersetzt. Auf dem Board prüfen, ob der Timeout auch den Verbindungsaufbau zu einem ausgeschalteten Pico 1 begrenzt (Aufbauanleitung 8.3) |
 | Echter Stromunterbruch während des Schreibens | TF-11, TF-30 | LittleFS-Anbindung in `src/common/storage.cpp` nur gebaut |
 | Bedienung im Browser | alle UI-Fälle | HTML wird im Test auf Inhalt geprüft; von Hand im PC-Simulator |
 
@@ -133,7 +134,7 @@ Klassen nach Testkonzept 6.2: 1 belanglos, 2 leicht, 3 schwer, 4 kritisch.
 | nicht durchgeführt | 1 (TF-33) |
 | Priorität 1 | 15, davon 7 bestanden, 8 teilweise |
 | offene Mängel Klasse 3 oder 4 | 0 (M-08, M-12 und M-14 behoben, aber auf Hardware ungeprüft) |
-| Smoke-Test (TF-01, 04, 20, 23, 24) | läuft bei jedem `pio test -e native` mit |
+| Smoke-Test (TF-01, 04, 20, 23, 24) | läuft bei jedem `pio test -e native` mit, also auch bei jedem Push auf `main` (CI) |
 
 **Endkriterien (6.3):** Alle Testfälle der Priorität 1 und 2 sind durchgeführt, und es sind keine Mängel der
 Klasse 3 oder 4 offen. Nicht erfüllt ist «alle Priorität-1-Testfälle bestanden»: Bei 8 Fällen fehlt die Messung

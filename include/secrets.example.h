@@ -1,6 +1,7 @@
 #pragma once
 
-// Copy to include/secrets.h (gitignored) and fill in.
+// Copy to include/secrets.h (gitignored) and fill in. Overview of all dev/test credentials: README.md,
+// "Zugangsdaten für Entwicklung und Test".
 
 #define WIFI_SSID "test-wlan"
 #define WIFI_PASSWORD "changeme"

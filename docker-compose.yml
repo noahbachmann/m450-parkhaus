@@ -17,6 +17,7 @@ services:
     init: true
     environment:
       KASSE_URL: http://kasse:8081
+      # login «betrieb»; credentials overview: README.md, "Zugangsdaten für Entwicklung und Test"
       OPERATOR_PASSWORD: ${OPERATOR_PASSWORD:-parkhaus}
     ports:
       - "127.0.0.1:8082:8082"

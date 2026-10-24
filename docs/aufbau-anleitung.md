@@ -273,6 +273,8 @@ Adressbereich des Hotspots liegen.
 ### 6.3 `secrets.h` anlegen
 
 Die Zugangsdaten stehen in `include/secrets.h`. Diese Datei ist **gitignored** und wird nie committet.
+Übersicht aller Zugangsdaten (Login, Passwörter, Adressen): README, Abschnitt
+[«Zugangsdaten für Entwicklung und Test»](../README.md#zugangsdaten-für-entwicklung-und-test).
 
 1. Vorlage kopieren:
    ```
@@ -393,7 +395,7 @@ Weboberflächen im Browser:
 |---|---|
 | `http://<SCHRANKEN_IP>/kamera` | Kamera-Simulation (Einfahrt mit optionaler Einfahrtszeit, Ausfahrt, «Durchfahren», «Fahrzeug bleibt stehen» – wirkt wie ein gedrückter Taster) |
 | `http://<SCHRANKEN_IP>/automat` | Automat: per Kennzeichen bezahlen (ohne Anmeldung) |
-| `http://<SCHRANKEN_IP>/login` | Anmeldung «betrieb»; danach Kasse, Registrierung und Betrieb in der Navigation |
+| `http://<SCHRANKEN_IP>/login` | Anmeldung «betrieb» (Passwort = `OPERATOR_PASSWORD` aus `secrets.h`); danach Kasse, Registrierung und Betrieb in der Navigation |
 | `http://<KASSE_IP>/` | nur ein Hinweis mit Link auf Pico 2 (Pico 1 hat keine eigenen Bedienseiten) |
 
 Schnittstelle der Kasse direkt testen:
@@ -413,6 +415,9 @@ Antwort zum Beispiel: `{"kz":"LU123456","status":"unbekannt"}` – die Kasse ist
 - [ ] **Ausfahrt** ohne Bezahlung → Servo 2 bleibt zu, Meldung zur offenen Gebühr.
 - [ ] Am Automaten (`/automat` auf Pico 2) bezahlen.
 - [ ] **Ausfahrt** erneut → Servo 2 öffnet.
+- [ ] Pico 1 vom Strom trennen, bei der **Ausfahrt** ein Kennzeichen eingeben → Servo 2 bleibt zu, «Kasse nicht
+  erreichbar – bitte Ruftaste drücken» erscheint nach höchstens etwa 2 s (Timeout 1000 ms; prüft, ob der
+  Timeout auch beim Verbindungsaufbau greift, TF-11/TF-30). Dauert es deutlich länger: als Mangel erfassen.
 
 ---
 

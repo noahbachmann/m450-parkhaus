@@ -35,6 +35,8 @@ shows the loops.
 - `include/secrets.h` (**gitignored**) holds SSID, password, the fixed IPs of both Picos (`KASSE_IP`,
   `SCHRANKEN_IP`, gateway, subnet) and `OPERATOR_PASSWORD`; the board build stops without it.
 - `include/secrets.example.h` (committed) shows the format.
+- All dev/test credentials (operator login, simulator/test passwords, addresses) are listed in one table in
+  `README.md`, «Zugangsdaten für Entwicklung und Test»; other docs link there. Update it when a value changes.
 - Separate test WLAN (phone hotspot). It needs internet access for NTP.
 
 ## Responsibilities
@@ -234,3 +236,5 @@ Two native programs with the same `lib/` code, talking HTTP like the boards:
 - System test through the real routes (`lib/test_support/system_rig.h`): `test_system_entry` (Testkonzept 8.1–8.2),
   `test_system_safety` (8.3–8.4), `test_system_payment` (8.5–8.7). A "reboot" rebuilds a Pico from its files.
 - No board test suites (`test_ignore = *` on the board envs).
+- CI (`.github/workflows/ci.yml`, GitHub Actions) on push/PR to `main`: `pio test -e native`; `pio run -e kasse -e
+  schranken -e hwtest` with `secrets.example.h` copied to `secrets.h`; `docker build .` for the simulator.

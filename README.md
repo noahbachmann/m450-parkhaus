@@ -1,5 +1,7 @@
 # Parkhaus mit Schranke
 
+[![CI](https://github.com/noahbachmann/m450-parkhaus/actions/workflows/ci.yml/badge.svg)](https://github.com/noahbachmann/m450-parkhaus/actions/workflows/ci.yml)
+
 Projekt im Modul 450 (BBZW Sursee, Klasse sina24cL).
 
 ## Gruppenmitglieder
@@ -102,8 +104,8 @@ ist (gleiche Abgrenzung wie im Testkonzept, Kapitel 2).
 ## Weboberflächen
 
 Alle Seiten laufen auf Pico 2 (`http://<SCHRANKEN_IP>`, im Simulator `http://localhost:8082`). Ohne Anmeldung:
-Kamerasimulation, Automat, Tarif. Nach der Anmeldung als «betrieb» (Passwort aus `secrets.h`, im Simulator
-`parkhaus`) zusätzlich Kasse, Registrierung und Betrieb.
+Kamerasimulation, Automat, Tarif. Nach der Anmeldung als «betrieb» (Passwort siehe
+[Zugangsdaten](#zugangsdaten-für-entwicklung-und-test)) zusätzlich Kasse, Registrierung und Betrieb.
 
 | Adresse | Zugang | Inhalt |
 |---|---|---|
@@ -130,6 +132,25 @@ bietet die JSON-Schnittstelle für Pico 2: `GET /api/status?kz=…` (z. B. für 
   «Sicherheitsabschaltung».
 - Die Seite aktualisiert sich nicht von selbst: «Aktualisieren» bzw. neu laden.
 
+## Zugangsdaten für Entwicklung und Test
+
+Die einzige Übersicht aller Zugangsdaten. Alle anderen Dokumente verweisen hierher. Es sind Testwerte für den
+Prototyp im eigenen Test-WLAN.
+
+| Was | Wert | Wo festgelegt |
+|---|---|---|
+| Anmeldung Betriebspersonal (Pico 2) | Benutzer `betrieb` | fest im Code (`lib/auth`), einziger Benutzer |
+| Passwort im PC-Simulator / Docker | `parkhaus` | Standardwert in `src/sim/schranken/main.cpp` und `docker-compose.yml`; ändern mit der Umgebungsvariablen `OPERATOR_PASSWORD` (z. B. `OPERATOR_PASSWORD=xyz docker compose up`) |
+| Passwort auf dem Board | Vorlage `parkhaus` | `OPERATOR_PASSWORD` in `include/secrets.h` (ohne diese Zeile bricht der Build ab) |
+| Passwort in den Tests | `parkhaus` | Systemtests (`lib/test_support/system_rig.h`); `test_schranken_app` nimmt absichtlich `geheim`, damit auffällt, falls das Passwort irgendwo fest eingebaut wäre |
+| WLAN (SSID, Passwort) | eigener Hotspot | nur `include/secrets.h` (gitignored), Vorlage `include/secrets.example.h` |
+| Feste IPs | Vorlage Kasse `…201`, Schranken `…202` | `KASSE_IP`, `SCHRANKEN_IP`, Gateway, Subnetz in `include/secrets.h` |
+| Adressen im Simulator | Pico 2 `http://localhost:8082`, Pico 1 `http://localhost:8081` | `src/sim/common/sim_common.h`, `docker-compose.yml` |
+| Adressen auf dem Board | Pico 2 `http://<SCHRANKEN_IP>`, Pico 1 `http://<KASSE_IP>` | `include/secrets.h` |
+
+`include/secrets.h` wird nie committet; anlegen siehe [Aufbauanleitung 6.3](docs/aufbau-anleitung.md#63-secretsh-anlegen).
+Pico 1 nimmt ändernde Anfragen (`POST /api/…`) nur von `SCHRANKEN_IP` an.
+
 ## Build und Tests
 
 ```
@@ -141,6 +162,10 @@ pio test -e native               # Unit- und Systemtests auf dem PC (ohne Board)
 ```
 
 Hardware-Aufbau, Pinbelegung, WLAN-Einrichtung und Flashen: [docs/aufbau-anleitung.md](docs/aufbau-anleitung.md).
+
+**CI:** Bei jedem Push auf `main` führt GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) die
+Unit- und Systemtests aus (`pio test -e native`), baut die Firmware (`kasse`, `schranken`, `hwtest`, mit
+`secrets.example.h` als `secrets.h`) und das Docker-Image des Simulators. Ergebnis im Tab «Actions» bzw. am Badge oben.
 
 ### Tests
 
@@ -184,4 +209,5 @@ pio run -e sim_kasse -t exec     # ohne Docker, zweites Terminal: pio run -e sim
 - Ohne «Durchfahren» (und ohne angeschlossene Schleife) bleibt eine geöffnete Schranke offen.
 - Die Kamerasimulation listet alle Parkvorgänge (Testhilfe); in einem echten Parkhaus wäre das nicht öffentlich.
 - Die Anmeldung gilt bis zum Abmelden oder Neustart von Pico 2; höchstens 4 Browser gleichzeitig (der älteste
-  wird abgemeldet). Alles läuft über unverschlüsseltes HTTP im Test-WLAN.
+  wird abgemeldet). Alles läuft über unverschlüsseltes HTTP im Test-WLAN. Fehlversuche bei der Anmeldung werden
+  nicht begrenzt; für einen Prototyp im eigenen Test-WLAN reicht das.
