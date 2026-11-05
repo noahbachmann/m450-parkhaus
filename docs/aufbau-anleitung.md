@@ -32,7 +32,7 @@ Die beiden Picos haben getrennte Aufgaben und sprechen über das WLAN per HTTP m
                  │ WLAN                              │ WLAN
    ┌─────────────┴───────────┐  HTTP (Port 80) ┌─────┴──────────────────────┐
    │  Pico 1  «Kasse»        │ ◄────────────── │  Pico 2  «Schranken»        │
-   │  192.168.1.201          │  Zahlungsstatus │  192.168.1.202              │
+   │  10.178.56.156          │  Zahlungsstatus │  10.178.56.157              │
    │                         │  Ein-/Ausfahrt  │                             │
    │  • Kasse (Schnittstelle)│                 │  • Einfahrtsschranke (Servo)│
    │  • Gebührenberechnung   │                 │  • Ausfahrtsschranke (Servo)│
@@ -250,25 +250,21 @@ Beide Picos verbinden sich mit einem **separaten Test-WLAN** – am einfachsten 
   Uhrzeit per NTP. Ohne Uhrzeit bleiben Ein- und Ausfahrt gesperrt.
 - [ ] SSID und Passwort ohne Sonderzeichen wie `"` oder `\` wählen.
 
-### 6.2 Subnetz des Hotspots herausfinden
+### 6.2 Feste IP-Adressen
 
-Die Picos bekommen **feste IP-Adressen**, damit Pico 2 immer weiss, wo Pico 1 ist. Diese müssen im
-Adressbereich des Hotspots liegen.
+Die Picos haben **feste IP-Adressen**, damit Pico 2 immer weiss, wo Pico 1 ist. Diese Adressen sind
+fix und werden nicht geändert:
 
-1. Laptop mit dem Hotspot verbinden.
-2. IP-Adresse des Laptops nachschauen:
-   - Windows: `ipconfig` → «IPv4-Adresse» und «Standardgateway»
-   - macOS / Linux: `ifconfig` bzw. `ip addr`
-3. Typische Werte:
+| Gerät | IP-Adresse |
+|---|---|
+| Pico 1 «Kasse» | `10.178.56.156` |
+| Pico 2 «Schranken» | `10.178.56.157` |
+| Gateway (auch DNS) | `10.178.56.50` |
+| Subnetzmaske | `255.255.255.0` |
 
-| Hotspot | Gateway | Vorschlag Kasse | Vorschlag Schranken |
-|---|---|---|---|
-| Android (oft) | 192.168.43.1 | 192.168.43.201 | 192.168.43.202 |
-| iPhone | 172.20.10.1 | 172.20.10.11 | 172.20.10.12 |
-| Router zu Hause | 192.168.1.1 | 192.168.1.201 | 192.168.1.202 |
-
-> Beim **iPhone** ist das Netz sehr klein (Subnetzmaske `255.255.255.240`, nur Adressen
-> 172.20.10.2–14). Darum dort .11 und .12 verwenden und die Maske anpassen.
+Kontrolle: Laptop mit dem WLAN verbinden und die eigene Adresse nachschauen (Windows: `ipconfig`,
+macOS / Linux: `ifconfig` bzw. `ip addr`). Sie muss mit `10.178.56.` beginnen, «Standardgateway» muss
+`10.178.56.50` sein.
 
 ### 6.3 `secrets.h` anlegen
 
@@ -281,16 +277,17 @@ Die Zugangsdaten stehen in `include/secrets.h`. Diese Datei ist **gitignored** u
    copy include\secrets.example.h include\secrets.h      (Windows)
    cp include/secrets.example.h include/secrets.h        (macOS / Linux)
    ```
-2. `include/secrets.h` ausfüllen. Die IPs werden **mit Kommas** geschrieben, nicht mit Punkten:
+2. In `include/secrets.h` SSID und Passwörter eintragen. Die IPs sind schon richtig gesetzt (fix, nicht
+   ändern); sie werden **mit Kommas** geschrieben, nicht mit Punkten:
    ```cpp
    #pragma once
 
    #define WIFI_SSID "Parkhaus-Test"
    #define WIFI_PASSWORD "geheim123"
 
-   #define KASSE_IP 192, 168, 43, 201
-   #define SCHRANKEN_IP 192, 168, 43, 202
-   #define GATEWAY_IP 192, 168, 43, 1
+   #define KASSE_IP 10, 178, 56, 156
+   #define SCHRANKEN_IP 10, 178, 56, 157
+   #define GATEWAY_IP 10, 178, 56, 50
    #define SUBNET_MASK 255, 255, 255, 0
 
    // Passwort für die Anmeldung «betrieb» auf Pico 2 (ohne diese Zeile bricht der Build ab)
@@ -385,23 +382,23 @@ Tastern wechselt die Anzeige beim Drücken auf «belegt». Danach die richtige F
 Laptop mit demselben Hotspot verbinden, dann:
 
 ```
-ping 192.168.43.201          ← Kasse
-ping 192.168.43.202          ← Schranken
+ping 10.178.56.156           ← Kasse
+ping 10.178.56.157           ← Schranken
 ```
 
 Weboberflächen im Browser:
 
 | Adresse | Inhalt |
 |---|---|
-| `http://<SCHRANKEN_IP>/kamera` | Kamera-Simulation (Einfahrt mit optionaler Einfahrtszeit, Ausfahrt, «Durchfahren», «Fahrzeug bleibt stehen» – wirkt wie ein gedrückter Taster) |
-| `http://<SCHRANKEN_IP>/automat` | Automat: per Kennzeichen bezahlen (ohne Anmeldung) |
-| `http://<SCHRANKEN_IP>/login` | Anmeldung «betrieb» (Passwort = `OPERATOR_PASSWORD` aus `secrets.h`); danach Kasse, Registrierung und Betrieb in der Navigation |
-| `http://<KASSE_IP>/` | nur ein Hinweis mit Link auf Pico 2 (Pico 1 hat keine eigenen Bedienseiten) |
+| `http://10.178.56.157/kamera` | Kamera-Simulation (Einfahrt mit optionaler Einfahrtszeit, Ausfahrt, «Durchfahren», «Fahrzeug bleibt stehen» – wirkt wie ein gedrückter Taster) |
+| `http://10.178.56.157/automat` | Automat: per Kennzeichen bezahlen (ohne Anmeldung) |
+| `http://10.178.56.157/login` | Anmeldung «betrieb» (Passwort = `OPERATOR_PASSWORD` aus `secrets.h`); danach Kasse, Registrierung und Betrieb in der Navigation |
+| `http://10.178.56.156/` | nur ein Hinweis mit Link auf Pico 2 (Pico 1 hat keine eigenen Bedienseiten) |
 
 Schnittstelle der Kasse direkt testen:
 
 ```
-curl "http://192.168.43.201/api/status?kz=LU123456"
+curl "http://10.178.56.156/api/status?kz=LU123456"
 ```
 
 Antwort zum Beispiel: `{"kz":"LU123456","status":"unbekannt"}` – die Kasse ist erreichbar.
@@ -432,7 +429,7 @@ Antwort zum Beispiel: `{"kz":"LU123456","status":"unbekannt"}` – die Kasse ist
 | `OPERATOR_PASSWORD missing in include/secrets.h` | Zeile `#define OPERATOR_PASSWORD "…"` aus `secrets.example.h` in `secrets.h` übernehmen. |
 | curl auf `POST /api/…` von Pico 1 antwortet `403 forbidden` | Gewollt: Änderungen nimmt Pico 1 nur von Pico 2 (`SCHRANKEN_IP`) an. `GET /api/status` geht von überall. |
 | LED blinkt dauernd | Hotspot auf 5 GHz → auf 2.4 GHz stellen. Passwort falsch. Hotspot ohne Internet → NTP schlägt fehl. Serielle Konsole zeigt mehr. |
-| Ping geht nicht | IPs in `secrets.h` passen nicht zum Subnetz des Hotspots (Abschnitt 6.2). Laptop im falschen WLAN. |
+| Ping geht nicht | IPs in `secrets.h` weichen von den festen Adressen ab (Abschnitt 6.2). WLAN vergibt nicht `10.178.56.x` bzw. Gateway ist nicht `10.178.56.50`. Laptop im falschen WLAN. |
 | «Kasse nicht erreichbar – bitte Ruftaste drücken» | Pico 1 aus, noch nicht bereit (LED blinkt) oder falsche `KASSE_IP`. |
 | Servo zittert / Pico startet beim Bewegen neu | Zu wenig Strom → siehe [Hinweise zur Stromversorgung](#hinweise-zur-stromversorgung). |
 | Servo bewegt sich gar nicht | Rot/braun vertauscht, Signal auf falschem Pin, keine gemeinsame Masse. |

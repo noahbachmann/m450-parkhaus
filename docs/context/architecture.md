@@ -34,6 +34,8 @@ shows the loops.
 
 - `include/secrets.h` (**gitignored**) holds SSID, password, the fixed IPs of both Picos (`KASSE_IP`,
   `SCHRANKEN_IP`, gateway, subnet) and `OPERATOR_PASSWORD`; the board build stops without it.
+- The IPs are fixed and never change: Kasse `10.178.56.156`, Schranken `10.178.56.157`, gateway (also DNS)
+  `10.178.56.50`, subnet `255.255.255.0`. Only SSID and passwords differ per setup.
 - `include/secrets.example.h` (committed) shows the format.
 - All dev/test credentials (operator login, simulator/test passwords, addresses) are listed in one table in
   `README.md`, «Zugangsdaten für Entwicklung und Test»; other docs link there. Update it when a value changes.

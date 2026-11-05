@@ -103,7 +103,7 @@ ist (gleiche Abgrenzung wie im Testkonzept, Kapitel 2).
 
 ## Weboberflächen
 
-Alle Seiten laufen auf Pico 2 (`http://<SCHRANKEN_IP>`, im Simulator `http://localhost:8082`). Ohne Anmeldung:
+Alle Seiten laufen auf Pico 2 (`http://10.178.56.157`, im Simulator `http://localhost:8082`). Ohne Anmeldung:
 Kamerasimulation, Automat, Tarif. Nach der Anmeldung als «betrieb» (Passwort siehe
 [Zugangsdaten](#zugangsdaten-für-entwicklung-und-test)) zusätzlich Kasse, Registrierung und Betrieb.
 
@@ -117,7 +117,7 @@ Kamerasimulation, Automat, Tarif. Nach der Anmeldung als «betrieb» (Passwort s
 | `/registrierung` | Betrieb | Kennzeichen registrieren und löschen |
 | `/betrieb` | Betrieb | Leitstelle: Spuren, Fernöffnung mit Grund (an der Einfahrt auch «Neuer Kunde registrieren»), Ereignisprotokoll mit Filter, Testdaten zurücksetzen |
 
-Pico 1 (`http://<KASSE_IP>`, im Simulator `http://localhost:8081`) zeigt unter `/` nur einen Link auf Pico 2 und
+Pico 1 (`http://10.178.56.156`, im Simulator `http://localhost:8081`) zeigt unter `/` nur einen Link auf Pico 2 und
 bietet die JSON-Schnittstelle für Pico 2: `GET /api/status?kz=…` (z. B. für TF-29 mit curl), `GET /api/sessions`,
 `POST /api/entry`, `/api/exit`, `/api/pay`, `/api/reset`. Ändernde Anfragen (POST) nimmt Pico 1 nur von Pico 2 an.
 
@@ -144,12 +144,12 @@ Prototyp im eigenen Test-WLAN.
 | Passwort auf dem Board | Vorlage `parkhaus` | `OPERATOR_PASSWORD` in `include/secrets.h` (ohne diese Zeile bricht der Build ab) |
 | Passwort in den Tests | `parkhaus` | Systemtests (`lib/test_support/system_rig.h`); `test_schranken_app` nimmt absichtlich `geheim`, damit auffällt, falls das Passwort irgendwo fest eingebaut wäre |
 | WLAN (SSID, Passwort) | eigener Hotspot | nur `include/secrets.h` (gitignored), Vorlage `include/secrets.example.h` |
-| Feste IPs | Vorlage Kasse `…201`, Schranken `…202` | `KASSE_IP`, `SCHRANKEN_IP`, Gateway, Subnetz in `include/secrets.h` |
+| Feste IPs (fix, nicht ändern) | Kasse `10.178.56.156`, Schranken `10.178.56.157`, Gateway `10.178.56.50`, Subnetz `255.255.255.0` | `KASSE_IP`, `SCHRANKEN_IP`, `GATEWAY_IP`, `SUBNET_MASK` in `include/secrets.h` (Vorlage `include/secrets.example.h`) |
 | Adressen im Simulator | Pico 2 `http://localhost:8082`, Pico 1 `http://localhost:8081` | `src/sim/common/sim_common.h`, `docker-compose.yml` |
-| Adressen auf dem Board | Pico 2 `http://<SCHRANKEN_IP>`, Pico 1 `http://<KASSE_IP>` | `include/secrets.h` |
+| Adressen auf dem Board | Pico 2 `http://10.178.56.157`, Pico 1 `http://10.178.56.156` | `include/secrets.h` |
 
 `include/secrets.h` wird nie committet; anlegen siehe [Aufbauanleitung 6.3](docs/aufbau-anleitung.md#63-secretsh-anlegen).
-Pico 1 nimmt ändernde Anfragen (`POST /api/…`) nur von `SCHRANKEN_IP` an.
+Pico 1 nimmt ändernde Anfragen (`POST /api/…`) nur von `SCHRANKEN_IP` (`10.178.56.157`) an.
 
 ## Build und Tests
 
