@@ -387,8 +387,8 @@ void test_automat_without_kasse_or_time()
 
 void test_kasse_server_page_links_to_pico2()
 {
-    std::string html = renderKasseServerPage("http://192.168.1.51");
-    TEST_ASSERT_TRUE(contains(html, "<a href=\"http://192.168.1.51\">"));
+    std::string html = renderKasseServerPage("http://10.178.56.157");
+    TEST_ASSERT_TRUE(contains(html, "<a href=\"http://10.178.56.157\">"));
     TEST_ASSERT_FALSE(contains(html, "<nav>"));
 }
 

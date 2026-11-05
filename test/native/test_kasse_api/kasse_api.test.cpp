@@ -283,9 +283,9 @@ void test_route_kasse_writes_only_from_pico2()
 void test_route_kasse_root_and_unknown()
 {
     SessionStore store;
-    KasseRouteResult root = routeKasse(request("GET", "/"), store, NOW, true, "http://192.168.1.202", true);
+    KasseRouteResult root = routeKasse(request("GET", "/"), store, NOW, true, "http://10.178.56.157", true);
     TEST_ASSERT_EQUAL_INT(200, root.response.status);
-    TEST_ASSERT_NOT_NULL(strstr(root.response.body.c_str(), "http://192.168.1.202"));
+    TEST_ASSERT_NOT_NULL(strstr(root.response.body.c_str(), "http://10.178.56.157"));
     TEST_ASSERT_EQUAL_INT(404, routeKasse(request("GET", "/api/entry"), store, NOW, true, "", true).response.status);
     TEST_ASSERT_EQUAL_INT(404, routeKasse(request("POST", "/api/status"), store, NOW, true, "", true).response.status);
     TEST_ASSERT_EQUAL_INT(404, routeKasse(request("GET", "/kasse"), store, NOW, true, "", true).response.status);
