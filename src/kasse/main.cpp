@@ -15,6 +15,10 @@
 
 // Pico 1 "Kasse": the routes of lib/kasse_api (routeKasse), sessions in /sessions.json. The pages are on Pico 2.
 
+#ifndef KASSE_API_KEY
+#error "KASSE_API_KEY missing in include/secrets.h (see include/secrets.example.h)"
+#endif
+
 namespace
 {
 constexpr unsigned long REPORT_INTERVAL_MS = 30000;
@@ -51,8 +55,8 @@ void handleRequest()
 {
     unsigned long startMs = millis();
     WebRequest req = readRequest(server);
-    bool fromPico2 = server.client().remoteIP() == IPAddress(SCHRANKEN_IP);
-    KasseRouteResult r = routeKasse(req, sessions, nowUtc(), timeReady(), uiUrl, fromPico2);
+    bool fromSchrankenIp = server.client().remoteIP() == IPAddress(SCHRANKEN_IP);
+    KasseRouteResult r = routeKasse(req, sessions, nowUtc(), timeReady(), uiUrl, fromSchrankenIp, KASSE_API_KEY);
     if (r.changed)
     {
         saveSessions();
@@ -82,6 +86,7 @@ void setup()
     loadSessions();
     uiUrl = (String("http://") + IPAddress(SCHRANKEN_IP).toString()).c_str();
     server.onNotFound(handleRequest);
+    server.collectHeaders(API_KEY_HEADER);
     netBegin(IPAddress(KASSE_IP));
 }
 

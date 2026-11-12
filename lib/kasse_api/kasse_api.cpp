@@ -235,8 +235,22 @@ ApiResponse handleReset(SessionStore& store)
     return respond(200, doc);
 }
 
+bool apiKeyMatches(const std::string& sent, const std::string& expected)
+{
+    if (expected.empty() || sent.size() != expected.size())
+    {
+        return false;
+    }
+    unsigned char diff = 0;
+    for (size_t i = 0; i < expected.size(); ++i)
+    {
+        diff |= static_cast<unsigned char>(sent[i] ^ expected[i]);
+    }
+    return diff == 0;
+}
+
 KasseRouteResult routeKasse(const WebRequest& req, SessionStore& store, int64_t now, bool timeSynced,
-                            const std::string& uiUrl, bool fromPico2)
+                            const std::string& uiUrl, bool fromSchrankenIp, const std::string& apiKey)
 {
     struct Route
     {
@@ -258,7 +272,7 @@ KasseRouteResult routeKasse(const WebRequest& req, SessionStore& store, int64_t 
         {
             continue;
         }
-        if (r.changedStatus != 0 && !fromPico2)
+        if (r.changedStatus != 0 && !(fromSchrankenIp && apiKeyMatches(req.apiKey, apiKey)))
         {
             ApiResponse forbidden = error(403, "forbidden");
             return {jsonReply(forbidden.status, forbidden.body)};

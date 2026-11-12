@@ -7,6 +7,7 @@
 
 #include "format.h"
 #include "gate.h"
+#include "kasse_api.h"
 #include "lane.h"
 #include "net.h"
 #include "pins.h"
@@ -20,6 +21,9 @@
 
 #ifndef OPERATOR_PASSWORD
 #error "OPERATOR_PASSWORD missing in include/secrets.h (see include/secrets.example.h)"
+#endif
+#ifndef KASSE_API_KEY
+#error "KASSE_API_KEY missing in include/secrets.h (see include/secrets.example.h)"
 #endif
 
 namespace
@@ -57,6 +61,7 @@ private:
         {
             return {};
         }
+        http.addHeader(API_KEY_HEADER, KASSE_API_KEY);
         HttpReply reply;
         if (body != nullptr)
         {

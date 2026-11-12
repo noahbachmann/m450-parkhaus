@@ -48,8 +48,16 @@ struct KasseRouteResult
     bool changed = false; // the sessions changed: save them
 };
 
+// HTTP header with the key Pico 2 sends on every request to Pico 1 (KASSE_API_KEY in secrets.h).
+constexpr const char* API_KEY_HEADER = "X-Api-Key";
+
+// The request carries the shared key (constant-time compare). Always false if expected is empty.
+bool apiKeyMatches(const std::string& sent, const std::string& expected);
+
 // All Pico 1 routes (board and simulator): the API above (JSON body in req.body) and GET / with a link to the
-// pages on Pico 2 at uiUrl. Anything else -> 404. fromPico2 = false (another device in the WLAN): the POST routes,
-// which change sessions, answer 403 forbidden; reading (e.g. curl on /api/status for TF-29) stays open.
+// pages on Pico 2 at uiUrl. Anything else -> 404. The POST routes, which change sessions, are only for Pico 2:
+// fromSchrankenIp (sender address = SCHRANKEN_IP; the simulator has no IP check) and req.apiKey == apiKey.
+// A spoofed IP alone is not enough (TF-39). Otherwise 403 forbidden; reading (e.g. curl on /api/status for TF-29)
+// stays open.
 KasseRouteResult routeKasse(const WebRequest& req, SessionStore& store, int64_t now, bool timeSynced,
-                            const std::string& uiUrl, bool fromPico2);
+                            const std::string& uiUrl, bool fromSchrankenIp, const std::string& apiKey);

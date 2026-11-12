@@ -13,6 +13,7 @@ struct WebRequest
     std::map<std::string, std::string> args; // query string + urlencoded form fields, decoded
     std::string body;   // raw body (JSON API)
     std::string cookie; // Cookie header, e.g. "parkhaus_session=ab12"
+    std::string apiKey; // X-Api-Key header: Pico 2's key for the Pico 1 API
 
     bool hasArg(const std::string& name) const;
     std::string arg(const std::string& name) const;

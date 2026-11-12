@@ -7,8 +7,8 @@
 // Arduino WebServer <-> lib/web. Register the routes with server.onNotFound(handler) and let the handler
 // pass readRequest() to the lib router; the board main then has no route list of its own.
 
-// Method, path, all arguments (query + form), JSON body (WebServer's "plain" argument) and the Cookie header
-// (needs server.collectHeaders("Cookie")).
+// Method, path, all arguments (query + form), JSON body (WebServer's "plain" argument), the Cookie header and
+// the X-Api-Key header (each needs server.collectHeaders(...)).
 WebRequest readRequest(WebServer& server);
 
 // Sends status, headers and body, and logs "[http] POST /kamera/einfahrt -> 303 (12 ms)".

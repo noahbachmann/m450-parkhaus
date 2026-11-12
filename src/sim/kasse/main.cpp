@@ -15,6 +15,7 @@ namespace
 {
 SessionStore sessions;
 std::string uiUrl;
+std::string apiKey;
 
 void saveSessions()
 {
@@ -23,8 +24,9 @@ void saveSessions()
 
 WebResponse route(const WebRequest& req)
 {
-    // The PC clock is always set, so the simulated Kasse is always synced. No client check in the simulator.
-    KasseRouteResult r = routeKasse(req, sessions, nowUtc(), true, uiUrl, true);
+    // The PC clock is always set, so the simulated Kasse is always synced. No IP check in the simulator (Docker
+    // addresses change); writes need the key like on the board.
+    KasseRouteResult r = routeKasse(req, sessions, nowUtc(), true, uiUrl, true, apiKey);
     if (r.changed)
     {
         saveSessions();
@@ -50,6 +52,7 @@ void loadSessions()
 int main()
 {
     uiUrl = envOr("SCHRANKEN_PUBLIC_URL", "http://localhost:8082");
+    apiKey = envOr("KASSE_API_KEY", "parkhaus-sim");
     loadSessions();
     std::string host = listenHost();
     std::printf("Simulator Pico 1 «Kasse», %s, Daten in %s/\n", formatDateTime(nowUtc()).c_str(), dataDir().c_str());

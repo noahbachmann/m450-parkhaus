@@ -13,7 +13,8 @@
 // Simulated Pico 2 "Schranken": lib/schranken_app with two LocalBarriers, real HTTP calls to the Kasse at
 // KASSE_URL (default http://localhost:8081). No safety loops: «Durchfahren» and «Fahrzeug bleibt stehen» on the
 // camera page stand in for them. Pico 1 off = stop the Kasse program or container.
-// Login: user «betrieb», password OPERATOR_PASSWORD (default "parkhaus").
+// Login: user «betrieb», password OPERATOR_PASSWORD (default "parkhaus"). KASSE_API_KEY (default "parkhaus-sim")
+// must match the Kasse's.
 
 namespace
 {
@@ -22,13 +23,13 @@ constexpr int KASSE_TIMEOUT_MS = 1000;
 class HttpKasseLink : public KasseLink
 {
 public:
-    explicit HttpKasseLink(std::string url) : baseUrl(std::move(url))
+    HttpKasseLink(std::string url, std::string key) : baseUrl(std::move(url)), apiKey(std::move(key))
     {
     }
 
     HttpReply postJson(const char* path, const std::string& body) override
     {
-        HttpReply r = httpPostJson(baseUrl, path, body, KASSE_TIMEOUT_MS);
+        HttpReply r = httpPostJson(baseUrl, path, body, KASSE_TIMEOUT_MS, apiKey);
         std::printf("[kasse] POST %s %s -> %d %s\n", path, body.c_str(), r.status,
                     r.status > 0 ? r.body.c_str() : "(keine Antwort)");
         return r;
@@ -36,11 +37,12 @@ public:
 
     HttpReply getJson(const std::string& pathAndQuery) override
     {
-        return httpGetJson(baseUrl, pathAndQuery, KASSE_TIMEOUT_MS);
+        return httpGetJson(baseUrl, pathAndQuery, KASSE_TIMEOUT_MS, apiKey);
     }
 
 private:
     std::string baseUrl;
+    std::string apiKey;
 };
 
 class SimPlatform : public AppPlatform
@@ -102,7 +104,7 @@ void tick()
 int main()
 {
     std::string kasseUrl = envOr("KASSE_URL", "http://localhost:8081");
-    HttpKasseLink kasse(kasseUrl);
+    HttpKasseLink kasse(kasseUrl, envOr("KASSE_API_KEY", "parkhaus-sim"));
     SimPlatform platform;
     SchrankenApp schranken(kasse, entryLane.barrier, exitLane.barrier, platform,
                            envOr("OPERATOR_PASSWORD", "parkhaus"));

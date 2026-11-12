@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 
+#include "kasse_api.h"
+
 WebRequest readRequest(WebServer& server)
 {
     WebRequest req;
@@ -13,6 +15,7 @@ WebRequest readRequest(WebServer& server)
     }
     req.body = server.arg("plain").c_str();
     req.cookie = server.header("Cookie").c_str();
+    req.apiKey = server.header(API_KEY_HEADER).c_str();
     return req;
 }
 

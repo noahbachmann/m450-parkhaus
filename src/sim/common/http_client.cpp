@@ -76,7 +76,8 @@ namespace
 namespace
 {
 // body == nullptr: GET, otherwise POST with JSON.
-HttpReply httpRequest(const std::string& baseUrl, const std::string& path, const std::string* body, int timeoutMs)
+HttpReply httpRequest(const std::string& baseUrl, const std::string& path, const std::string* body, int timeoutMs,
+                      const std::string& apiKey)
 {
     using Clock = std::chrono::steady_clock;
     Clock::time_point deadline = Clock::now() + std::chrono::milliseconds(timeoutMs);
@@ -113,6 +114,10 @@ HttpReply httpRequest(const std::string& baseUrl, const std::string& path, const
 
     std::string request = (body != nullptr ? "POST " : "GET ") + path + " HTTP/1.0\r\nHost: " + host +
                           "\r\nConnection: close\r\n";
+    if (!apiKey.empty())
+    {
+        request += "X-Api-Key: " + apiKey + "\r\n";
+    }
     if (body != nullptr)
     {
         request += "Content-Type: application/json\r\nContent-Length: " + std::to_string(body->size()) + "\r\n\r\n" +
@@ -170,12 +175,13 @@ HttpReply httpRequest(const std::string& baseUrl, const std::string& path, const
 }
 }
 
-HttpReply httpPostJson(const std::string& baseUrl, const std::string& path, const std::string& body, int timeoutMs)
+HttpReply httpPostJson(const std::string& baseUrl, const std::string& path, const std::string& body, int timeoutMs,
+                       const std::string& apiKey)
 {
-    return httpRequest(baseUrl, path, &body, timeoutMs);
+    return httpRequest(baseUrl, path, &body, timeoutMs, apiKey);
 }
 
-HttpReply httpGetJson(const std::string& baseUrl, const std::string& path, int timeoutMs)
+HttpReply httpGetJson(const std::string& baseUrl, const std::string& path, int timeoutMs, const std::string& apiKey)
 {
-    return httpRequest(baseUrl, path, nullptr, timeoutMs);
+    return httpRequest(baseUrl, path, nullptr, timeoutMs, apiKey);
 }

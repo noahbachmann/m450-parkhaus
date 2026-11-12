@@ -7,6 +7,9 @@
 // Blocking HTTP/1.0 POST with Content-Type application/json, for the simulated Pico 2.
 // baseUrl like "http://kasse:8081". Whole request incl. connect is bounded by timeoutMs.
 // Any failure (bad URL, DNS, refused, timeout, garbage) -> status 0, like an unreachable Pico 1.
-HttpReply httpPostJson(const std::string& baseUrl, const std::string& path, const std::string& body, int timeoutMs);
+// apiKey: sent as X-Api-Key if not empty.
+HttpReply httpPostJson(const std::string& baseUrl, const std::string& path, const std::string& body, int timeoutMs,
+                       const std::string& apiKey = "");
 // Same as GET, e.g. path "/api/status?kz=LU123456".
-HttpReply httpGetJson(const std::string& baseUrl, const std::string& path, int timeoutMs);
+HttpReply httpGetJson(const std::string& baseUrl, const std::string& path, int timeoutMs,
+                      const std::string& apiKey = "");

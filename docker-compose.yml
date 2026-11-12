@@ -6,6 +6,9 @@ services:
     image: parkhaus-sim
     command: sim_kasse
     init: true
+    environment:
+      # shared key Pico 2 -> Pico 1 (X-Api-Key); same value in both services
+      KASSE_API_KEY: ${KASSE_API_KEY:-parkhaus-sim}
     ports:
       - "127.0.0.1:8081:8081"
     volumes:
@@ -19,6 +22,7 @@ services:
       KASSE_URL: http://kasse:8081
       # login «betrieb»; credentials overview: README.md, "Zugangsdaten für Entwicklung und Test"
       OPERATOR_PASSWORD: ${OPERATOR_PASSWORD:-parkhaus}
+      KASSE_API_KEY: ${KASSE_API_KEY:-parkhaus-sim}
     ports:
       - "127.0.0.1:8082:8082"
     volumes:

@@ -107,6 +107,10 @@ namespace
                 {
                     req.cookie = value;
                 }
+                else if (name == "x-api-key")
+                {
+                    req.apiKey = value;
+                }
             }
             pos = end == std::string::npos ? head.size() : end + 2;
         }

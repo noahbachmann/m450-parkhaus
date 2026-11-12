@@ -16,6 +16,7 @@ namespace fixtures
     constexpr int64_t NOW = 1760530000; // 15.10.2025 14:06:40 Zurich (CEST)
     constexpr int64_t MIN = 60;
     constexpr int64_t HOUR = 3600;
+    constexpr const char* API_KEY = "test-api-key"; // shared key Pico 2 -> Pico 1
 
     // Test plates, test-concept.md 11.2.1 (as typed by the tester).
     constexpr const char* KZ_01 = "LU 123456"; // registered, Test Kunde A
@@ -77,7 +78,9 @@ namespace fixtures
             {
                 return {};
             }
-            WebResponse r = routeKasse(req, store, now, synced, "http://pico2", true).response;
+            WebRequest withKey = req;
+            withKey.apiKey = API_KEY;
+            WebResponse r = routeKasse(withKey, store, now, synced, "http://pico2", true, API_KEY).response;
             return {r.status, r.body};
         }
     };

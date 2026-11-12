@@ -14,3 +14,7 @@
 
 // Password of the operator view /betrieb on Pico 2 (user «betrieb»)
 #define OPERATOR_PASSWORD "parkhaus"
+
+// Shared key: Pico 2 sends it in X-Api-Key, Pico 1 accepts writes only with it (and only from SCHRANKEN_IP).
+// Same value on both Picos; use a long random string, e.g. openssl rand -hex 16.
+#define KASSE_API_KEY "change-me-to-a-long-random-string"
