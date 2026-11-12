@@ -36,6 +36,6 @@ struct LaneView
 };
 
 // Lanes on top, below the sessions from Pico 1 (active first) as a testing aid. The plate fields suggest
-// registered plates and plates in the car park.
+// registered plates and plates in the car park. The entry time field (backdating) only for Role::Admin.
 std::string renderCameraPage(const LaneView& entry, const LaneView& exit, const KasseSnapshot& kasse,
                              const RegistrationList& registrations, Role role);

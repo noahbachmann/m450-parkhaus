@@ -23,7 +23,9 @@ namespace
                 "<button type=\"submit\">Fahrzeug wendet</button></form> ";
     }
 
-    void appendLane(std::string& html, const char* title, const char* action, bool withEntryTime, const LaneView& lane)
+    // isEntry: the entry lane; entryTime: offer the backdating field «Einfahrtszeit» (operator only, M-03).
+    void appendLane(std::string& html, const char* title, const char* action, bool isEntry, bool entryTime,
+                    const LaneView& lane)
     {
         html += "<div class=\"card\"><h2>";
         html += title;
@@ -45,13 +47,13 @@ namespace
         html += action;
         html += "\"><p><label>Kennzeichen <input name=\"kz\" placeholder=\"LU 123456\" autocomplete=\"off\" "
                 "list=\"plates\"></label></p>";
-        if (withEntryTime)
+        if (entryTime)
         {
             html += "<p><label>Einfahrtszeit (leer = jetzt) <input type=\"datetime-local\" name=\"entry\" step=\"1\">"
                     "</label></p>";
         }
         html += "<button type=\"submit\">Erfassen</button></form>";
-        const char* laneName = withEntryTime ? "entry" : "exit";
+        const char* laneName = isEntry ? "entry" : "exit";
         if (lane.canPass)
         {
             html += "<form method=\"post\" action=\"/kamera/durchfahren\" class=\"inline\"><input type=\"hidden\" "
@@ -69,7 +71,7 @@ namespace
                                   : "\"><input type=\"hidden\" name=\"held\" value=\"1\"><button type=\"submit\">"
                                     "Fahrzeug bleibt stehen</button></form> ";
         }
-        if (!withEntryTime)
+        if (!isEntry)
         {
             appendExitTerminal(html, lane);
         }
@@ -231,8 +233,8 @@ std::string renderCameraPage(const LaneView& entry, const LaneView& exit, const 
     appendPageStart(html, "Kamerasimulation", role, "Kamerasimulation");
     appendPlateSuggestions(html, kasse, registrations);
     html += "<div class=\"lanes\">";
-    appendLane(html, "Einfahrt", "/kamera/einfahrt", true, entry);
-    appendLane(html, "Ausfahrt", "/kamera/ausfahrt", false, exit);
+    appendLane(html, "Einfahrt", "/kamera/einfahrt", true, role == Role::Admin, entry);
+    appendLane(html, "Ausfahrt", "/kamera/ausfahrt", false, false, exit);
     html += "</div><p class=\"muted\"><a href=\"/kamera\">Aktualisieren</a> – die Schranke schliesst, sobald das "
             "Fahrzeug durchgefahren ist («Durchfahren»), frühestens " +
             std::to_string(BARRIER_MIN_OPEN_MS / 1000) + " s nach dem Öffnen. «Fahrzeug bleibt stehen» "

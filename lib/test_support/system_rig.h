@@ -48,13 +48,7 @@ namespace fixtures
         WebResponse request(const char* method, const std::string& path,
                             const std::map<std::string, std::string>& args = {})
         {
-            WebRequest req;
-            req.method = method;
-            req.path = path;
-            req.args = args;
-            req.cookie = cookie;
-            kasse.now = now;
-            return pico2->handle(req, now);
+            return requestAs(cookie, method, path, args);
         }
 
         // GET, or POST and follow the redirect: the page the browser shows afterwards.
@@ -86,16 +80,24 @@ namespace fixtures
         }
 
         // Camera simulation; returns the lane's terminal text.
-        std::string entry(const std::string& kz, const std::string& entryTime = "")
+        std::string entry(const std::string& kz)
         {
-            request("POST", "/kamera/einfahrt", {{"kz", kz}, {"entry", entryTime}});
+            request("POST", "/kamera/einfahrt", {{"kz", kz}});
             return terminalText(GateLane::Entry);
         }
 
-        // Entry backdated by seconds, typed into the form like a tester would (to the second).
+        // Entry backdated by seconds, typed into the form like a tester would (to the second). Backdating is for the
+        // operator only (Testkonzept Kap. 3): sent from a second, logged-in browser, the tester's own login state
+        // stays as it is.
         std::string entryAgo(const std::string& kz, int64_t seconds)
         {
-            return entry(kz, formatDateTime(now - seconds));
+            if (operatorCookie.empty())
+            {
+                WebResponse r = requestAs("", "POST", "/login", {{"user", "betrieb"}, {"password", "parkhaus"}});
+                operatorCookie = r.setCookie.substr(0, r.setCookie.find(';'));
+            }
+            requestAs(operatorCookie, "POST", "/kamera/einfahrt", {{"kz", kz}, {"entry", formatDateTime(now - seconds)}});
+            return terminalText(GateLane::Entry);
         }
 
         std::string exit(const std::string& kz)
@@ -215,9 +217,22 @@ namespace fixtures
             pico2.reset(new SchrankenApp(kasse, entryBarrier, exitBarrier, platform, "parkhaus"));
             pico2->begin();
             cookie.clear();
+            operatorCookie.clear();
         }
 
     private:
+        WebResponse requestAs(const std::string& withCookie, const char* method, const std::string& path,
+                              const std::map<std::string, std::string>& args)
+        {
+            WebRequest req;
+            req.method = method;
+            req.path = path;
+            req.args = args;
+            req.cookie = withCookie;
+            kasse.now = now;
+            return pico2->handle(req, now);
+        }
+
         void step(uint32_t ms)
         {
             nowMs += ms;
@@ -226,5 +241,6 @@ namespace fixtures
         }
 
         std::unique_ptr<SchrankenApp> pico2;
+        std::string operatorCookie; // for entryAgo
     };
 }

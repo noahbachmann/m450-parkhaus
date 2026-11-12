@@ -96,7 +96,8 @@ void test_camera_page()
     std::string html = camera(entry, exit);
     TEST_ASSERT_TRUE(contains(html, "action=\"/kamera/einfahrt\""));
     TEST_ASSERT_TRUE(contains(html, "action=\"/kamera/ausfahrt\""));
-    TEST_ASSERT_TRUE(contains(html, "name=\"entry\""));
+    TEST_ASSERT_FALSE(contains(html, "name=\"entry\"")); // backdating only for the operator (M-03)
+    TEST_ASSERT_TRUE(contains(camera(entry, exit, Role::Admin), "name=\"entry\""));
     TEST_ASSERT_TRUE(contains(html, "LU123456 – Willkommen, Einfahrt frei"));
     TEST_ASSERT_TRUE(contains(html, "Gebühr CHF 6.00 nicht bezahlt"));
     TEST_ASSERT_TRUE(contains(html, "Schranke: <strong>offen</strong>"));

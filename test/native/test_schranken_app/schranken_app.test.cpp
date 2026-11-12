@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "format.h"
 #include "kasse_api.h"
 #include "schranken_app.h"
 #include "test_fixtures.h"
@@ -272,6 +273,21 @@ void test_tf21_automat_is_public()
     TEST_ASSERT_TRUE(SessionStatus::Paid == rig.kasse.store.findActive("AG1")->status);
 }
 
+// TF-40 / M-03: without login there is no entry time field and a sent one is ignored: the entry counts from the
+// capture. The operator can still backdate (Testkonzept Kap. 3).
+void test_tf40_entry_time_only_for_operator()
+{
+    Rig rig;
+    TEST_ASSERT_FALSE(contains(rig.get("/kamera").body, "name=\"entry\""));
+    rig.post("/kamera/einfahrt", {{"kz", "ZH 98765"}, {"entry", formatDateTime(NOW - 80 * MIN)}});
+    TEST_ASSERT_EQUAL_INT64(NOW, rig.kasse.store.findActive("ZH98765")->entry);
+
+    rig.login();
+    TEST_ASSERT_TRUE(contains(rig.get("/kamera").body, "name=\"entry\""));
+    rig.post("/kamera/einfahrt", {{"kz", "LU 123456"}, {"entry", formatDateTime(NOW - 80 * MIN)}});
+    TEST_ASSERT_EQUAL_INT64(NOW - 80 * MIN, rig.kasse.store.findActive("LU123456")->entry);
+}
+
 void test_entry_opens_and_terminal_shows_plate()
 {
     Rig rig;
@@ -432,6 +448,7 @@ int main()
     RUN_TEST(test_only_the_last_eight_notices_are_kept);
     RUN_TEST(test_kasse_pay_redirect_keeps_valid_plate);
     RUN_TEST(test_tf21_automat_is_public);
+    RUN_TEST(test_tf40_entry_time_only_for_operator);
     RUN_TEST(test_entry_opens_and_terminal_shows_plate);
     RUN_TEST(test_drive_through_uses_the_barrier_answer);
     RUN_TEST(test_loop_hold_only_while_barrier_up);

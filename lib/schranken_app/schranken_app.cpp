@@ -168,7 +168,9 @@ WebResponse SchrankenApp::camera(const WebRequest&, const Ctx& ctx)
 
 WebResponse SchrankenApp::entryGate(const WebRequest& req, const Ctx& ctx)
 {
-    GateResult r = entryRequest(registrationList, req.arg("kz"), req.arg("entry"), kasse);
+    // Backdating is a test function for the operator; otherwise the entry time is always the time of capture.
+    std::string entryTime = ctx.role == Role::Admin ? req.arg("entry") : "";
+    GateResult r = entryRequest(registrationList, req.arg("kz"), entryTime, kasse);
     recordGate(entryLane.terminal, r);
     show(entryLane, r, ctx.now);
     return redirect("/kamera");
