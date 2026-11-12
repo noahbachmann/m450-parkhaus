@@ -88,6 +88,9 @@ void netUpdate(unsigned long nowMs)
         wasConnected = connected;
         if (connected)
         {
+            // Power saving lets the radio sleep between beacons: requests to the other Pico were then delayed or
+            // lost now and then (M-05).
+            WiFi.noLowPowerMode();
             Serial.print("WLAN connected, RSSI ");
             Serial.print(WiFi.RSSI());
             Serial.println(" dBm");

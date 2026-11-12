@@ -30,8 +30,11 @@ namespace
 {
 constexpr unsigned long REPORT_INTERVAL_MS = 30000;
 constexpr uint16_t KASSE_TIMEOUT_MS = 1000;
+constexpr int KASSE_CONNECT_ATTEMPTS = 3;
 
-// Calls Pico 1 over HTTP. Any transport error is reported as status <= 0 (= unreachable).
+// Calls Pico 1 over HTTP. Any transport error is reported as status <= 0 (= unreachable). A connection that could
+// not be opened is retried (up to KASSE_CONNECT_ATTEMPTS within KASSE_TIMEOUT_MS): nothing was sent yet, so a retry
+// cannot book twice. One connection per request ("Connection: close"), none is left half open on Pico 1.
 class HttpKasseLink : public KasseLink
 {
 public:
@@ -53,10 +56,27 @@ private:
         {
             return {};
         }
+        String url = String("http://") + IPAddress(KASSE_IP).toString() + path;
+        unsigned long startMs = millis();
+        HttpReply reply;
+        for (int attempt = 1; attempt <= KASSE_CONNECT_ATTEMPTS; ++attempt)
+        {
+            reply = attemptOnce(url, body);
+            if (reply.status != HTTPC_ERROR_CONNECTION_FAILED || millis() - startMs >= KASSE_TIMEOUT_MS)
+            {
+                break;
+            }
+            Serial.printf("[kasse] %s: connection failed (attempt %d)\n", path, attempt);
+        }
+        return reply;
+    }
+
+    HttpReply attemptOnce(const String& url, const std::string* body)
+    {
         WiFiClient client;
         HTTPClient http;
         http.setTimeout(KASSE_TIMEOUT_MS);
-        String url = String("http://") + IPAddress(KASSE_IP).toString() + path;
+        http.setReuse(false); // "Connection: close"
         if (!http.begin(client, url))
         {
             return {};
