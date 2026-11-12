@@ -184,14 +184,14 @@ void test_login_logout_and_wrong_password()
 {
     Rig rig;
     WebResponse wrong = rig.post("/login", {{"user", "betrieb"}, {"password", "falsch"}, {"next", "/kasse"}});
-    TEST_ASSERT_EQUAL_STRING("/login?next=/kasse&m=1", wrong.location.c_str());
+    TEST_ASSERT_EQUAL_STRING("/login?next=/kasse&m=00001000", wrong.location.c_str());
     TEST_ASSERT_TRUE(wrong.setCookie.empty());
     TEST_ASSERT_TRUE(contains(rig.follow(wrong), "Benutzer oder Passwort falsch"));
-    TEST_ASSERT_FALSE(contains(rig.get("/login", {{"next", "/kasse"}}).body, "falsch")); // only with ?m=1
+    TEST_ASSERT_FALSE(contains(rig.get("/login", {{"next", "/kasse"}}).body, "falsch")); // only with ?m=<id>
 
     WebResponse ok = rig.post("/login", {{"user", "betrieb"}, {"password", "geheim"}, {"next", "/registrierung"}});
     TEST_ASSERT_EQUAL_STRING("/registrierung", ok.location.c_str());
-    TEST_ASSERT_TRUE(contains(ok.setCookie, "parkhaus_session=00001000000010010000100200001003"));
+    TEST_ASSERT_TRUE(contains(ok.setCookie, "parkhaus_session=00001001000010020000100300001004"));
     rig.cookie = ok.setCookie.substr(0, ok.setCookie.find(';'));
     TEST_ASSERT_EQUAL_STRING("/registrierung", rig.get("/login", {{"next", "/registrierung"}}).location.c_str());
 
@@ -200,18 +200,50 @@ void test_login_logout_and_wrong_password()
     TEST_ASSERT_EQUAL_INT(303, rig.get("/betrieb").status); // token no longer valid
 }
 
-void test_notice_is_shown_once_per_post()
+void test_notice_belongs_to_its_post()
 {
     Rig rig;
     rig.login();
     WebResponse added = rig.post("/registrierung/add", {{"name", "Test Kunde C"}, {"kz", "NW 654321"}});
-    TEST_ASSERT_EQUAL_STRING("/registrierung?m=1", added.location.c_str());
+    TEST_ASSERT_EQUAL_STRING("/registrierung?m=00001004", added.location.c_str());
     TEST_ASSERT_TRUE(contains(rig.follow(added), "Kennzeichen registriert: NW654321"));
     TEST_ASSERT_FALSE(contains(rig.get("/registrierung").body, "Kennzeichen registriert"));
+    TEST_ASSERT_FALSE(contains(rig.get("/registrierung", {{"m", "1"}}).body, "Kennzeichen registriert"));
     WebResponse dup = rig.post("/registrierung/add", {{"name", "Test Kunde B"}, {"kz", "nw654321"}});
-    TEST_ASSERT_EQUAL_STRING("/registrierung?m=2", dup.location.c_str());
-    TEST_ASSERT_FALSE(contains(rig.get("/registrierung", {{"m", "1"}}).body, "registriert:"));
+    TEST_ASSERT_EQUAL_STRING("/registrierung?m=00001005", dup.location.c_str());
     TEST_ASSERT_TRUE(contains(rig.follow(dup), "Kennzeichen bereits registriert"));
+    std::string first = rig.follow(added); // the earlier POST keeps its own result
+    TEST_ASSERT_TRUE(contains(first, "Kennzeichen registriert: NW654321"));
+    TEST_ASSERT_FALSE(contains(first, "bereits registriert"));
+}
+
+// TF-38 / M-01: two browsers pay at the Kasse one right after the other; each sees its own confirmation.
+void test_tf38_two_browsers_each_see_their_payment()
+{
+    Rig rig;
+    rig.login();
+    rig.kasse.store.openEntry("LU123456", NOW - 30 * MIN);
+    rig.kasse.store.openEntry("ZH98765", NOW - 30 * MIN);
+    WebResponse a = rig.post("/kasse/pay", {{"kz", "LU 123456"}, {"method", "card_ok"}});
+    WebResponse b = rig.post("/kasse/pay", {{"kz", "ZH 98765"}, {"method", "card_ok"}});
+    std::string pageB = rig.follow(b);
+    std::string pageA = rig.follow(a);
+    TEST_ASSERT_TRUE(contains(pageA, "Bezahlt – CHF 2.00, Karte – Transaktion TX-000001"));
+    TEST_ASSERT_FALSE(contains(pageA, "TX-000002"));
+    TEST_ASSERT_TRUE(contains(pageB, "Bezahlt – CHF 2.00, Karte – Transaktion TX-000002"));
+    TEST_ASSERT_FALSE(contains(pageB, "TX-000001"));
+}
+
+void test_only_the_last_eight_notices_are_kept()
+{
+    Rig rig;
+    WebResponse first = rig.post("/automat/pay", {{"kz", "BE 4711"}, {"method", "twint"}});
+    TEST_ASSERT_TRUE(contains(rig.follow(first), "Kein offener Parkvorgang für BE4711"));
+    for (int i = 0; i < 8; ++i)
+    {
+        rig.post("/automat/pay", {{"kz", "SZ 555"}, {"method", "twint"}});
+    }
+    TEST_ASSERT_FALSE(contains(rig.follow(first), "BE4711"));
 }
 
 void test_kasse_pay_redirect_keeps_valid_plate()
@@ -220,10 +252,10 @@ void test_kasse_pay_redirect_keeps_valid_plate()
     rig.login();
     rig.kasse.store.openEntry("LU123456", NOW - 80 * MIN);
     WebResponse paid = rig.post("/kasse/pay", {{"kz", "lu 123456"}, {"method", "card_ok"}});
-    TEST_ASSERT_EQUAL_STRING("/kasse?kz=LU123456&m=1", paid.location.c_str());
+    TEST_ASSERT_EQUAL_STRING("/kasse?kz=LU123456&m=00001004", paid.location.c_str());
     TEST_ASSERT_TRUE(contains(rig.follow(paid), "Bezahlt – CHF 4.00, Karte"));
     WebResponse bad = rig.post("/kasse/pay", {{"kz", "L1"}, {"method", "card_ok"}});
-    TEST_ASSERT_EQUAL_STRING("/kasse?m=2", bad.location.c_str());
+    TEST_ASSERT_EQUAL_STRING("/kasse?m=00001005", bad.location.c_str());
 }
 
 void test_tf21_automat_is_public()
@@ -233,7 +265,7 @@ void test_tf21_automat_is_public()
     TEST_ASSERT_FALSE(SchrankenApp::isAdminRoute("POST", "/automat/pay"));
     rig.kasse.store.openEntry("AG1", NOW - 30 * MIN);
     WebResponse partial = rig.post("/automat/pay", {{"kz", "ag 1"}, {"method", "cash"}, {"amount", "1"}});
-    TEST_ASSERT_EQUAL_STRING("/automat?kz=AG1&m=1", partial.location.c_str());
+    TEST_ASSERT_EQUAL_STRING("/automat?kz=AG1&m=00001000", partial.location.c_str());
     TEST_ASSERT_TRUE(contains(rig.follow(partial), "Restbetrag CHF 1.00 – unbezahlt"));
     WebResponse paid = rig.post("/automat/pay", {{"kz", "AG1"}, {"method", "cash"}, {"amount", "1.00"}});
     TEST_ASSERT_TRUE(contains(rig.follow(paid), "Rückgeld CHF 0.00"));
@@ -395,7 +427,9 @@ int main()
     RUN_TEST(test_admin_routes_need_login);
     RUN_TEST(test_login_target_only_admin_pages);
     RUN_TEST(test_login_logout_and_wrong_password);
-    RUN_TEST(test_notice_is_shown_once_per_post);
+    RUN_TEST(test_notice_belongs_to_its_post);
+    RUN_TEST(test_tf38_two_browsers_each_see_their_payment);
+    RUN_TEST(test_only_the_last_eight_notices_are_kept);
     RUN_TEST(test_kasse_pay_redirect_keeps_valid_plate);
     RUN_TEST(test_tf21_automat_is_public);
     RUN_TEST(test_entry_opens_and_terminal_shows_plate);

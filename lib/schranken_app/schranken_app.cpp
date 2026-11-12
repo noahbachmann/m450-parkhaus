@@ -408,14 +408,29 @@ OperatorLane SchrankenApp::operatorLane(Lane& l)
 
 Notice SchrankenApp::pendingNotice(const WebRequest& req) const
 {
-    return req.arg("m") == std::to_string(noticeId) ? lastNotice : Notice{};
+    std::string id = req.arg("m");
+    for (const StoredNotice& stored : notices)
+    {
+        if (!id.empty() && stored.id == id)
+        {
+            return stored.notice;
+        }
+    }
+    return {};
 }
 
 WebResponse SchrankenApp::redirectWithNotice(const std::string& path, const Notice& notice, const std::string& query)
 {
-    lastNotice = notice;
-    noticeId++;
-    return redirect(path + "?" + query + "m=" + std::to_string(noticeId));
+    static const char HEX[] = "0123456789abcdef";
+    uint32_t word = platform.random32();
+    std::string id;
+    for (int shift = 28; shift >= 0; shift -= 4)
+    {
+        id += HEX[(word >> shift) & 0xF];
+    }
+    notices[nextNoticeSlot] = {id, notice};
+    nextNoticeSlot = (nextNoticeSlot + 1) % NOTICE_SLOTS;
+    return redirect(path + "?" + query + "m=" + id);
 }
 
 WebResponse SchrankenApp::payAndShow(const std::string& page, const WebRequest& req)

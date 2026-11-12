@@ -142,7 +142,14 @@ private:
     RegistrationList registrationList;
     EventLog eventLog;
     LoginSessions logins;
-    // Result of the last POST, shown once after the redirect (?m=<noticeId>).
-    uint32_t noticeId = 0;
-    Notice lastNotice;
+    // Results of the last POSTs, each shown after its own redirect (?m=<id>), so a second browser posting in
+    // between does not replace the first one's confirmation. Random ids: one browser can't guess another's.
+    static constexpr size_t NOTICE_SLOTS = 8;
+    struct StoredNotice
+    {
+        std::string id;
+        Notice notice;
+    };
+    StoredNotice notices[NOTICE_SLOTS];
+    size_t nextNoticeSlot = 0;
 };
