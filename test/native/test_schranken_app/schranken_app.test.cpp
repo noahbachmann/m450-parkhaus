@@ -229,22 +229,24 @@ void test_tf38_two_browsers_each_see_their_payment()
     WebResponse b = rig.post("/kasse/pay", {{"kz", "ZH 98765"}, {"method", "card_ok"}});
     std::string pageB = rig.follow(b);
     std::string pageA = rig.follow(a);
-    TEST_ASSERT_TRUE(contains(pageA, "Bezahlt – CHF 2.00, Karte – Transaktion TX-000001"));
-    TEST_ASSERT_FALSE(contains(pageA, "TX-000002"));
-    TEST_ASSERT_TRUE(contains(pageB, "Bezahlt – CHF 2.00, Karte – Transaktion TX-000002"));
-    TEST_ASSERT_FALSE(contains(pageB, "TX-000001"));
+    // The session list on the Kasse page shows both TX numbers; the notice shows only the browser's own payment.
+    TEST_ASSERT_TRUE(contains(pageA, "<p class=\"notice ok\">Bezahlt – CHF 2.00, Karte – Transaktion TX-000001</p>"));
+    TEST_ASSERT_FALSE(contains(pageA, "Transaktion TX-000002"));
+    TEST_ASSERT_TRUE(contains(pageB, "<p class=\"notice ok\">Bezahlt – CHF 2.00, Karte – Transaktion TX-000002</p>"));
+    TEST_ASSERT_FALSE(contains(pageB, "Transaktion TX-000001"));
 }
 
 void test_only_the_last_eight_notices_are_kept()
 {
     Rig rig;
-    WebResponse first = rig.post("/automat/pay", {{"kz", "BE 4711"}, {"method", "twint"}});
-    TEST_ASSERT_TRUE(contains(rig.follow(first), "Kein offener Parkvorgang für BE4711"));
+    // A text only the notice shows (the Automat search for the plate in the redirect has its own messages).
+    WebResponse first = rig.post("/automat/pay", {{"kz", "SZ 555"}, {"method", ""}});
+    TEST_ASSERT_TRUE(contains(rig.follow(first), "Bitte Zahlungsmittel wählen"));
     for (int i = 0; i < 8; ++i)
     {
-        rig.post("/automat/pay", {{"kz", "SZ 555"}, {"method", "twint"}});
+        rig.post("/automat/pay", {{"kz", "BE 4711"}, {"method", "twint"}});
     }
-    TEST_ASSERT_FALSE(contains(rig.follow(first), "BE4711"));
+    TEST_ASSERT_FALSE(contains(rig.follow(first), "Bitte Zahlungsmittel wählen"));
 }
 
 void test_kasse_pay_redirect_keeps_valid_plate()
