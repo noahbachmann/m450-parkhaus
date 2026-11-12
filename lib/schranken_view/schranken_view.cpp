@@ -13,9 +13,12 @@ namespace
     {
         if (!lane.payPlate.empty())
         {
-            html += "<form method=\"post\" action=\"/kamera/bezahlen\" class=\"methods\"><p><strong>Gebühr " +
-                    htmlEscape(lane.payFee) + " für " + htmlEscape(lane.payPlate) +
-                    " – hier bezahlen</strong></p>";
+            std::string due = lane.payRest.empty()
+                                  ? "Gebühr " + lane.payFee + " für " + lane.payPlate
+                                  : "Restbetrag " + lane.payRest + " für " + lane.payPlate + " (Gebühr " +
+                                        lane.payFee + ")";
+            html += "<form method=\"post\" action=\"/kamera/bezahlen\" class=\"methods\"><p><strong>" +
+                    htmlEscape(due) + " – hier bezahlen</strong></p>";
             appendPaymentMethods(html, false); // no cash at the barrier
             html += "<button type=\"submit\">Bezahlen</button></form>";
         }

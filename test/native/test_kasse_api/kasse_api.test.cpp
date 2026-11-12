@@ -196,6 +196,16 @@ void test_pay_card_after_partial_cash_reports_cash_part()
                    handlePay(store, "{\"kz\":\"ZH98765\",\"method\":\"card_ok\"}", NOW, true));
 }
 
+// M-08: the unpaid exit names the cash already inserted, so the exit terminal can ask for the rest only.
+void test_exit_unpaid_after_partial_cash_names_cash()
+{
+    SessionStore store = testData();
+    assertResponse(402, "{\"error\":\"unpaid\",\"fee\":600}", handleExit(store, "{\"kz\":\"ZH98765\"}", NOW, true));
+    handlePay(store, "{\"kz\":\"ZH98765\",\"method\":\"cash\",\"amount\":250}", NOW, true);
+    assertResponse(402, "{\"error\":\"unpaid\",\"fee\":600,\"cash\":250}",
+                   handleExit(store, "{\"kz\":\"ZH98765\"}", NOW, true));
+}
+
 void test_status_with_clock_before_entry()
 {
     SessionStore store = testData();
@@ -345,6 +355,7 @@ int main()
     RUN_TEST(test_tf28_pay_at_exit_terminal);
     RUN_TEST(test_tf21_pay_cash_at_kasse);
     RUN_TEST(test_pay_card_after_partial_cash_reports_cash_part);
+    RUN_TEST(test_exit_unpaid_after_partial_cash_names_cash);
     RUN_TEST(test_status_with_clock_before_entry);
     RUN_TEST(test_pay_cash_invalid_amount);
     RUN_TEST(test_sessions_list);

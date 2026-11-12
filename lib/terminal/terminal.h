@@ -17,6 +17,7 @@ struct LaneTerminal
     std::string lastPlate;  // last plate typed at this lane
     std::string payPlate;   // exit: plate with an unpaid fee, payment offered; empty = none
     uint32_t payFeeRappen = 0;
+    uint32_t payCashRappen = 0; // of payFeeRappen already paid in cash at the Automat
     int declines = 0;       // declined terminal payments for payPlate in a row
     bool callPending = false; // call button pressed or payment alert, not yet handled by the operator
     int64_t callTime = 0;

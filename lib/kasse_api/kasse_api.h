@@ -23,7 +23,7 @@ ApiResponse handleStatus(const SessionStore& store, const std::string& kzParam, 
 ApiResponse handleEntry(SessionStore& store, const std::string& body, int64_t now, bool timeSynced);
 
 // POST /api/exit, body {"kz":"..."}; {"kz":"...","override":true} = operator remote opening (closes unpaid
-// sessions as closed_unpaid)
+// sessions as closed_unpaid). Unpaid: 402 {"error":"unpaid","fee"} + "cash" if cash was inserted before.
 ApiResponse handleExit(SessionStore& store, const std::string& body, int64_t now, bool timeSynced);
 
 // POST /api/pay, body {"kz":"...","method":"card_ok"|"card_declined"|"twint"} (exit terminal, Kasse) or

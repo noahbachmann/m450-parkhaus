@@ -135,9 +135,16 @@ ApiResponse handleExit(SessionStore& store, const std::string& body, int64_t now
         doc["fee"] = r.feeRappen;
         return respond(200, doc);
     case ExitResult::Kind::Unpaid:
+    {
         doc["error"] = "unpaid";
         doc["fee"] = r.feeRappen;
+        const ParkingSession* s = store.findActive(plate);
+        if (s != nullptr && s->cashPaidRappen > 0)
+        {
+            doc["cash"] = s->cashPaidRappen; // partial cash at the Automat: only the rest is due
+        }
         return respond(402, doc);
+    }
     case ExitResult::Kind::NoSession:
         return error(404, "no_session");
     case ExitResult::Kind::TimeError:

@@ -30,6 +30,7 @@ struct LaneView
     std::string fault;                   // loop fault message; empty if none
     std::string payPlate;                // exit: plate with an unpaid fee -> payment form; empty = none
     std::string payFee;                  // "CHF 6.00"
+    std::string payRest;                 // "CHF 1.50" after partial cash at the Automat; empty = whole fee due
     bool canPass = false;                // barrier open, loop free: «Durchfahren» offered
     bool canHold = false;                // barrier up: «Fahrzeug bleibt stehen» offered
     bool loopHeld = false;               // «Fahrzeug bleibt stehen» pressed: only «Fahrzeug fährt weiter» offered

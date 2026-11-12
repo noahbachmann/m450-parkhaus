@@ -402,6 +402,9 @@ void SchrankenApp::refresh(Lane& l, int64_t now)
     l.view.fault = l.barrier.loopFault() ? loopFaultMessage(gateLaneLabel(l.id)) : "";
     l.view.payPlate = l.terminal.payPlate;
     l.view.payFee = l.terminal.payPlate.empty() ? "" : formatChf(l.terminal.payFeeRappen);
+    l.view.payRest = l.terminal.payPlate.empty() || l.terminal.payCashRappen == 0
+                         ? ""
+                         : formatChf(l.terminal.payFeeRappen - l.terminal.payCashRappen);
 }
 
 bool SchrankenApp::laneFree(Lane& l, const WebRequest& req, int64_t now)

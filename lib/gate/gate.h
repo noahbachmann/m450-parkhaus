@@ -33,6 +33,7 @@ struct GateResult
     bool unreachable = false; // Pico 1 didn't answer (logged as a fault)
     bool unpaid = false;      // exit refused because of an unpaid fee (payment offered at the terminal)
     uint32_t feeRappen = 0;   // the unpaid fee
+    uint32_t cashRappen = 0;  // of it already paid in cash at the Automat (the rest is due)
 };
 
 // "error" field of a Pico 1 error reply ({"error":"<code>"}); empty if there is none.
@@ -43,7 +44,8 @@ std::string errorCode(const HttpReply& reply);
 GateResult entryRequest(const RegistrationList& registrations, const std::string& rawPlate,
                         const std::string& entryTimeInput, KasseLink& kasse);
 
-// Exit: valid plate -> POST /api/exit; opens on 200 closed / closed_free only.
+// Exit: valid plate -> POST /api/exit; opens on 200 closed / closed_free only. Unpaid: «Gebühr CHF 6.00 nicht
+// bezahlt – …», after partial cash «Restbetrag CHF 1.50 von CHF 4.00 nicht bezahlt – …».
 GateResult exitRequest(const std::string& rawPlate, KasseLink& kasse);
 
 // A plate captured while the lane's barrier is still open or closing: one opening per vehicle, so it is not

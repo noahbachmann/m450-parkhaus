@@ -1,6 +1,7 @@
 #include <unity.h>
 
 #include "kasse_api.h"
+#include "payment.h"
 #include "session.h"
 #include "terminal.h"
 #include "test_fixtures.h"
@@ -56,6 +57,24 @@ void test_tf28_declined_then_twint_opens()
     TEST_ASSERT_EQUAL(SessionStatus::Closed, kasse.store.findLatest("LU123456")->status);
     TEST_ASSERT_EQUAL_STRING("", t.payPlate.c_str());
     TEST_ASSERT_EQUAL_UINT(0, log.all().size());
+}
+
+// TF-44 / M-08: after partial cash at the Automat the terminal asks for the rest and the confirmation splits it.
+void test_tf44_pay_rest_after_partial_cash()
+{
+    LocalKasse kasse;
+    kasse.store.openEntry("ZH98765", NOW - 90 * MIN);
+    pay(kasse.store, "ZH98765", PayMethod::Cash, NOW, 250);
+    EventLog log;
+    LaneTerminal t = exitTerminal();
+    recordGate(t, exitRequest("ZH98765", kasse));
+    TEST_ASSERT_EQUAL_UINT32(400, t.payFeeRappen);
+    TEST_ASSERT_EQUAL_UINT32(250, t.payCashRappen);
+    GateResult twint = payAtTerminal(t, "twint", NOW, kasse, log);
+    TEST_ASSERT_TRUE(twint.open);
+    TEST_ASSERT_EQUAL_STRING("Bezahlt – CHF 4.00, TWINT CHF 1.50 + Bargeld CHF 2.50 – ZH98765 – Gute Fahrt, Ausfahrt frei",
+                             twint.message.c_str());
+    TEST_ASSERT_EQUAL_UINT32(0, t.payCashRappen);
 }
 
 void test_tf28_five_declines_notify_operator()
@@ -250,6 +269,7 @@ int main()
     UNITY_BEGIN();
     RUN_TEST(test_unpaid_exit_offers_payment);
     RUN_TEST(test_tf28_declined_then_twint_opens);
+    RUN_TEST(test_tf44_pay_rest_after_partial_cash);
     RUN_TEST(test_tf28_five_declines_notify_operator);
     RUN_TEST(test_declines_reset_for_another_plate);
     RUN_TEST(test_tf27_abort_keeps_session_open);

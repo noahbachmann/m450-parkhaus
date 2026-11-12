@@ -146,6 +146,16 @@ void test_tf24_tf26_tf30_exit_unpaid_and_errors()
     TEST_ASSERT_EQUAL_STRING("Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen", unpaid.message.c_str());
     TEST_ASSERT_TRUE(unpaid.unpaid);
     TEST_ASSERT_EQUAL_UINT32(600, unpaid.feeRappen);
+    TEST_ASSERT_EQUAL_UINT32(0, unpaid.cashRappen);
+    fake.reply = {402, "{\"error\":\"unpaid\",\"fee\":400,\"cash\":250}"}; // M-08: cash at the Automat before
+    GateResult rest = exitRequest("ZH98765", fake);
+    TEST_ASSERT_EQUAL_STRING("Restbetrag CHF 1.50 von CHF 4.00 nicht bezahlt – bitte am Automaten bezahlen",
+                             rest.message.c_str());
+    TEST_ASSERT_EQUAL_UINT32(400, rest.feeRappen);
+    TEST_ASSERT_EQUAL_UINT32(250, rest.cashRappen);
+    fake.reply = {402, "{\"error\":\"unpaid\",\"fee\":400,\"cash\":400}"}; // makes no sense: whole fee
+    TEST_ASSERT_EQUAL_STRING("Gebühr CHF 4.00 nicht bezahlt – bitte am Automaten bezahlen",
+                             exitRequest("ZH98765", fake).message.c_str());
     fake.reply = {404, "{\"error\":\"no_session\"}"};
     TEST_ASSERT_EQUAL_STRING("Kein Parkvorgang gefunden – bitte Ruftaste drücken",
                              exitRequest("SZ555", fake).message.c_str());

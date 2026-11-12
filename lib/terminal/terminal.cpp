@@ -22,6 +22,7 @@ namespace
     {
         t.payPlate.clear();
         t.payFeeRappen = 0;
+        t.payCashRappen = 0;
         t.declines = 0;
     }
 
@@ -32,7 +33,8 @@ namespace
         t.callText = text;
     }
 
-    // "Bezahlt – CHF 6.00, TWINT"; empty if the reply isn't a valid payment confirmation for the plate.
+    // "Bezahlt – CHF 6.00, TWINT", after partial cash "Bezahlt – CHF 4.00, TWINT CHF 1.50 + Bargeld CHF 2.50";
+    // empty if the reply isn't a valid payment confirmation for the plate.
     std::string paidText(const HttpReply& reply, const std::string& plate)
     {
         JsonDocument doc;
@@ -44,7 +46,14 @@ namespace
         {
             return "";
         }
-        return "Bezahlt – " + formatChf(doc["amount"].as<uint32_t>()) + ", " + paymentMethodLabel(method);
+        uint32_t amount = doc["amount"].as<uint32_t>();
+        uint32_t cash = doc["cash"].is<uint32_t>() ? doc["cash"].as<uint32_t>() : 0;
+        std::string text = "Bezahlt – " + formatChf(amount) + ", " + paymentMethodLabel(method);
+        if (cash > 0 && cash < amount && method != PaymentMethod::Cash)
+        {
+            text += " " + formatChf(amount - cash) + " + Bargeld " + formatChf(cash);
+        }
+        return text;
     }
 }
 
@@ -66,6 +75,7 @@ void recordGate(LaneTerminal& t, const GateResult& result)
         }
         t.payPlate = result.plate;
         t.payFeeRappen = result.feeRappen;
+        t.payCashRappen = result.cashRappen;
         return;
     }
     clearPayment(t);

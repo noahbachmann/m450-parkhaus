@@ -306,6 +306,24 @@ void test_tf42_exit_one_vehicle_per_opening()
     TEST_ASSERT_EQUAL_STRING("Gebühr CHF 2.00 nicht bezahlt – bitte am Automaten bezahlen", sys.exit(KZ_02).c_str());
 }
 
+// TF-44 / M-08: cash at the Automat first, the rest by TWINT at the exit terminal.
+void test_tf44_exit_terminal_asks_for_the_rest_only()
+{
+    SystemRig sys;
+    sys.entryAgo(KZ_02, HOUR + 30 * MIN);
+    TEST_ASSERT_TRUE(contains(sys.automatPay(KZ_02, "cash", "2.50"), "Restbetrag CHF 1.50 – unbezahlt"));
+    TEST_ASSERT_EQUAL_STRING("Restbetrag CHF 1.50 von CHF 4.00 nicht bezahlt – bitte am Automaten bezahlen",
+                             sys.exit(KZ_02).c_str());
+    TEST_ASSERT_TRUE(contains(sys.page("/kamera"), "Restbetrag CHF 1.50 für ZH98765 (Gebühr CHF 4.00) – hier bezahlen"));
+    TEST_ASSERT_EQUAL_STRING("Bezahlt – CHF 4.00, TWINT CHF 1.50 + Bargeld CHF 2.50 – ZH98765 – Gute Fahrt, Ausfahrt frei",
+                             sys.payAtExit("twint").c_str());
+    const ParkingSession* s = sys.sessions().findLatest("ZH98765");
+    TEST_ASSERT_TRUE(SessionStatus::Closed == s->status);
+    TEST_ASSERT_EQUAL_UINT32(400, s->amountRappen);
+    TEST_ASSERT_EQUAL_UINT32(250, s->cashPaidRappen);
+    TEST_ASSERT_TRUE(PaymentMethod::Twint == s->method);
+}
+
 void test_tf32_whole_system()
 {
     SystemRig sys;
@@ -339,6 +357,7 @@ int main()
     RUN_TEST(test_tf30_kasse_off_at_exit_logged_and_paid_status_kept);
     RUN_TEST(test_tf31_remote_opening_at_exit_without_payment);
     RUN_TEST(test_tf42_exit_one_vehicle_per_opening);
+    RUN_TEST(test_tf44_exit_terminal_asks_for_the_rest_only);
     RUN_TEST(test_tf32_whole_system);
     return UNITY_END();
 }
