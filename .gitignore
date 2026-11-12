@@ -7,3 +7,4 @@
 include/secrets.h
 sim-data/
 *.pdf
+*.docx
