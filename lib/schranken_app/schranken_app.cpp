@@ -342,7 +342,7 @@ WebResponse SchrankenApp::remoteOpening(const WebRequest& req, const Ctx& ctx)
     {
         Lane& l = lane(id);
         l.barrier.requestOpen();
-        recordRemoteOpening(l.terminal, r.plate);
+        show(l, recordRemoteOpening(l.terminal, r.plate), ctx.now);
     }
     platform.log("[betrieb] " + r.notice.text);
     return redirectWithNotice("/betrieb", r.notice);

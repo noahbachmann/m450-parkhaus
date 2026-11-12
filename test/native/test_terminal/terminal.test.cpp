@@ -135,7 +135,9 @@ void test_call_button()
     TEST_ASSERT_EQUAL(EventType::CallButton, log.all()[0].type);
     TEST_ASSERT_EQUAL(GateLane::Entry, log.all()[0].lane);
     TEST_ASSERT_EQUAL_STRING("BE4711", log.all()[0].plate.c_str());
-    recordRemoteOpening(t, "BE4711");
+    GateResult opened = recordRemoteOpening(t, "BE4711");
+    TEST_ASSERT_EQUAL_STRING("BE4711 – Freigabe durch Leitstelle, Einfahrt frei", opened.message.c_str());
+    TEST_ASSERT_FALSE(opened.open); // the app opens the barrier itself
     TEST_ASSERT_EQUAL_STRING("", callLabel(t).c_str());
     TEST_ASSERT_EQUAL_STRING("BE4711", t.lastPlate.c_str());
 }

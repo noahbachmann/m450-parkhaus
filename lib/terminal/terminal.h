@@ -29,8 +29,9 @@ struct LaneTerminal
 // payment state when the barrier opens.
 void recordGate(LaneTerminal& t, const GateResult& result);
 
-// Operator opened the barrier for plate: call handled, payment offer gone.
-void recordRemoteOpening(LaneTerminal& t, const std::string& plate);
+// Operator opened the barrier for plate: call handled, payment offer gone. Returns the terminal text, e.g.
+// «ZH98765 – Freigabe durch Leitstelle, Ausfahrt frei» (the barrier is opened by the caller).
+GateResult recordRemoteOpening(LaneTerminal& t, const std::string& plate);
 
 // «Durchfahren»: the vehicle passed the open barrier (stands in for the safety loop). barrierUp = the
 // barrier accepted it (Barrier::vehiclePassed()).

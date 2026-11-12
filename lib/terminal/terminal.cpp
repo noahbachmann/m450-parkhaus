@@ -71,12 +71,15 @@ void recordGate(LaneTerminal& t, const GateResult& result)
     clearPayment(t);
 }
 
-void recordRemoteOpening(LaneTerminal& t, const std::string& plate)
+GateResult recordRemoteOpening(LaneTerminal& t, const std::string& plate)
 {
     clearPayment(t);
     t.callPending = false;
     t.passing = false;
     t.lastPlate = plate;
+    std::string text = std::string("Freigabe durch Leitstelle, ") +
+                       (t.lane == GateLane::Exit ? "Ausfahrt frei" : "Einfahrt frei");
+    return message(plate, "ok", plate.empty() ? text : plate + " – " + text);
 }
 
 GateResult driveThrough(LaneTerminal& t, bool barrierUp)

@@ -269,6 +269,11 @@ void test_tf31_remote_opening_at_exit_without_payment()
     TEST_ASSERT_TRUE(contains(sys.page("/betrieb"), "unbezahlt (CHF 6.00)"));
     sys.remoteOpen(GateLane::Exit, "ZH98765", "Kulanz");
     TEST_ASSERT_TRUE(BarrierState::Open == sys.state(GateLane::Exit));
+    // TF-43 / M-07: the exit terminal shows the release, no longer the unpaid fee
+    TEST_ASSERT_EQUAL_STRING("ZH98765 – Freigabe durch Leitstelle, Ausfahrt frei", sys.terminalText(GateLane::Exit).c_str());
+    std::string camera = sys.page("/kamera");
+    TEST_ASSERT_FALSE(contains(camera, "nicht bezahlt"));
+    TEST_ASSERT_FALSE(contains(camera, "/kamera/bezahlen"));
     const Event& e = sys.app().events().all().back();
     TEST_ASSERT_EQUAL_STRING("betrieb", e.user.c_str());
     TEST_ASSERT_TRUE(GateLane::Exit == e.lane);
