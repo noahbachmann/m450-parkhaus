@@ -35,13 +35,13 @@ std::string cookieValue(const std::string& cookieHeader, const char* name)
 
 std::string makeToken(const uint32_t random[4])
 {
-    static const char HEX[] = "0123456789abcdef";
+    static const char HEX_DIGITS[] = "0123456789abcdef";
     std::string token;
     for (int i = 0; i < 4; ++i)
     {
         for (int shift = 28; shift >= 0; shift -= 4)
         {
-            token += HEX[(random[i] >> shift) & 0xF];
+            token += HEX_DIGITS[(random[i] >> shift) & 0xF];
         }
     }
     return token;

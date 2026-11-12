@@ -445,12 +445,12 @@ Notice SchrankenApp::pendingNotice(const WebRequest& req) const
 
 WebResponse SchrankenApp::redirectWithNotice(const std::string& path, const Notice& notice, const std::string& query)
 {
-    static const char HEX[] = "0123456789abcdef";
+    static const char HEX_DIGITS[] = "0123456789abcdef";
     uint32_t word = platform.random32();
     std::string id;
     for (int shift = 28; shift >= 0; shift -= 4)
     {
-        id += HEX[(word >> shift) & 0xF];
+        id += HEX_DIGITS[(word >> shift) & 0xF];
     }
     notices[nextNoticeSlot] = {id, notice};
     nextNoticeSlot = (nextNoticeSlot + 1) % NOTICE_SLOTS;
