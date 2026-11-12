@@ -125,6 +125,8 @@ private:
     // «Kasse nicht erreichbar».
     void show(Lane& lane, const GateResult& r, int64_t now);
     void refresh(Lane& lane, int64_t now);
+    // Plate captured at the lane's camera: refused while the barrier is still open or closing (M-04).
+    bool laneFree(Lane& lane, const WebRequest& req, int64_t now);
     OperatorLane operatorLane(Lane& lane);
     Notice pendingNotice(const WebRequest& req) const;
     // query: extra arguments, e.g. "kz=LU123456&".

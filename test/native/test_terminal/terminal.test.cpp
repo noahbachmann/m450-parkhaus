@@ -190,6 +190,23 @@ void test_drive_through_then_closed_message()
     TEST_ASSERT_EQUAL_STRING("", closedAfterPass(t).message.c_str()); // once
 }
 
+// M-06: a plate typed while the barrier closes (rejected exit) does not take over the closing message.
+void test_closed_message_names_the_vehicle_that_passed()
+{
+    LaneTerminal t = exitTerminal();
+    GateResult opened;
+    opened.open = true;
+    opened.plate = "LU123456";
+    recordGate(t, opened);
+    driveThrough(t, true);
+    GateResult refused;
+    refused.plate = "ZH98765";
+    refused.unpaid = true;
+    refused.feeRappen = 200;
+    recordGate(t, refused);
+    TEST_ASSERT_EQUAL_STRING("LU123456 durchgefahren – Schranke geschlossen", closedAfterPass(t).message.c_str());
+}
+
 void test_drive_through_without_open_barrier()
 {
     LaneTerminal t = exitTerminal();
@@ -238,6 +255,7 @@ int main()
     RUN_TEST(test_pay_without_offer_or_kasse);
     RUN_TEST(test_paid_elsewhere_meanwhile_just_exits);
     RUN_TEST(test_drive_through_then_closed_message);
+    RUN_TEST(test_closed_message_names_the_vehicle_that_passed);
     RUN_TEST(test_drive_through_without_open_barrier);
     RUN_TEST(test_left_loop_counts_as_pass);
     RUN_TEST(test_new_opening_clears_pass);

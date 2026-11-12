@@ -132,6 +132,11 @@ GateResult entryRequest(const RegistrationList& registrations, const std::string
     return closed(plate, UNEXPECTED);
 }
 
+GateResult laneBusy(const std::string& rawPlate)
+{
+    return closed(normalizePlate(rawPlate), "Bitte warten, bis das vorherige Fahrzeug durchgefahren ist");
+}
+
 GateResult exitRequest(const std::string& rawPlate, KasseLink& kasse)
 {
     std::string plate = normalizePlate(rawPlate);

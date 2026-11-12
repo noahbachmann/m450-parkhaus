@@ -85,6 +85,25 @@ void test_tf05_terminal_feedback_at_entry()
     TEST_ASSERT_EQUAL_STRING("BE4711 – nicht registriert, bitte Ruftaste drücken", sys.entry(KZ_03).c_str());
 }
 
+// TF-41 / M-04: at the entry no further plate while the barrier is open or closing: one session per opening.
+void test_tf41_entry_one_vehicle_per_opening()
+{
+    SystemRig sys;
+    TEST_ASSERT_EQUAL_STRING("LU123456 – Willkommen, Einfahrt frei", sys.entry(KZ_01).c_str());
+    TEST_ASSERT_EQUAL_STRING("Bitte warten, bis das vorherige Fahrzeug durchgefahren ist", sys.entry(KZ_03).c_str());
+    TEST_ASSERT_EQUAL_STRING("Bitte warten, bis das vorherige Fahrzeug durchgefahren ist", sys.entry(KZ_02).c_str());
+    sys.driveThrough(GateLane::Entry);
+    sys.waitMs(BARRIER_MIN_OPEN_MS + 1000);
+    TEST_ASSERT_TRUE(BarrierState::Closing == sys.state(GateLane::Entry));
+    TEST_ASSERT_EQUAL_STRING("Bitte warten, bis das vorherige Fahrzeug durchgefahren ist", sys.entry(KZ_02).c_str());
+    sys.waitMs(BARRIER_CLOSE_MS);
+    TEST_ASSERT_TRUE(BarrierState::Closed == sys.state(GateLane::Entry));
+    TEST_ASSERT_TRUE(contains(sys.page("/kamera"), "LU123456 durchgefahren – Schranke geschlossen"));
+    TEST_ASSERT_EQUAL_UINT(1, sys.sessions().all().size());
+    TEST_ASSERT_EQUAL_UINT(1, sys.sessionCount("LU123456"));
+    TEST_ASSERT_TRUE(contains(sys.entry(KZ_02), "Willkommen")); // after closing: next car
+}
+
 void test_tf06_normalized_plate_matches_at_exit()
 {
     SystemRig sys;
@@ -185,6 +204,7 @@ int main()
     RUN_TEST(test_tf03_duplicate_plate_rejected);
     RUN_TEST(test_tf04_entry_opens_and_closes_after_the_car_passed);
     RUN_TEST(test_tf05_terminal_feedback_at_entry);
+    RUN_TEST(test_tf41_entry_one_vehicle_per_opening);
     RUN_TEST(test_tf06_normalized_plate_matches_at_exit);
     RUN_TEST(test_tf07_unregistered_stays_closed_no_session);
     RUN_TEST(test_tf08_ten_entry_cycles);

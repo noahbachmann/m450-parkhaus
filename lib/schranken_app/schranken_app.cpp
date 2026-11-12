@@ -168,6 +168,10 @@ WebResponse SchrankenApp::camera(const WebRequest&, const Ctx& ctx)
 
 WebResponse SchrankenApp::entryGate(const WebRequest& req, const Ctx& ctx)
 {
+    if (!laneFree(entryLane, req, ctx.now))
+    {
+        return redirect("/kamera");
+    }
     // Backdating is a test function for the operator; otherwise the entry time is always the time of capture.
     std::string entryTime = ctx.role == Role::Admin ? req.arg("entry") : "";
     GateResult r = entryRequest(registrationList, req.arg("kz"), entryTime, kasse);
@@ -178,6 +182,10 @@ WebResponse SchrankenApp::entryGate(const WebRequest& req, const Ctx& ctx)
 
 WebResponse SchrankenApp::exitGate(const WebRequest& req, const Ctx& ctx)
 {
+    if (!laneFree(exitLane, req, ctx.now))
+    {
+        return redirect("/kamera");
+    }
     GateResult r = exitRequest(req.arg("kz"), kasse);
     recordGate(exitLane.terminal, r);
     show(exitLane, r, ctx.now);
@@ -394,6 +402,17 @@ void SchrankenApp::refresh(Lane& l, int64_t now)
     l.view.fault = l.barrier.loopFault() ? loopFaultMessage(gateLaneLabel(l.id)) : "";
     l.view.payPlate = l.terminal.payPlate;
     l.view.payFee = l.terminal.payPlate.empty() ? "" : formatChf(l.terminal.payFeeRappen);
+}
+
+bool SchrankenApp::laneFree(Lane& l, const WebRequest& req, int64_t now)
+{
+    refresh(l, now); // a pass that closed since the last page view is reported before the new capture
+    if (l.barrier.state() == BarrierState::Closed)
+    {
+        return true;
+    }
+    show(l, laneBusy(req.arg("kz")), now);
+    return false;
 }
 
 OperatorLane SchrankenApp::operatorLane(Lane& l)

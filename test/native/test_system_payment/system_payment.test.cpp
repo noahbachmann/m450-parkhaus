@@ -279,6 +279,28 @@ void test_tf31_remote_opening_at_exit_without_payment()
     TEST_ASSERT_TRUE(contains(sys.page("/kasse", {{"kz", KZ_02}}), "<td>ohne Zahlung ausgefahren</td>"));
 }
 
+// TF-42 / M-04 / M-06: at the exit no further plate while the barrier is open or closing; the message after closing
+// names the car that left.
+void test_tf42_exit_one_vehicle_per_opening()
+{
+    SystemRig sys;
+    sys.entryAgo(KZ_01, 30 * MIN);
+    sys.entryAgo(KZ_02, 30 * MIN);
+    sys.automatPay(KZ_01, "twint");
+    TEST_ASSERT_EQUAL_STRING("LU123456 – Gute Fahrt, Ausfahrt frei", sys.exit(KZ_01).c_str());
+    TEST_ASSERT_EQUAL_STRING("Bitte warten, bis das vorherige Fahrzeug durchgefahren ist", sys.exit(KZ_02).c_str());
+    sys.driveThrough(GateLane::Exit);
+    sys.waitMs(BARRIER_MIN_OPEN_MS + 1000);
+    TEST_ASSERT_TRUE(BarrierState::Closing == sys.state(GateLane::Exit));
+    TEST_ASSERT_EQUAL_STRING("Bitte warten, bis das vorherige Fahrzeug durchgefahren ist", sys.exit(KZ_02).c_str());
+    sys.waitMs(BARRIER_CLOSE_MS);
+    TEST_ASSERT_TRUE(BarrierState::Closed == sys.state(GateLane::Exit));
+    TEST_ASSERT_TRUE(contains(sys.page("/kamera"), "LU123456 durchgefahren – Schranke geschlossen"));
+    TEST_ASSERT_TRUE(SessionStatus::Closed == sys.sessions().findLatest("LU123456")->status);
+    TEST_ASSERT_TRUE(SessionStatus::Open == sys.sessions().findActive("ZH98765")->status);
+    TEST_ASSERT_EQUAL_STRING("Gebühr CHF 2.00 nicht bezahlt – bitte am Automaten bezahlen", sys.exit(KZ_02).c_str());
+}
+
 void test_tf32_whole_system()
 {
     SystemRig sys;
@@ -287,7 +309,6 @@ void test_tf32_whole_system()
                               "Kennzeichen registriert"));
     sys.cookie.clear(); // the customer is not logged in
     TEST_ASSERT_TRUE(contains(sys.entryAgo(KZ_11, 2 * HOUR + 30 * MIN), "Willkommen"));
-    sys.driveThrough(GateLane::Entry);
     TEST_ASSERT_TRUE(contains(sys.automat(KZ_11), "<td>CHF 6.00</td>"));
     TEST_ASSERT_EQUAL_STRING("Gebühr CHF 6.00 nicht bezahlt – bitte am Automaten bezahlen", sys.exit(KZ_11).c_str());
     TEST_ASSERT_TRUE(contains(sys.automatPay(KZ_11, "cash", "10.00"), "Rückgeld CHF 4.00"));
@@ -312,6 +333,7 @@ int main()
     RUN_TEST(test_tf29_status_interface_for_all_states);
     RUN_TEST(test_tf30_kasse_off_at_exit_logged_and_paid_status_kept);
     RUN_TEST(test_tf31_remote_opening_at_exit_without_payment);
+    RUN_TEST(test_tf42_exit_one_vehicle_per_opening);
     RUN_TEST(test_tf32_whole_system);
     return UNITY_END();
 }

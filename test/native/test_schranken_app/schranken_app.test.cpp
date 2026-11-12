@@ -283,6 +283,7 @@ void test_tf40_entry_time_only_for_operator()
     TEST_ASSERT_EQUAL_INT64(NOW, rig.kasse.store.findActive("ZH98765")->entry);
 
     rig.login();
+    rig.entry.current = BarrierState::Closed; // ZH98765 drove through
     TEST_ASSERT_TRUE(contains(rig.get("/kamera").body, "name=\"entry\""));
     rig.post("/kamera/einfahrt", {{"kz", "LU 123456"}, {"entry", formatDateTime(NOW - 80 * MIN)}});
     TEST_ASSERT_EQUAL_INT64(NOW - 80 * MIN, rig.kasse.store.findActive("LU123456")->entry);
@@ -296,6 +297,7 @@ void test_entry_opens_and_terminal_shows_plate()
     TEST_ASSERT_EQUAL_STRING("LU123456", rig.app.terminal(GateLane::Entry).lastPlate.c_str());
     TEST_ASSERT_TRUE(contains(rig.get("/kamera").body, "LU123456 – Willkommen, Einfahrt frei"));
 
+    rig.entry.current = BarrierState::Closed; // LU123456 drove through
     rig.post("/kamera/einfahrt", {{"kz", "BE 4711"}});
     TEST_ASSERT_EQUAL_INT(1, rig.entry.opens);
     TEST_ASSERT_TRUE(contains(rig.get("/kamera").body, "BE4711 – nicht registriert, bitte Ruftaste drücken"));
@@ -310,6 +312,7 @@ void test_drive_through_uses_the_barrier_answer()
     TEST_ASSERT_EQUAL_INT(1, rig.entry.passes);
     TEST_ASSERT_TRUE(contains(rig.get("/kamera").body, "Keine offene Schranke – Fahrzeug kann nicht durchfahren"));
 
+    rig.entry.current = BarrierState::Closed;
     rig.post("/kamera/einfahrt", {{"kz", "LU123456"}});
     rig.entry.passResult = true;
     rig.post("/kamera/durchfahren", {{"lane", "entry"}});
@@ -317,6 +320,32 @@ void test_drive_through_uses_the_barrier_answer()
     rig.entry.current = BarrierState::Closed;
     TEST_ASSERT_TRUE(contains(rig.get("/kamera").body, "LU123456 durchgefahren – Schranke geschlossen"));
     TEST_ASSERT_EQUAL_INT(0, rig.exit.passes);
+}
+
+// M-04 / M-06: while the barrier is open or closing no further plate is taken; Pico 1 is not asked, the plate of
+// the vehicle under the barrier stays.
+void test_no_capture_while_barrier_up()
+{
+    for (BarrierState up : {BarrierState::Open, BarrierState::Closing})
+    {
+        Rig rig;
+        rig.post("/kamera/einfahrt", {{"kz", "LU 123456"}});
+        rig.entry.current = up;
+        rig.post("/kamera/ausfahrt", {{"kz", "ZH 98765"}}); // the other lane is not affected
+        int calls = rig.kasse.calls;
+        rig.post("/kamera/einfahrt", {{"kz", "ZH 98765"}});
+        TEST_ASSERT_EQUAL_INT(calls, rig.kasse.calls);
+        TEST_ASSERT_EQUAL_INT(1, rig.entry.opens);
+        TEST_ASSERT_NULL(rig.kasse.store.findActive("ZH98765"));
+        TEST_ASSERT_EQUAL_STRING("LU123456", rig.app.terminal(GateLane::Entry).lastPlate.c_str());
+        TEST_ASSERT_TRUE(
+            contains(rig.get("/kamera").body, "Bitte warten, bis das vorherige Fahrzeug durchgefahren ist"));
+
+        rig.exit.current = up;
+        rig.post("/kamera/ausfahrt", {{"kz", "LU 123456"}});
+        TEST_ASSERT_EQUAL_STRING("Bitte warten, bis das vorherige Fahrzeug durchgefahren ist",
+                                 rig.app.view(GateLane::Exit).terminal.c_str());
+    }
 }
 
 void test_loop_hold_only_while_barrier_up()
@@ -451,6 +480,7 @@ int main()
     RUN_TEST(test_tf40_entry_time_only_for_operator);
     RUN_TEST(test_entry_opens_and_terminal_shows_plate);
     RUN_TEST(test_drive_through_uses_the_barrier_answer);
+    RUN_TEST(test_no_capture_while_barrier_up);
     RUN_TEST(test_loop_hold_only_while_barrier_up);
     RUN_TEST(test_saves_only_what_changed);
     RUN_TEST(test_payment_alert_saved_with_full_log);

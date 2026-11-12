@@ -22,6 +22,7 @@ struct LaneTerminal
     int64_t callTime = 0;
     std::string callText;   // «Ruftaste gedrückt», «Zahlung 5× abgelehnt»
     bool passing = false;   // «Durchfahren» pressed, barrier not closed yet
+    std::string passingPlate; // the vehicle that drove through (for «… durchgefahren – Schranke geschlossen»)
 };
 
 // After an entry/exit decision: remembers the plate, offers payment after an unpaid exit, clears the call and
@@ -37,8 +38,8 @@ GateResult driveThrough(LaneTerminal& t, bool barrierUp);
 // «Fahrzeug fährt weiter» after «Fahrzeug bleibt stehen»: freeing the loop counts as the pass, so an open
 // barrier gets the «Durchfahren» message unless that was already pressed; otherwise an empty message.
 GateResult leftLoop(LaneTerminal& t, bool barrierUp);
-// Call when the barrier is closed: after «Durchfahren» returns «… durchgefahren – Schranke geschlossen»
-// once; otherwise an empty message (nothing to show).
+// Call when the barrier is closed: after «Durchfahren» returns «<passing plate> durchgefahren – Schranke
+// geschlossen» once; otherwise an empty message (nothing to show).
 GateResult closedAfterPass(LaneTerminal& t);
 
 // «Ruftaste»: logs the call (lane, last plate) and shows it in the operator view.

@@ -86,8 +86,9 @@ GateResult driveThrough(LaneTerminal& t, bool barrierUp)
         return message(t.lastPlate, "err", "Keine offene Schranke – Fahrzeug kann nicht durchfahren");
     }
     t.passing = true;
-    std::string who = t.lastPlate.empty() ? "Fahrzeug" : t.lastPlate;
-    return message(t.lastPlate, "ok", who + " durchgefahren – Schranke schliesst");
+    t.passingPlate = t.lastPlate;
+    std::string who = t.passingPlate.empty() ? "Fahrzeug" : t.passingPlate;
+    return message(t.passingPlate, "ok", who + " durchgefahren – Schranke schliesst");
 }
 
 GateResult leftLoop(LaneTerminal& t, bool barrierUp)
@@ -106,8 +107,8 @@ GateResult closedAfterPass(LaneTerminal& t)
         return message(t.lastPlate, "", "");
     }
     t.passing = false;
-    std::string who = t.lastPlate.empty() ? "Fahrzeug" : t.lastPlate;
-    return message(t.lastPlate, "ok", who + " durchgefahren – Schranke geschlossen");
+    std::string who = t.passingPlate.empty() ? "Fahrzeug" : t.passingPlate;
+    return message(t.passingPlate, "ok", who + " durchgefahren – Schranke geschlossen");
 }
 
 GateResult pressCallButton(LaneTerminal& t, int64_t now, EventLog& log)

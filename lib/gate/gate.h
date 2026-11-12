@@ -45,3 +45,7 @@ GateResult entryRequest(const RegistrationList& registrations, const std::string
 
 // Exit: valid plate -> POST /api/exit; opens on 200 closed / closed_free only.
 GateResult exitRequest(const std::string& rawPlate, KasseLink& kasse);
+
+// A plate captured while the lane's barrier is still open or closing: one opening per vehicle, so it is not
+// passed on to Pico 1 («Bitte warten, bis das vorherige Fahrzeug durchgefahren ist»).
+GateResult laneBusy(const std::string& rawPlate);

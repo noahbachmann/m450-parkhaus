@@ -88,7 +88,8 @@ namespace fixtures
 
         // Entry backdated by seconds, typed into the form like a tester would (to the second). Backdating is for the
         // operator only (Testkonzept Kap. 3): sent from a second, logged-in browser, the tester's own login state
-        // stays as it is.
+        // stays as it is. The car entered in the past, so it drives through and the barrier closes again (barrier
+        // clock only, the parking clock stands still). Returns the terminal text of the entry.
         std::string entryAgo(const std::string& kz, int64_t seconds)
         {
             if (operatorCookie.empty())
@@ -97,7 +98,13 @@ namespace fixtures
                 operatorCookie = r.setCookie.substr(0, r.setCookie.find(';'));
             }
             requestAs(operatorCookie, "POST", "/kamera/einfahrt", {{"kz", kz}, {"entry", formatDateTime(now - seconds)}});
-            return terminalText(GateLane::Entry);
+            std::string text = terminalText(GateLane::Entry);
+            if (entryBarrier.state() != BarrierState::Closed)
+            {
+                driveThrough(GateLane::Entry);
+                waitMs(BARRIER_MIN_OPEN_MS + BARRIER_CLOSE_MS + 100);
+            }
+            return text;
         }
 
         std::string exit(const std::string& kz)
