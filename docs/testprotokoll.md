@@ -109,7 +109,24 @@ Klassen nach Testkonzept 6.2: 1 belanglos, 2 leicht, 3 schwer, 4 kritisch.
 | M-12 | 4 | Review | Pico 1 nahm Zahlungen, Ausfahrten und Reset von jedem Gerät im WLAN an (Ausfahrt ohne Zahlung möglich) | behoben 24.10.2026: POST nur von Pico 2; auf Hardware ungeprüft |
 | M-13 | 2 | Review | «Durchfahren» entschied auf dem Board nach einem möglicherweise veralteten Schrankenzustand, im Simulator nach dem echten (Board und Simulator wichen ab) | behoben 24.10.2026: eine gemeinsame Anwendung für Board und Simulator, Antwort vom Schrankenkern |
 | M-14 | 2 | Review | Ein prellender Taster bzw. verrauschter IR-Sensor konnte Sicherheitsabschaltungen oder eine vorzeitige «Durchfahrt» auslösen | behoben 24.10.2026: Schleife muss 50 ms stabil sein; auf Hardware ungeprüft |
-| M-15 | 1 | Review | Die Meldung nach einem Formular (z. B. «Bezahlt …») gibt es nur einmal für alle Browser: Schickt ein zweiter Browser dazwischen ein Formular ab, sieht der erste seine Bestätigung nicht (die Buchung selbst stimmt) | offen, in TF-34 Runde 2 mit zwei Browsern prüfen |
+| M-15 | 1 | Review | Die Meldung nach einem Formular (z. B. «Bezahlt …») gibt es nur einmal für alle Browser: Schickt ein zweiter Browser dazwischen ein Formular ab, sieht der erste seine Bestätigung nicht (die Buchung selbst stimmt) | behoben: eigene Meldung pro Formular (Testprotokoll M-01, TF-38) |
+
+### Entwicklertests zu den Mängeln aus Durchgang 2
+
+Die Mängel aus der manuellen Testdurchführung (Durchgang 2) stehen im Testprotokoll (Word, Kap. 6) mit eigener
+Nummerierung M-01 bis M-08; sie sind nicht dieselben wie M-01 bis M-15 oben. Die Behebungen und der Retest in
+Durchgang 3 stehen dort in Kap. 8. Neue Testfälle aus Testkonzept v1.1 und ihre automatisierten Tests:
+
+| TF | Mangel (Testprotokoll) | Test |
+|---|---|---|
+| TF-38 | M-01 | `test_schranken_app`: `test_tf38_two_browsers_each_see_their_payment`, `test_notice_belongs_to_its_post` |
+| TF-39 | M-02 | `test_kasse_api`: `test_tf39_spoofed_ip_without_key_is_forbidden`, `test_api_key_matches` |
+| TF-40 | M-03 | `test_schranken_app`: `test_tf40_entry_time_only_for_operator` |
+| TF-41 | M-04 | `test_system_entry`: `test_tf41_entry_one_vehicle_per_opening`; `test_schranken_app`: `test_no_capture_while_barrier_up` |
+| TF-42 | M-04, M-06 | `test_system_payment`: `test_tf42_exit_one_vehicle_per_opening`; `test_terminal`: `test_closed_message_names_the_vehicle_that_passed` |
+| TF-43 | M-07 | `test_system_payment`: `test_tf31_remote_opening_at_exit_without_payment` |
+| TF-44 | M-08 | `test_system_payment`: `test_tf44_exit_terminal_asks_for_the_rest_only`; `test_terminal`: `test_tf44_pay_rest_after_partial_cash` |
+| TF-08 | M-05 | nur auf dem Aufbau TU-2 prüfbar (Verbindungsaufbau, WLAN-Stromsparmodus in `src/`) |
 
 ## Nicht geprüft (nur mit Hardware möglich)
 

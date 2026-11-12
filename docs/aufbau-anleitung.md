@@ -292,6 +292,9 @@ Die Zugangsdaten stehen in `include/secrets.h`. Diese Datei ist **gitignored** u
 
    // Passwort für die Anmeldung «betrieb» auf Pico 2 (ohne diese Zeile bricht der Build ab)
    #define OPERATOR_PASSWORD "parkhaus"
+
+   // Gemeinsamer Schlüssel Pico 2 -> Pico 1, auf beiden Picos gleich (z. B. openssl rand -hex 16)
+   #define KASSE_API_KEY "eigenen-zufaelligen-wert-eintragen"
    ```
 3. Kontrolle: `git status` darf `include/secrets.h` **nicht** anzeigen.
 
@@ -390,7 +393,7 @@ Weboberflächen im Browser:
 
 | Adresse | Inhalt |
 |---|---|
-| `http://10.178.56.157/kamera` | Kamera-Simulation (Einfahrt mit optionaler Einfahrtszeit, Ausfahrt, «Durchfahren», «Fahrzeug bleibt stehen» – wirkt wie ein gedrückter Taster) |
+| `http://10.178.56.157/kamera` | Kamera-Simulation (Einfahrt, nach Anmeldung mit optionaler Einfahrtszeit, Ausfahrt, «Durchfahren», «Fahrzeug bleibt stehen» – wirkt wie ein gedrückter Taster) |
 | `http://10.178.56.157/automat` | Automat: per Kennzeichen bezahlen (ohne Anmeldung) |
 | `http://10.178.56.157/login` | Anmeldung «betrieb» (Passwort = `OPERATOR_PASSWORD` aus `secrets.h`); danach Kasse, Registrierung und Betrieb in der Navigation |
 | `http://10.178.56.156/` | nur ein Hinweis mit Link auf Pico 2 (Pico 1 hat keine eigenen Bedienseiten) |
@@ -427,7 +430,9 @@ Antwort zum Beispiel: `{"kz":"LU123456","status":"unbekannt"}` – die Kasse ist
 | Build bricht mit Pfad-Fehlern ab (Windows) | `git config --system core.longpaths true` (Abschnitt 5). |
 | `secrets.h: No such file` | `include/secrets.example.h` nach `include/secrets.h` kopieren (Abschnitt 6.3). |
 | `OPERATOR_PASSWORD missing in include/secrets.h` | Zeile `#define OPERATOR_PASSWORD "…"` aus `secrets.example.h` in `secrets.h` übernehmen. |
-| curl auf `POST /api/…` von Pico 1 antwortet `403 forbidden` | Gewollt: Änderungen nimmt Pico 1 nur von Pico 2 (`SCHRANKEN_IP`) an. `GET /api/status` geht von überall. |
+| `KASSE_API_KEY missing in include/secrets.h` | Zeile `#define KASSE_API_KEY "…"` aus `secrets.example.h` übernehmen und einen eigenen Wert setzen. |
+| curl auf `POST /api/…` von Pico 1 antwortet `403 forbidden` | Gewollt: Änderungen nimmt Pico 1 nur von Pico 2 (`SCHRANKEN_IP`) mit `KASSE_API_KEY` an. `GET /api/status` geht von überall. |
+| Jede Einfahrt/Ausfahrt meldet «Unerwartete Antwort der Kasse – bitte Ruftaste drücken» | `KASSE_API_KEY` auf beiden Picos gleich? Mit einem anderen Schlüssel antwortet Pico 1 mit 403. |
 | LED blinkt dauernd | Hotspot auf 5 GHz → auf 2.4 GHz stellen. Passwort falsch. Hotspot ohne Internet → NTP schlägt fehl. Serielle Konsole zeigt mehr. |
 | Ping geht nicht | IPs in `secrets.h` weichen von den festen Adressen ab (Abschnitt 6.2). WLAN vergibt nicht `10.178.56.x` bzw. Gateway ist nicht `10.178.56.50`. Laptop im falschen WLAN. |
 | «Kasse nicht erreichbar – bitte Ruftaste drücken» | Pico 1 aus, noch nicht bereit (LED blinkt) oder falsche `KASSE_IP`. |

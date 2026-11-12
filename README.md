@@ -109,7 +109,7 @@ Kamerasimulation, Automat, Tarif. Nach der Anmeldung als «betrieb» (Passwort s
 
 | Adresse | Zugang | Inhalt |
 |---|---|---|
-| `/kamera` (Startseite) | alle | Kennzeichen an Ein- und Ausfahrt eingeben (Einfahrt optional rückdatiert), «Durchfahren», «Fahrzeug bleibt stehen», Ruftaste, «Fahrzeug wendet», Bezahlen am Ausfahrtsterminal; darunter alle Parkvorgänge als Testhilfe |
+| `/kamera` (Startseite) | alle | Kennzeichen an Ein- und Ausfahrt eingeben (Einfahrt rückdatieren nur nach Anmeldung), «Durchfahren», «Fahrzeug bleibt stehen», Ruftaste, «Fahrzeug wendet», Bezahlen am Ausfahrtsterminal; darunter alle Parkvorgänge als Testhilfe |
 | `/automat` | alle | Kennzeichen suchen, Dauer und Gebühr, bezahlen mit Karte, TWINT oder Bargeld; zeigt nur den gesuchten Parkvorgang |
 | `/tarif` | alle | gültiger Tarif mit Beispielen |
 | `/login` | alle | Anmeldung Betriebspersonal |
@@ -119,12 +119,17 @@ Kamerasimulation, Automat, Tarif. Nach der Anmeldung als «betrieb» (Passwort s
 
 Pico 1 (`http://10.178.56.156`, im Simulator `http://localhost:8081`) zeigt unter `/` nur einen Link auf Pico 2 und
 bietet die JSON-Schnittstelle für Pico 2: `GET /api/status?kz=…` (z. B. für TF-29 mit curl), `GET /api/sessions`,
-`POST /api/entry`, `/api/exit`, `/api/pay`, `/api/reset`. Ändernde Anfragen (POST) nimmt Pico 1 nur von Pico 2 an.
+`POST /api/entry`, `/api/exit`, `/api/pay`, `/api/reset`. Ändernde Anfragen (POST) nimmt Pico 1 nur von Pico 2 an:
+von dessen IP und mit dem gemeinsamen Schlüssel im Header `X-Api-Key`.
 
 ### Bedienung der Kamerasimulation
 
 - Die Schranke schliesst erst, wenn das Fahrzeug durchgefahren ist: «Durchfahren» (oder eine angeschlossene
   Schleife, die belegt und wieder frei wird), frühestens 5 s nach dem Öffnen.
+- Pro Öffnung ein Fahrzeug: Solange die Schranke offen ist oder schliesst, nimmt die Spur kein weiteres
+  Kennzeichen an («Bitte warten, bis das vorherige Fahrzeug durchgefahren ist»).
+- Rückdatieren (Feld «Einfahrtszeit») gibt es nur nach der Anmeldung «betrieb»; ohne Anmeldung gilt die Uhrzeit
+  der Erfassung.
 - «Fahrzeug bleibt stehen» belegt die Sicherungsschleife, solange die Schranke offen ist oder schliesst;
   «Fahrzeug fährt weiter» gibt sie frei und zählt als Durchfahrt.
 - Sicherheitsabschaltung (TF-13) von Hand: Schranke öffnen, nach mindestens 5 s «Durchfahren», während der
@@ -142,6 +147,9 @@ Prototyp im eigenen Test-WLAN.
 | Anmeldung Betriebspersonal (Pico 2) | Benutzer `betrieb` | fest im Code (`lib/auth`), einziger Benutzer |
 | Passwort im PC-Simulator / Docker | `parkhaus` | Standardwert in `src/sim/schranken/main.cpp` und `docker-compose.yml`; ändern mit der Umgebungsvariablen `OPERATOR_PASSWORD` (z. B. `OPERATOR_PASSWORD=xyz docker compose up`) |
 | Passwort auf dem Board | Vorlage `parkhaus` | `OPERATOR_PASSWORD` in `include/secrets.h` (ohne diese Zeile bricht der Build ab) |
+| Schlüssel Pico 2 → Pico 1 (`X-Api-Key`) auf dem Board | Vorlage `change-me-to-a-long-random-string`, eigenen Wert setzen (z. B. `openssl rand -hex 16`) | `KASSE_API_KEY` in `include/secrets.h`, auf beiden Picos gleich (ohne diese Zeile bricht der Build ab) |
+| Schlüssel im PC-Simulator / Docker | `parkhaus-sim` | Standardwert in `src/sim/*/main.cpp` und `docker-compose.yml`; ändern mit der Umgebungsvariablen `KASSE_API_KEY` (für beide Programme gleich) |
+| Schlüssel in den Tests | `test-api-key` | `lib/test_support/test_fixtures.h` |
 | Passwort in den Tests | `parkhaus` | Systemtests (`lib/test_support/system_rig.h`); `test_schranken_app` nimmt absichtlich `geheim`, damit auffällt, falls das Passwort irgendwo fest eingebaut wäre |
 | WLAN (SSID, Passwort) | eigener Hotspot | nur `include/secrets.h` (gitignored), Vorlage `include/secrets.example.h` |
 | Feste IPs (fix, nicht ändern) | Kasse `10.178.56.156`, Schranken `10.178.56.157`, Gateway `10.178.56.50`, Subnetz `255.255.255.0` | `KASSE_IP`, `SCHRANKEN_IP`, `GATEWAY_IP`, `SUBNET_MASK` in `include/secrets.h` (Vorlage `include/secrets.example.h`) |
@@ -149,7 +157,8 @@ Prototyp im eigenen Test-WLAN.
 | Adressen auf dem Board | Pico 2 `http://10.178.56.157`, Pico 1 `http://10.178.56.156` | `include/secrets.h` |
 
 `include/secrets.h` wird nie committet; anlegen siehe [Aufbauanleitung 6.3](docs/aufbau-anleitung.md#63-secretsh-anlegen).
-Pico 1 nimmt ändernde Anfragen (`POST /api/…`) nur von `SCHRANKEN_IP` (`10.178.56.157`) an.
+Pico 1 nimmt ändernde Anfragen (`POST /api/…`) nur von `SCHRANKEN_IP` (`10.178.56.157`) mit dem richtigen
+`KASSE_API_KEY` an; eine gefälschte IP allein reicht nicht (TF-39).
 
 ## Build und Tests
 

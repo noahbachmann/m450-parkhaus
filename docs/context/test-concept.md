@@ -138,6 +138,21 @@ Strings in «» are the exact expected German UI text.
 | 33 | 3 | Goal 10, US-14 AK3 | Stranger told only «Bezahle das Parken für das Auto ZH 98765.» | Pays without help in < 2 min; unclear points logged as class 1/2 |
 | 34 | 3 | all | 45-min exploratory charter: simultaneous entry/exit, double-click «Bezahlen», pay during exit query, browser back, two browsers on Kasse | Session documented, defects classified and filed |
 
+### Added in v1.1 (Testprotokoll Kap. 7.2, after test run 2)
+
+The Word Testprotokoll (local, not in git) records the defects M-01..M-08 of run 2 and these test cases. Its M-IDs
+are not the ones in `docs/testprotokoll.md`.
+
+| TF | Prio | Ref | Steps (short) | Expected |
+|---|---|---|---|---|
+| 38 | 3 | M-01 | Two browsers pay at the Kasse right after each other | Each sees its own «Bezahlt – …» |
+| 39 | 1 | Goal 03, M-02 | Laptop with Pico 2's IP sends POST /api/pay, /api/exit, /api/reset to Pico 1 without the key | 403 each; session stays open/unpaid; exit stays closed |
+| 40 | 1 | TF-09, M-03 | Camera page without login | No «Einfahrtszeit» field; entry time = capture time (±2 s); fee CHF 0.00 |
+| 41 | 2 | TF-05, M-04 | Entry KZ-01 (opens); before «Durchfahren» KZ-03, KZ-02; while closing KZ-02 again | «Bitte warten, bis das vorherige Fahrzeug durchgefahren ist»; then «LU123456 durchgefahren – Schranke geschlossen»; one session |
+| 42 | 2 | TF-28, M-04, M-06 | KZ-01 paid, KZ-02 unpaid; exit KZ-01 (opens); KZ-02 before «Durchfahren» and while closing | KZ-02 not taken; «LU123456 durchgefahren – Schranke geschlossen»; KZ-01 closed, KZ-02 open + unpaid |
+| 43 | 2 | TF-31, M-07 | KZ-02 unpaid at the exit; operator opens with «Kulanz» | Terminal «ZH98765 – Freigabe durch Leitstelle, Ausfahrt frei», no «nicht bezahlt» |
+| 44 | 2 | TF-37, M-08 | KZ-02 −1 h 30 min (CHF 4.00); Automat cash CHF 2.50; exit; terminal TWINT | «Restbetrag CHF 1.50 von CHF 4.00 nicht bezahlt – …»; «Bezahlt – CHF 4.00, TWINT CHF 1.50 + Bargeld CHF 2.50»; booking 4.00 (cash 2.50) |
+
 ## Test data (reset before each test day)
 
 ### Plates
@@ -190,7 +205,10 @@ The PDF is the spec; the implementation differs here (also listed in the README 
   may have answered after Pico 2's 1000 ms timeout). TF-10 therefore waits ≥ 30 s between the two entries.
 - **Safety loop in the simulator:** «Fahrzeug bleibt stehen» / «Fahrzeug fährt weiter» on the camera page; on
   the board ORed with the loop pin. «Durchfahren» stands in for a car passing without a loop.
-- **Writes on Pico 1** (POST /api/*) are accepted only from Pico 2's IP; GET /api/status stays open (TF-29).
+- **Writes on Pico 1** (POST /api/*) are accepted only from Pico 2's IP **and** with the shared key in `X-Api-Key`
+  (a spoofed IP alone gets 403, TF-39); GET /api/status stays open (TF-29).
+- **Backdating** (entry time field on the camera page) only after the operator login; without login the entry
+  counts from the capture (TF-40).
 - **Test environment:** without hardware, the system tests run as native tests (TU-1) through the same routes
   and forms as the browser (`test/native/test_system_*`); timing goals (≤ 2 s, ≤ 3 s, < 1 s) are not measured.
 
