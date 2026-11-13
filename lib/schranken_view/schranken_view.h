@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdint.h>
 #include <string>
 
 #include "html.h"
@@ -34,9 +35,16 @@ struct LaneView
     bool canPass = false;                // barrier open, loop free: «Durchfahren» offered
     bool canHold = false;                // barrier up: «Fahrzeug bleibt stehen» offered
     bool loopHeld = false;               // «Fahrzeug bleibt stehen» pressed: only «Fahrzeug fährt weiter» offered
+    uint32_t shown = 0;                  // counts terminal texts, so the same text shown again is a change too
 };
+
+// Short key (8 hex digits) of everything the two lanes show. GET /kamera/stand returns it; the camera page reloads
+// when it differs from the key it was rendered with (remote opening, barrier closed, … without a reload, M-09).
+std::string cameraStateKey(const LaneView& entry, const LaneView& exit);
 
 // Lanes on top, below the sessions from Pico 1 (active first) as a testing aid. The plate fields suggest
 // registered plates and plates in the car park. The entry time field (backdating) only for Role::Admin.
+// A small script polls GET /kamera/stand every second and reloads on a change, unless a plate or entry time
+// field is focused or filled (the tester is typing).
 std::string renderCameraPage(const LaneView& entry, const LaneView& exit, const KasseSnapshot& kasse,
                              const RegistrationList& registrations, Role role);
