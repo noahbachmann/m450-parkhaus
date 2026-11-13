@@ -114,7 +114,7 @@ Klassen nach Testkonzept 6.2: 1 belanglos, 2 leicht, 3 schwer, 4 kritisch.
 ### Entwicklertests zu den Mängeln aus Durchgang 2
 
 Die Mängel aus der manuellen Testdurchführung (Durchgang 2) stehen im Testprotokoll (Word, Kap. 6) mit eigener
-Nummerierung M-01 bis M-08; sie sind nicht dieselben wie M-01 bis M-15 oben. Die Behebungen und der Retest in
+Nummerierung M-01 bis M-08 (M-09 aus dem Retest in Durchgang 3); sie sind nicht dieselben wie M-01 bis M-15 oben. Die Behebungen und der Retest in
 Durchgang 3 stehen dort in Kap. 8. Neue Testfälle aus Testkonzept v1.1 und ihre automatisierten Tests:
 
 | TF | Mangel (Testprotokoll) | Test |
@@ -126,6 +126,7 @@ Durchgang 3 stehen dort in Kap. 8. Neue Testfälle aus Testkonzept v1.1 und ihre
 | TF-42 | M-04, M-06 | `test_system_payment`: `test_tf42_exit_one_vehicle_per_opening`; `test_terminal`: `test_closed_message_names_the_vehicle_that_passed` |
 | TF-43 | M-07 | `test_system_payment`: `test_tf31_remote_opening_at_exit_without_payment` |
 | TF-44 | M-08 | `test_system_payment`: `test_tf44_exit_terminal_asks_for_the_rest_only`; `test_terminal`: `test_tf44_pay_rest_after_partial_cash` |
+| TF-45 | M-09 | `test_system_payment`: `test_tf45_camera_page_follows_remote_opening`; `test_schranken_app`: `test_camera_state_key_follows_the_lanes` |
 | TF-08 | M-05 | nur auf dem Aufbau TU-2 prüfbar (Verbindungsaufbau, WLAN-Stromsparmodus in `src/`) |
 
 ## Nicht geprüft (nur mit Hardware möglich)

@@ -305,6 +305,29 @@ void test_entry_opens_and_terminal_shows_plate()
     TEST_ASSERT_TRUE(contains(rig.get("/kamera").body, "BE4711 – nicht registriert, bitte Ruftaste drücken"));
 }
 
+// M-09: GET /kamera/stand (public) is the key the camera page was rendered with until a lane changes.
+void test_camera_state_key_follows_the_lanes()
+{
+    Rig rig;
+    WebResponse state = rig.get("/kamera/stand");
+    TEST_ASSERT_EQUAL_INT(200, state.status);
+    TEST_ASSERT_EQUAL_STRING("text/plain; charset=utf-8", state.contentType.c_str());
+    std::string key = state.body;
+    TEST_ASSERT_EQUAL_INT(8, key.size());
+    TEST_ASSERT_TRUE(contains(rig.get("/kamera").body, "var key=\"" + key + "\""));
+    TEST_ASSERT_EQUAL_STRING(key.c_str(), rig.get("/kamera/stand").body.c_str());
+
+    rig.exit.current = BarrierState::Open; // changed without this browser (e.g. remote opening)
+    std::string open = rig.get("/kamera/stand").body;
+    TEST_ASSERT_NOT_EQUAL(0, key.compare(open));
+
+    rig.post("/kamera/ruftaste", {{"lane", "entry"}});
+    std::string called = rig.get("/kamera/stand").body;
+    TEST_ASSERT_NOT_EQUAL(0, open.compare(called));
+    rig.post("/kamera/ruftaste", {{"lane", "entry"}}); // same text again is still news
+    TEST_ASSERT_NOT_EQUAL(0, called.compare(rig.get("/kamera/stand").body));
+}
+
 void test_drive_through_uses_the_barrier_answer()
 {
     Rig rig;
@@ -481,6 +504,7 @@ int main()
     RUN_TEST(test_tf21_automat_is_public);
     RUN_TEST(test_tf40_entry_time_only_for_operator);
     RUN_TEST(test_entry_opens_and_terminal_shows_plate);
+    RUN_TEST(test_camera_state_key_follows_the_lanes);
     RUN_TEST(test_drive_through_uses_the_barrier_answer);
     RUN_TEST(test_no_capture_while_barrier_up);
     RUN_TEST(test_loop_hold_only_while_barrier_up);

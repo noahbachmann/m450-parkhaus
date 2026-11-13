@@ -106,6 +106,43 @@ namespace
         html += "</datalist>";
     }
 
+    // FNV-1a; '\x1f' separates the fields so "ab"+"c" and "a"+"bc" differ.
+    void hashField(uint32_t& h, const std::string& field)
+    {
+        for (unsigned char c : field)
+        {
+            h = (h ^ c) * 16777619u;
+        }
+        h = (h ^ 0x1f) * 16777619u;
+    }
+
+    void hashLane(uint32_t& h, const LaneView& lane)
+    {
+        hashField(h, lane.barrier);
+        hashField(h, lane.cls);
+        hashField(h, lane.terminal);
+        hashField(h, lane.fault);
+        hashField(h, lane.payPlate);
+        hashField(h, lane.payFee);
+        hashField(h, lane.payRest);
+        hashField(h, std::string{lane.canPass ? '1' : '0', lane.canHold ? '1' : '0', lane.loopHeld ? '1' : '0'});
+        hashField(h, std::to_string(lane.shown));
+    }
+
+    // Reload when the lanes changed elsewhere (operator, barrier closing). One request at a time; a failed poll
+    // (Pico 2 busy, WLAN) just tries again.
+    void appendStatePoll(std::string& html, const std::string& key)
+    {
+        html += "<script>(function(){var key=\"" + key +
+                "\";function busy(){var f=document.querySelectorAll(\"input[name=kz],input[name=entry]\");"
+                "for(var i=0;i<f.length;i++){if(f[i].value||f[i]===document.activeElement)return true;}return false;}"
+                "function poll(){if(busy()){setTimeout(poll,1000);return;}"
+                "fetch(\"/kamera/stand\",{cache:\"no-store\"}).then(function(r){return r.ok?r.text():\"\";})"
+                ".then(function(t){if(t&&t!==key){location.reload();}else{setTimeout(poll,1000);}})"
+                ".catch(function(){setTimeout(poll,1000);});}"
+                "setTimeout(poll,1000);})();</script>";
+    }
+
     void appendSessions(std::string& html, const KasseSnapshot& kasse)
     {
         html += "<h2>Parkvorgänge (Kasse)</h2>";
@@ -122,6 +159,20 @@ namespace
         html += "<p class=\"muted\">Offene zuerst, dann abgeschlossene – zum Testen.</p>";
         appendSessionTable(html, kasse.sessions, kasse.now, false);
     }
+}
+
+std::string cameraStateKey(const LaneView& entry, const LaneView& exit)
+{
+    static const char HEX_DIGITS[] = "0123456789abcdef";
+    uint32_t h = 2166136261u;
+    hashLane(h, entry);
+    hashLane(h, exit);
+    std::string key;
+    for (int shift = 28; shift >= 0; shift -= 4)
+    {
+        key += HEX_DIGITS[(h >> shift) & 0xF];
+    }
+    return key;
 }
 
 std::string registrationMessage(RegistrationResult result)
@@ -238,12 +289,14 @@ std::string renderCameraPage(const LaneView& entry, const LaneView& exit, const 
     html += "<div class=\"lanes\">";
     appendLane(html, "Einfahrt", "/kamera/einfahrt", true, role == Role::Admin, entry);
     appendLane(html, "Ausfahrt", "/kamera/ausfahrt", false, false, exit);
-    html += "</div><p class=\"muted\"><a href=\"/kamera\">Aktualisieren</a> – die Schranke schliesst, sobald das "
+    html += "</div><p class=\"muted\"><a href=\"/kamera\">Aktualisieren</a> (die Seite aktualisiert sich auch "
+            "selbst, solange kein Kennzeichen eingegeben wird) – die Schranke schliesst, sobald das "
             "Fahrzeug durchgefahren ist («Durchfahren»), frühestens " +
             std::to_string(BARRIER_MIN_OPEN_MS / 1000) + " s nach dem Öffnen. «Fahrzeug bleibt stehen» "
             "belegt die Sicherungsschleife: die Schranke bleibt offen bzw. stoppt beim Schliessen und öffnet "
             "wieder.</p>";
     appendSessions(html, kasse);
+    appendStatePoll(html, cameraStateKey(entry, exit));
     appendPageEnd(html);
     return html;
 }
