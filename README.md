@@ -185,6 +185,7 @@ Unit- und Systemtests aus (`pio test -e native`), baut die Firmware (`kasse`, `s
   Gesamtablauf). Sie bedienen Pico 2 über dieselben Seiten und Formulare wie der Browser; Pico 1 antwortet über
   dieselbe Schnittstelle wie auf dem Board.
 - Ergebnisse, Mängel und Testbericht: [docs/testprotokoll.md](docs/testprotokoll.md).
+- Abhängigkeiten der Logik und die Test Doubles, die sie in den Tests ersetzen: [docs/test-doubles.md](docs/test-doubles.md).
 
 ### PC-Simulator (ohne Hardware)
 
@@ -208,7 +209,7 @@ pio run -e sim_kasse -t exec     # ohne Docker, zweites Terminal: pio run -e sim
 | `src/kasse/`, `src/schranken/`, `src/common/` | Anbindung an die Picos (WLAN, Webserver, Flash, Servos) |
 | `src/sim/` | Anbindung an den PC (Simulator) |
 | `test/native/` | Unit- und Systemtests |
-| `docs/` | Aufbauanleitung, Testprotokoll; `docs/context/` = Spezifikation und Architektur (Englisch) |
+| `docs/` | Aufbauanleitung, Testprotokoll, Test Doubles; `docs/context/` = Spezifikation und Architektur (Englisch) |
 
 ## Bekannte Einschränkungen
 
