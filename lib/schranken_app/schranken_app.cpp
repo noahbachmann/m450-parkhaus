@@ -22,8 +22,8 @@ const SchrankenApp::Route SchrankenApp::ROUTES[] = {
     {"POST", "/kamera/einfahrt", false, &SchrankenApp::entryGate},
     {"POST", "/kamera/ausfahrt", false, &SchrankenApp::exitGate},
     {"POST", "/kamera/ruftaste", false, &SchrankenApp::callButton},
-    {"POST", "/kamera/durchfahren", false, &SchrankenApp::driveThrough},
-    {"POST", "/kamera/schleife", false, &SchrankenApp::loop},
+    {"POST", "/kamera/durchfahren", false, &SchrankenApp::passVehicle},
+    {"POST", "/kamera/schleife", false, &SchrankenApp::setLoop},
     {"POST", "/kamera/abbrechen", false, &SchrankenApp::abortExit},
     {"POST", "/kamera/bezahlen", false, &SchrankenApp::terminalPay},
     {"GET", "/automat", false, &SchrankenApp::automatPage},
@@ -194,7 +194,7 @@ WebResponse SchrankenApp::entryGate(const WebRequest& req, const Ctx& ctx)
     std::string entryTime = ctx.role == Role::Admin ? req.arg("entry") : "";
     GateResult r = entryRequest(registrationList, req.arg("kz"), entryTime, kasse);
     recordGate(entryLane.terminal, r);
-    show(entryLane, r, ctx.now);
+    applyGateResult(entryLane, r, ctx.now);
     return redirect(CAMERA_PAGE);
 }
 
@@ -206,7 +206,7 @@ WebResponse SchrankenApp::exitGate(const WebRequest& req, const Ctx& ctx)
     }
     GateResult r = exitRequest(req.arg("kz"), kasse);
     recordGate(exitLane.terminal, r);
-    show(exitLane, r, ctx.now);
+    applyGateResult(exitLane, r, ctx.now);
     return redirect(CAMERA_PAGE);
 }
 
@@ -214,21 +214,21 @@ WebResponse SchrankenApp::callButton(const WebRequest& req, const Ctx& ctx)
 {
     if (Lane* l = laneArg(req))
     {
-        show(*l, pressCallButton(l->terminal, ctx.now, eventLog), ctx.now);
+        applyGateResult(*l, pressCallButton(l->terminal, ctx.now, eventLog), ctx.now);
     }
     return redirect(CAMERA_PAGE);
 }
 
-WebResponse SchrankenApp::driveThrough(const WebRequest& req, const Ctx& ctx)
+WebResponse SchrankenApp::passVehicle(const WebRequest& req, const Ctx& ctx)
 {
     if (Lane* l = laneArg(req))
     {
-        show(*l, ::driveThrough(l->terminal, l->barrier.requestPass()), ctx.now);
+        applyGateResult(*l, driveThrough(l->terminal, l->barrier.requestPass()), ctx.now);
     }
     return redirect(CAMERA_PAGE);
 }
 
-WebResponse SchrankenApp::loop(const WebRequest& req, const Ctx& ctx)
+WebResponse SchrankenApp::setLoop(const WebRequest& req, const Ctx& ctx)
 {
     if (Lane* l = laneArg(req))
     {
@@ -241,7 +241,7 @@ WebResponse SchrankenApp::loop(const WebRequest& req, const Ctx& ctx)
             GateResult r = leftLoop(l->terminal, up);
             if (!r.message.empty())
             {
-                show(*l, r, ctx.now);
+                applyGateResult(*l, r, ctx.now);
             }
         }
     }
@@ -250,13 +250,13 @@ WebResponse SchrankenApp::loop(const WebRequest& req, const Ctx& ctx)
 
 WebResponse SchrankenApp::abortExit(const WebRequest&, const Ctx& ctx)
 {
-    show(exitLane, abortAtTerminal(exitLane.terminal), ctx.now);
+    applyGateResult(exitLane, abortAtTerminal(exitLane.terminal), ctx.now);
     return redirect(CAMERA_PAGE);
 }
 
 WebResponse SchrankenApp::terminalPay(const WebRequest& req, const Ctx& ctx)
 {
-    show(exitLane, payAtTerminal(exitLane.terminal, req.arg("method"), ctx.now, kasse, eventLog), ctx.now);
+    applyGateResult(exitLane, payAtTerminal(exitLane.terminal, req.arg("method"), ctx.now, kasse, eventLog), ctx.now);
     return redirect(CAMERA_PAGE);
 }
 
@@ -360,7 +360,7 @@ WebResponse SchrankenApp::remoteOpening(const WebRequest& req, const Ctx& ctx)
     {
         Lane& l = lane(id);
         l.barrier.requestOpen();
-        show(l, recordRemoteOpening(l.terminal, r.plate), ctx.now);
+        applyGateResult(l, recordRemoteOpening(l.terminal, r.plate), ctx.now);
     }
     platform.log("[betrieb] " + r.notice.text);
     return redirectWithNotice("/betrieb", r.notice);
@@ -398,7 +398,7 @@ SchrankenApp::Lane* SchrankenApp::laneArg(const WebRequest& req)
     return id == GateLane::None ? nullptr : &lane(id);
 }
 
-void SchrankenApp::show(Lane& l, const GateResult& r, int64_t now)
+void SchrankenApp::applyGateResult(Lane& l, const GateResult& r, int64_t now)
 {
     if (r.open)
     {
@@ -416,7 +416,7 @@ void SchrankenApp::refresh(Lane& l, int64_t now)
     BarrierState state = l.barrier.state();
     if (state == BarrierState::Closed && l.terminal.passing)
     {
-        show(l, closedAfterPass(l.terminal), now);
+        applyGateResult(l, closedAfterPass(l.terminal), now);
     }
     bool held = l.barrier.loopHeld();
     l.view.canPass = state == BarrierState::Open && !l.terminal.passing && !held;
@@ -438,7 +438,7 @@ bool SchrankenApp::laneFree(Lane& l, const WebRequest& req, int64_t now)
     {
         return true;
     }
-    show(l, laneBusy(req.arg("kz")), now);
+    applyGateResult(l, laneBusy(req.arg("kz")), now);
     return false;
 }
 

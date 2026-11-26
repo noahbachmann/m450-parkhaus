@@ -55,6 +55,6 @@ private:
     // core 1 only
     Servo servo;
     BarrierDriver driver;
-    Debouncer loop;
+    Debouncer loopDebouncer;
     int writtenAngle = -1;
 };

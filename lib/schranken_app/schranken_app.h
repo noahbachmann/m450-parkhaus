@@ -101,8 +101,8 @@ private:
     WebResponse entryGate(const WebRequest& req, const Ctx& ctx);
     WebResponse exitGate(const WebRequest& req, const Ctx& ctx);
     WebResponse callButton(const WebRequest& req, const Ctx& ctx);
-    WebResponse driveThrough(const WebRequest& req, const Ctx& ctx);
-    WebResponse loop(const WebRequest& req, const Ctx& ctx);
+    WebResponse passVehicle(const WebRequest& req, const Ctx& ctx);
+    WebResponse setLoop(const WebRequest& req, const Ctx& ctx);
     WebResponse abortExit(const WebRequest& req, const Ctx& ctx);
     WebResponse terminalPay(const WebRequest& req, const Ctx& ctx);
     WebResponse automatPage(const WebRequest& req, const Ctx& ctx);
@@ -122,9 +122,9 @@ private:
 
     Lane& lane(GateLane id);
     Lane* laneArg(const WebRequest& req);
-    // Shows a terminal result (gate decision, payment, call, abort), opens the barrier if it says so and logs
-    // «Kasse nicht erreichbar».
-    void show(Lane& lane, const GateResult& r, int64_t now);
+    // A terminal result (gate decision, payment, call, abort): opens the barrier if it says so, writes
+    // «Kasse nicht erreichbar» to the event log, shows the text on the lane's terminal and logs it to the console.
+    void applyGateResult(Lane& lane, const GateResult& r, int64_t now);
     void refresh(Lane& lane, int64_t now);
     // Plate captured at the lane's camera: refused while the barrier is still open or closing (M-04).
     bool laneFree(Lane& lane, const WebRequest& req, int64_t now);
