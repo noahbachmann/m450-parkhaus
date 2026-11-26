@@ -324,6 +324,43 @@ void test_tf44_exit_terminal_asks_for_the_rest_only()
     TEST_ASSERT_TRUE(PaymentMethod::Twint == s->method);
 }
 
+// The key the camera page was rendered with (its poll script compares it with GET /kamera/stand).
+std::string renderedKey(const std::string& page)
+{
+    const std::string marker = "var key=\"";
+    size_t at = page.find(marker);
+    return at == std::string::npos ? "" : page.substr(at + marker.size(), 8);
+}
+
+// TF-45 / M-09: the open camera page notices the remote opening (and the closing after the pass) without a manual
+// reload: GET /kamera/stand differs from the key it was rendered with, the reloaded page offers «Durchfahren».
+void test_tf45_camera_page_follows_remote_opening()
+{
+    SystemRig sys;
+    sys.entryAgo(KZ_02, 30 * MIN);
+    TEST_ASSERT_EQUAL_STRING("Gebühr CHF 2.00 nicht bezahlt – bitte am Automaten bezahlen", sys.exit(KZ_02).c_str());
+    std::string terminal = sys.page("/kamera");
+    std::string key = renderedKey(terminal);
+    TEST_ASSERT_EQUAL_INT(8, key.size());
+    TEST_ASSERT_EQUAL_STRING(key.c_str(), sys.page("/kamera/stand").c_str()); // nothing changed: no reload
+    TEST_ASSERT_FALSE(contains(terminal, "/kamera/durchfahren"));
+
+    sys.login(); // the operator in another browser
+    sys.remoteOpen(GateLane::Exit, KZ_02, "Kulanz");
+    std::string changed = sys.page("/kamera/stand");
+    TEST_ASSERT_NOT_EQUAL(0, key.compare(changed)); // the terminal page reloads itself
+    terminal = sys.page("/kamera");
+    TEST_ASSERT_EQUAL_STRING(changed.c_str(), renderedKey(terminal).c_str());
+    TEST_ASSERT_TRUE(contains(terminal, "ZH98765 – Freigabe durch Leitstelle, Ausfahrt frei"));
+    TEST_ASSERT_TRUE(contains(terminal, "<strong>Durchfahren</strong>"));
+
+    key = changed;
+    sys.driveThrough(GateLane::Exit);
+    sys.waitMs(BARRIER_MIN_OPEN_MS + BARRIER_CLOSE_MS + 100);
+    TEST_ASSERT_NOT_EQUAL(0, key.compare(sys.page("/kamera/stand")));
+    TEST_ASSERT_TRUE(contains(sys.page("/kamera"), "ZH98765 durchgefahren – Schranke geschlossen"));
+}
+
 void test_tf32_whole_system()
 {
     SystemRig sys;
@@ -358,6 +395,7 @@ int main()
     RUN_TEST(test_tf31_remote_opening_at_exit_without_payment);
     RUN_TEST(test_tf42_exit_one_vehicle_per_opening);
     RUN_TEST(test_tf44_exit_terminal_asks_for_the_rest_only);
+    RUN_TEST(test_tf45_camera_page_follows_remote_opening);
     RUN_TEST(test_tf32_whole_system);
     return UNITY_END();
 }

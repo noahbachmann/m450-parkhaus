@@ -135,7 +135,9 @@ von dessen IP und mit dem gemeinsamen Schlüssel im Header `X-Api-Key`.
 - Sicherheitsabschaltung (TF-13) von Hand: Schranke öffnen, nach mindestens 5 s «Durchfahren», während der
   2 s Schliessen «Fahrzeug bleibt stehen» klicken. Die Schranke ist wieder offen, im Ereignisprotokoll steht
   «Sicherheitsabschaltung».
-- Die Seite aktualisiert sich nicht von selbst: «Aktualisieren» bzw. neu laden.
+- Die Kamerasimulation aktualisiert sich selbst (etwa jede Sekunde), z. B. nach einer Öffnung durch die Leitstelle
+  oder wenn die Schranke geschlossen hat – aber nicht, solange ein Kennzeichen- oder Zeitfeld ausgefüllt oder
+  angewählt ist. Die anderen Seiten: «Aktualisieren» bzw. neu laden.
 
 ## Zugangsdaten für Entwicklung und Test
 

@@ -150,13 +150,14 @@ closed, «Kasse nicht erreichbar – bitte Ruftaste drücken». **Fail-safe: any
 
 ## Web pages (all on Pico 2)
 
-Server-rendered HTML forms, no JavaScript. Nav: «Kamerasimulation», «Automat», «Tarif» for everyone; «Kasse»,
+Server-rendered HTML forms; the only JavaScript is the camera page's state poll (below). Nav: «Kamerasimulation», «Automat», «Tarif» for everyone; «Kasse»,
 «Registrierung», «Betrieb» after login; right side «🔒 Anmelden» or «👤 betrieb (Admin)» + «Abmelden».
 
 | Route | Access | Contents |
 |---|---|---|
 | `GET /` | all | 303 to `/kamera` |
 | `GET /kamera` | all | per lane: barrier state, terminal text, plate field (+ optional `datetime-local` entry time at the entry, operator only), «Erfassen», «Durchfahren», «Fahrzeug bleibt stehen», «Ruftaste»; exit: «Fahrzeug wendet» and the payment form; below all sessions (testing aid) and plate suggestions |
+| `GET /kamera/stand` | all | `text/plain` key (8 hex digits) of what both lanes show (barrier, terminal text, payment, buttons, fault); the camera page polls it every second and reloads when it differs from the key it was rendered with, unless a plate/entry time field is focused or filled (M-09, TF-45) |
 | `POST /kamera/einfahrt`, `/kamera/ausfahrt`, `/kamera/durchfahren`, `/kamera/schleife`, `/kamera/ruftaste`, `/kamera/abbrechen`, `/kamera/bezahlen` | all | the actions above (field `kz`, `entry`, `lane`, `held`, `method`), 303 to `/kamera` |
 | `GET /automat?kz=`, `POST /automat/pay` | all | Automat: tariff, search by plate (**active session only**, nothing about other cars), pay with Karte OK / Karte abgelehnt / TWINT / Bargeld (CHF amount) |
 | `GET /tarif` | all | tariff sentence and example fees from `lib/tariff` |

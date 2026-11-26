@@ -97,6 +97,7 @@ private:
 
     WebResponse home(const WebRequest& req, const Ctx& ctx);
     WebResponse camera(const WebRequest& req, const Ctx& ctx);
+    WebResponse cameraState(const WebRequest& req, const Ctx& ctx);
     WebResponse entryGate(const WebRequest& req, const Ctx& ctx);
     WebResponse exitGate(const WebRequest& req, const Ctx& ctx);
     WebResponse callButton(const WebRequest& req, const Ctx& ctx);

@@ -11,6 +11,7 @@
 const SchrankenApp::Route SchrankenApp::ROUTES[] = {
     {"GET", "/", false, &SchrankenApp::home},
     {"GET", "/kamera", false, &SchrankenApp::camera},
+    {"GET", "/kamera/stand", false, &SchrankenApp::cameraState},
     {"POST", "/kamera/einfahrt", false, &SchrankenApp::entryGate},
     {"POST", "/kamera/ausfahrt", false, &SchrankenApp::exitGate},
     {"POST", "/kamera/ruftaste", false, &SchrankenApp::callButton},
@@ -164,6 +165,16 @@ WebResponse SchrankenApp::camera(const WebRequest&, const Ctx& ctx)
     refresh(exitLane, ctx.now);
     KasseSnapshot snap = fetchSessions(kasse);
     return htmlPage(renderCameraPage(entryLane.view, exitLane.view, snap, registrationList, ctx.role));
+}
+
+WebResponse SchrankenApp::cameraState(const WebRequest&, const Ctx& ctx)
+{
+    refresh(entryLane, ctx.now);
+    refresh(exitLane, ctx.now);
+    WebResponse r;
+    r.contentType = "text/plain; charset=utf-8";
+    r.body = cameraStateKey(entryLane.view, exitLane.view);
+    return r;
 }
 
 WebResponse SchrankenApp::entryGate(const WebRequest& req, const Ctx& ctx)
@@ -384,6 +395,7 @@ void SchrankenApp::show(Lane& l, const GateResult& r, int64_t now)
     logGateResult(eventLog, l.id, r, now);
     l.view.cls = r.cls;
     l.view.terminal = r.message;
+    l.view.shown++;
     platform.log(std::string("[gate] ") + gateLaneLabel(l.id) + " " + r.plate + ": " + r.message);
 }
 

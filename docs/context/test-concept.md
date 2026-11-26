@@ -140,7 +140,7 @@ Strings in «» are the exact expected German UI text.
 
 ### Added in v1.1 (Testprotokoll Kap. 7.2, after test run 2)
 
-The Word Testprotokoll (local, not in git) records the defects M-01..M-08 of run 2 and these test cases. Its M-IDs
+The Word Testprotokoll (local, not in git) records the defects M-01..M-08 of run 2 (M-09 from the retest in run 3) and these test cases. Its M-IDs
 are not the ones in `docs/testprotokoll.md`.
 
 | TF | Prio | Ref | Steps (short) | Expected |
@@ -152,6 +152,7 @@ are not the ones in `docs/testprotokoll.md`.
 | 42 | 2 | TF-28, M-04, M-06 | KZ-01 paid, KZ-02 unpaid; exit KZ-01 (opens); KZ-02 before «Durchfahren» and while closing | KZ-02 not taken; «LU123456 durchgefahren – Schranke geschlossen»; KZ-01 closed, KZ-02 open + unpaid |
 | 43 | 2 | TF-31, M-07 | KZ-02 unpaid at the exit; operator opens with «Kulanz» | Terminal «ZH98765 – Freigabe durch Leitstelle, Ausfahrt frei», no «nicht bezahlt» |
 | 44 | 2 | TF-37, M-08 | KZ-02 −1 h 30 min (CHF 4.00); Automat cash CHF 2.50; exit; terminal TWINT | «Restbetrag CHF 1.50 von CHF 4.00 nicht bezahlt – …»; «Bezahlt – CHF 4.00, TWINT CHF 1.50 + Bargeld CHF 2.50»; booking 4.00 (cash 2.50) |
+| 45 | 2 | TF-43, M-09 | KZ-02 −30 min unpaid at the exit (stays closed); operator opens with «Kulanz»; watch the exit terminal without reloading | Terminal shows the release and «Durchfahren» within ~1 s; after «Durchfahren» and closing «… durchgefahren – Schranke geschlossen» without reloading |
 
 ## Test data (reset before each test day)
 
