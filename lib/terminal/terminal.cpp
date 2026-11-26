@@ -160,9 +160,7 @@ GateResult payAtTerminal(LaneTerminal& t, const std::string& method, int64_t now
 
     if (reply.status <= 0)
     {
-        GateResult r = message(plate, "err", "Kasse nicht erreichbar – bitte Ruftaste drücken");
-        r.unreachable = true;
-        return r;
+        return kasseUnreachable(plate);
     }
     std::string paid;
     std::string code = errorCode(reply);
@@ -182,7 +180,7 @@ GateResult payAtTerminal(LaneTerminal& t, const std::string& method, int64_t now
         paid = paidText(reply, plate);
         if (paid.empty())
         {
-            return message(plate, "err", "Unerwartete Antwort der Kasse – bitte Ruftaste drücken");
+            return message(plate, "err", UNEXPECTED_REPLY_TEXT);
         }
     }
     else if (!(reply.status == HTTP_CONFLICT && (code == "already_paid" || code == "nothing_to_pay")))

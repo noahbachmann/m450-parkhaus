@@ -36,6 +36,12 @@ struct GateResult
     uint32_t cashRappen = 0;  // of it already paid in cash at the Automat (the rest is due)
 };
 
+// «Unerwartete Antwort der Kasse – bitte Ruftaste drücken»
+extern const char* const UNEXPECTED_REPLY_TEXT;
+
+// «Kasse nicht erreichbar – bitte Ruftaste drücken», marked as unreachable (logged as a fault).
+GateResult kasseUnreachable(const std::string& plate);
+
 // "error" field of a Pico 1 error reply ({"error":"<code>"}); empty if there is none.
 std::string errorCode(const HttpReply& reply);
 
