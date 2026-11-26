@@ -1,5 +1,15 @@
 #include "barrier.h"
 
+namespace
+{
+    // Linear from open to closed over BARRIER_CLOSE_MS.
+    int sweepAngle(uint32_t elapsedMs)
+    {
+        int64_t range = BARRIER_OPEN_ANGLE - BARRIER_CLOSED_ANGLE;
+        return BARRIER_OPEN_ANGLE - static_cast<int>(range * elapsedMs / BARRIER_CLOSE_MS);
+    }
+}
+
 void Barrier::begin(uint32_t nowMs, bool loopOccupied)
 {
     *this = Barrier();
@@ -36,8 +46,13 @@ bool Barrier::vehiclePassed()
 
 BarrierEvent Barrier::update(uint32_t nowMs, bool loopOccupied)
 {
-    BarrierEvent event = BarrierEvent::None;
+    BarrierEvent loopEvent = trackLoop(nowMs, loopOccupied);
+    BarrierEvent stateEvent = stepStateMachine(nowMs);
+    return stateEvent != BarrierEvent::None ? stateEvent : loopEvent;
+}
 
+BarrierEvent Barrier::trackLoop(uint32_t nowMs, bool loopOccupied)
+{
     if (loopOccupied && !occupied)
     {
         occupiedSinceMs = nowMs;
@@ -50,13 +65,18 @@ BarrierEvent Barrier::update(uint32_t nowMs, bool loopOccupied)
     if (!occupied)
     {
         fault = false;
+        return BarrierEvent::None;
     }
-    else if (!fault && nowMs - occupiedSinceMs >= LOOP_FAULT_MS)
+    if (!fault && nowMs - occupiedSinceMs >= LOOP_FAULT_MS)
     {
         fault = true;
-        event = BarrierEvent::LoopFault;
+        return BarrierEvent::LoopFault;
     }
+    return BarrierEvent::None;
+}
 
+BarrierEvent Barrier::stepStateMachine(uint32_t nowMs)
+{
     switch (current)
     {
     case BarrierState::Closed:
@@ -69,26 +89,29 @@ BarrierEvent Barrier::update(uint32_t nowMs, bool loopOccupied)
         }
         break;
     case BarrierState::Closing:
-        if (occupied)
-        {
-            reopen(nowMs);
-            return BarrierEvent::SafetyStop;
-        }
-        uint32_t elapsed = nowMs - closingSinceMs;
-        if (elapsed >= BARRIER_CLOSE_MS)
-        {
-            current = BarrierState::Closed;
-            currentAngle = BARRIER_CLOSED_ANGLE;
-        }
-        else
-        {
-            currentAngle = BARRIER_OPEN_ANGLE -
-                           static_cast<int>(static_cast<int64_t>(BARRIER_OPEN_ANGLE - BARRIER_CLOSED_ANGLE) * elapsed /
-                                            BARRIER_CLOSE_MS);
-        }
-        break;
+        return stepClosing(nowMs);
     }
-    return event;
+    return BarrierEvent::None;
+}
+
+BarrierEvent Barrier::stepClosing(uint32_t nowMs)
+{
+    if (occupied)
+    {
+        reopen(nowMs);
+        return BarrierEvent::SafetyStop;
+    }
+    uint32_t elapsed = nowMs - closingSinceMs;
+    if (elapsed >= BARRIER_CLOSE_MS)
+    {
+        current = BarrierState::Closed;
+        currentAngle = BARRIER_CLOSED_ANGLE;
+    }
+    else
+    {
+        currentAngle = sweepAngle(elapsed);
+    }
+    return BarrierEvent::None;
 }
 
 BarrierState Barrier::state() const

@@ -50,6 +50,10 @@ public:
 
 private:
     void reopen(uint32_t nowMs);
+    // Loop occupation and the 5-min fault; a car leaving the loop under the raised arm counts as passed.
+    BarrierEvent trackLoop(uint32_t nowMs, bool loopOccupied);
+    BarrierEvent stepStateMachine(uint32_t nowMs);
+    BarrierEvent stepClosing(uint32_t nowMs);
 
     BarrierState current = BarrierState::Closed;
     uint32_t openedAtMs = 0;
