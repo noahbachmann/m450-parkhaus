@@ -26,6 +26,26 @@ namespace
                 "<button type=\"submit\">Fahrzeug wendet</button></form> ";
     }
 
+    // One-button form that posts the lane («entry»/«exit»); held: value of the extra field «held», or nullptr.
+    void appendLaneAction(std::string& html, const char* action, const char* laneName, const char* buttonHtml,
+                          const char* held = nullptr)
+    {
+        html += "<form method=\"post\" action=\"";
+        html += action;
+        html += "\" class=\"inline\"><input type=\"hidden\" name=\"lane\" value=\"";
+        html += laneName;
+        html += "\">";
+        if (held != nullptr)
+        {
+            html += "<input type=\"hidden\" name=\"held\" value=\"";
+            html += held;
+            html += "\">";
+        }
+        html += "<button type=\"submit\">";
+        html += buttonHtml;
+        html += "</button></form>";
+    }
+
     // isEntry: the entry lane; entryTime: offer the backdating field «Einfahrtszeit» (operator only, M-03).
     void appendLane(std::string& html, const char* title, const char* action, bool isEntry, bool entryTime,
                     const LaneView& lane)
@@ -59,29 +79,22 @@ namespace
         const char* laneName = isEntry ? "entry" : "exit";
         if (lane.canPass)
         {
-            html += "<form method=\"post\" action=\"/kamera/durchfahren\" class=\"inline\"><input type=\"hidden\" "
-                    "name=\"lane\" value=\"";
-            html += laneName;
-            html += "\"><button type=\"submit\"><strong>Durchfahren</strong></button></form> ";
+            appendLaneAction(html, "/kamera/durchfahren", laneName, "<strong>Durchfahren</strong>");
+            html += " ";
         }
         if (lane.loopHeld || lane.canHold)
         {
-            html += "<form method=\"post\" action=\"/kamera/schleife\" class=\"inline\"><input type=\"hidden\" "
-                    "name=\"lane\" value=\"";
-            html += laneName;
-            html += lane.loopHeld ? "\"><input type=\"hidden\" name=\"held\" value=\"0\"><button type=\"submit\">"
-                                    "Fahrzeug fährt weiter</button></form> "
-                                  : "\"><input type=\"hidden\" name=\"held\" value=\"1\"><button type=\"submit\">"
-                                    "Fahrzeug bleibt stehen</button></form> ";
+            appendLaneAction(html, "/kamera/schleife", laneName,
+                             lane.loopHeld ? "Fahrzeug fährt weiter" : "Fahrzeug bleibt stehen",
+                             lane.loopHeld ? "0" : "1");
+            html += " ";
         }
         if (!isEntry)
         {
             appendExitTerminal(html, lane);
         }
-        html += "<form method=\"post\" action=\"/kamera/ruftaste\" class=\"inline\"><input type=\"hidden\" "
-                "name=\"lane\" value=\"";
-        html += laneName;
-        html += "\"><button type=\"submit\">Ruftaste</button></form></div>";
+        appendLaneAction(html, "/kamera/ruftaste", laneName, "Ruftaste");
+        html += "</div>";
     }
 
     void appendPlateSuggestions(std::string& html, const KasseSnapshot& kasse, const RegistrationList& registrations)
