@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 
 #include "codec.h"
+#include "http_status.h"
 #include "kasse_pages.h"
 #include "payment.h"
 #include "plate.h"
@@ -42,7 +43,7 @@ ApiResponse handleStatus(const SessionStore& store, const std::string& kzParam, 
     std::string plate = normalizePlate(kzParam);
     if (!isValidPlate(plate))
     {
-        return error(400, "invalid_plate");
+        return error(HTTP_BAD_REQUEST, "invalid_plate");
     }
     JsonDocument doc;
     doc["kz"] = plate;
@@ -50,17 +51,17 @@ ApiResponse handleStatus(const SessionStore& store, const std::string& kzParam, 
     if (s == nullptr)
     {
         doc["status"] = "unbekannt";
-        return respond(200, doc);
+        return respond(HTTP_OK, doc);
     }
     uint32_t fee = s->amountRappen;
     if (s->status == SessionStatus::Open && !currentFee(*s, now, fee))
     {
-        return error(503, "time_not_synced"); // clock before the entry: no fee can be given
+        return error(HTTP_UNAVAILABLE, "time_not_synced"); // clock before the entry: no fee can be given
     }
     doc["status"] = s->status == SessionStatus::Paid ? "bezahlt" : "unbezahlt";
     doc["fee"] = fee;
     doc["entry"] = s->entry;
-    return respond(200, doc);
+    return respond(HTTP_OK, doc);
 }
 
 ApiResponse handleEntry(SessionStore& store, const std::string& body, int64_t now, bool timeSynced)
@@ -69,15 +70,15 @@ ApiResponse handleEntry(SessionStore& store, const std::string& body, int64_t no
     std::string plate;
     if (!parseBody(body, req, plate) || (!req["entry"].isNull() && !req["entry"].is<int64_t>()))
     {
-        return error(400, "bad_request");
+        return error(HTTP_BAD_REQUEST, "bad_request");
     }
     if (!isValidPlate(plate))
     {
-        return error(400, "invalid_plate");
+        return error(HTTP_BAD_REQUEST, "invalid_plate");
     }
     if (!timeSynced)
     {
-        return error(503, "time_not_synced");
+        return error(HTTP_UNAVAILABLE, "time_not_synced");
     }
     std::optional<int64_t> backdated;
     if (!req["entry"].isNull())
@@ -90,18 +91,18 @@ ApiResponse handleEntry(SessionStore& store, const std::string& body, int64_t no
     case EntryResult::Repeated:
         break;
     case EntryResult::AlreadyOpen:
-        return error(409, "already_open");
+        return error(HTTP_CONFLICT, "already_open");
     case EntryResult::EntryInFuture:
-        return error(400, "entry_in_future");
+        return error(HTTP_BAD_REQUEST, "entry_in_future");
     case EntryResult::Full:
-        return error(503, "store_full");
+        return error(HTTP_UNAVAILABLE, "store_full");
     case EntryResult::InvalidPlate:
-        return error(400, "invalid_plate");
+        return error(HTTP_BAD_REQUEST, "invalid_plate");
     }
     JsonDocument doc;
     doc["kz"] = plate;
     doc["entry"] = store.findActive(plate)->entry;
-    return respond(201, doc);
+    return respond(HTTP_CREATED, doc);
 }
 
 ApiResponse handleExit(SessionStore& store, const std::string& body, int64_t now, bool timeSynced)
@@ -110,15 +111,15 @@ ApiResponse handleExit(SessionStore& store, const std::string& body, int64_t now
     std::string plate;
     if (!parseBody(body, req, plate) || (!req["override"].isNull() && !req["override"].is<bool>()))
     {
-        return error(400, "bad_request");
+        return error(HTTP_BAD_REQUEST, "bad_request");
     }
     if (!isValidPlate(plate))
     {
-        return error(400, "invalid_plate");
+        return error(HTTP_BAD_REQUEST, "invalid_plate");
     }
     if (!timeSynced)
     {
-        return error(503, "time_not_synced");
+        return error(HTTP_UNAVAILABLE, "time_not_synced");
     }
     ExitResult r = req["override"].as<bool>() ? store.forceExit(plate, now) : store.tryExit(plate, now);
     JsonDocument doc;
@@ -133,7 +134,7 @@ ApiResponse handleExit(SessionStore& store, const std::string& body, int64_t now
                                                                                    : SessionStatus::ClosedUnpaid);
         doc["exit"] = r.exit;
         doc["fee"] = r.feeRappen;
-        return respond(200, doc);
+        return respond(HTTP_OK, doc);
     case ExitResult::Kind::Unpaid:
     {
         doc["error"] = "unpaid";
@@ -143,16 +144,16 @@ ApiResponse handleExit(SessionStore& store, const std::string& body, int64_t now
         {
             doc["cash"] = s->cashPaidRappen; // partial cash at the Automat: only the rest is due
         }
-        return respond(402, doc);
+        return respond(HTTP_PAYMENT_REQUIRED, doc);
     }
     case ExitResult::Kind::NoSession:
-        return error(404, "no_session");
+        return error(HTTP_NOT_FOUND, "no_session");
     case ExitResult::Kind::TimeError:
-        return error(503, "time_not_synced");
+        return error(HTTP_UNAVAILABLE, "time_not_synced");
     case ExitResult::Kind::InvalidPlate:
         break;
     }
-    return error(400, "invalid_plate");
+    return error(HTTP_BAD_REQUEST, "invalid_plate");
 }
 
 ApiResponse handlePay(SessionStore& store, const std::string& body, int64_t now, bool timeSynced)
@@ -161,21 +162,21 @@ ApiResponse handlePay(SessionStore& store, const std::string& body, int64_t now,
     std::string plate;
     if (!parseBody(body, req, plate) || !req["method"].is<const char*>())
     {
-        return error(400, "bad_request");
+        return error(HTTP_BAD_REQUEST, "bad_request");
     }
     PayMethod method;
     if (!parsePayMethod(req["method"].as<std::string>(), method) ||
         (method == PayMethod::Cash && !req["amount"].isNull() && !req["amount"].is<uint32_t>()))
     {
-        return error(400, "bad_request");
+        return error(HTTP_BAD_REQUEST, "bad_request");
     }
     if (!isValidPlate(plate))
     {
-        return error(400, "invalid_plate");
+        return error(HTTP_BAD_REQUEST, "invalid_plate");
     }
     if (!timeSynced)
     {
-        return error(503, "time_not_synced");
+        return error(HTTP_UNAVAILABLE, "time_not_synced");
     }
     PaymentResult r = pay(store, plate, method, now, req["amount"].as<uint32_t>());
     switch (r.kind)
@@ -196,7 +197,7 @@ ApiResponse handlePay(SessionStore& store, const std::string& body, int64_t now,
         {
             doc["cash"] = r.cashRappen;
         }
-        return respond(200, doc);
+        return respond(HTTP_OK, doc);
     }
     case PaymentResult::Kind::PartialCash:
     {
@@ -205,24 +206,24 @@ ApiResponse handlePay(SessionStore& store, const std::string& body, int64_t now,
         doc["status"] = "unbezahlt";
         doc["amount"] = r.amountRappen;
         doc["remaining"] = r.remainingRappen;
-        return respond(200, doc);
+        return respond(HTTP_OK, doc);
     }
     case PaymentResult::Kind::InvalidAmount:
-        return error(400, "invalid_amount");
+        return error(HTTP_BAD_REQUEST, "invalid_amount");
     case PaymentResult::Kind::Declined:
-        return error(402, "declined");
+        return error(HTTP_PAYMENT_REQUIRED, "declined");
     case PaymentResult::Kind::AlreadyPaid:
-        return error(409, "already_paid");
+        return error(HTTP_CONFLICT, "already_paid");
     case PaymentResult::Kind::NothingToPay:
-        return error(409, "nothing_to_pay");
+        return error(HTTP_CONFLICT, "nothing_to_pay");
     case PaymentResult::Kind::NoSession:
-        return error(404, "no_session");
+        return error(HTTP_NOT_FOUND, "no_session");
     case PaymentResult::Kind::TimeError:
-        return error(503, "time_not_synced");
+        return error(HTTP_UNAVAILABLE, "time_not_synced");
     case PaymentResult::Kind::InvalidPlate:
         break;
     }
-    return error(400, "invalid_plate");
+    return error(HTTP_BAD_REQUEST, "invalid_plate");
 }
 
 ApiResponse handleSessions(const SessionStore& store, int64_t now, bool timeSynced)
@@ -231,7 +232,7 @@ ApiResponse handleSessions(const SessionStore& store, int64_t now, bool timeSync
     sessionsToDoc(store, doc);
     doc["now"] = now;
     doc["synced"] = timeSynced;
-    return respond(200, doc);
+    return respond(HTTP_OK, doc);
 }
 
 ApiResponse handleReset(SessionStore& store)
@@ -239,7 +240,7 @@ ApiResponse handleReset(SessionStore& store)
     loadDefaultSessions(store);
     JsonDocument doc;
     doc["status"] = "reset";
-    return respond(200, doc);
+    return respond(HTTP_OK, doc);
 }
 
 bool apiKeyMatches(const std::string& sent, const std::string& expected)
@@ -266,8 +267,8 @@ KasseRouteResult routeKasse(const WebRequest& req, SessionStore& store, int64_t 
         int changedStatus; // a reply with this status changed the sessions; 0 = read only
     };
     static const Route ROUTES[] = {
-        {"GET", "/api/status", 0},  {"GET", "/api/sessions", 0}, {"POST", "/api/entry", 201},
-        {"POST", "/api/exit", 200}, {"POST", "/api/pay", 200},   {"POST", "/api/reset", 200},
+        {"GET", "/api/status", 0},       {"GET", "/api/sessions", 0},  {"POST", "/api/entry", HTTP_CREATED},
+        {"POST", "/api/exit", HTTP_OK},  {"POST", "/api/pay", HTTP_OK}, {"POST", "/api/reset", HTTP_OK},
     };
     if (req.method == "GET" && req.path == "/")
     {
@@ -281,7 +282,7 @@ KasseRouteResult routeKasse(const WebRequest& req, SessionStore& store, int64_t 
         }
         if (r.changedStatus != 0 && !(fromSchrankenIp && apiKeyMatches(req.apiKey, apiKey)))
         {
-            ApiResponse forbidden = error(403, "forbidden");
+            ApiResponse forbidden = error(HTTP_FORBIDDEN, "forbidden");
             return {jsonReply(forbidden.status, forbidden.body)};
         }
         std::string path = r.path;

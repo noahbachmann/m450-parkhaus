@@ -3,6 +3,8 @@
 #include <map>
 #include <string>
 
+#include "http_status.h"
+
 // Platform-neutral HTTP request and response. The board glue fills them from WebServer, the PC simulator from
 // its own socket server; the routes in lib/ only see these.
 
@@ -21,7 +23,7 @@ struct WebRequest
 
 struct WebResponse
 {
-    int status = 200;
+    int status = HTTP_OK;
     std::string contentType = "text/html; charset=utf-8";
     std::string body;
     std::string location;  // Location header, for redirects

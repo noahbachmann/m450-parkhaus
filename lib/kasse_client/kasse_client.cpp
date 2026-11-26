@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 
 #include "codec.h"
+#include "http_status.h"
 #include "kasse_view.h"
 #include "payment.h"
 #include "plate.h"
@@ -21,7 +22,7 @@ namespace
         {
             return false;
         }
-        if (reply.status == 200)
+        if (reply.status == HTTP_OK)
         {
             if (!doc["kz"].is<const char*>() || doc["kz"].as<std::string>() != plate ||
                 !doc["amount"].is<uint32_t>() || !doc["status"].is<const char*>())
@@ -51,31 +52,31 @@ namespace
         }
         std::string code = doc["error"].is<const char*>() ? doc["error"].as<std::string>() : "";
         Kind kind;
-        if (reply.status == 402 && code == "declined")
+        if (reply.status == HTTP_PAYMENT_REQUIRED && code == "declined")
         {
             kind = Kind::Declined;
         }
-        else if (reply.status == 409 && code == "already_paid")
+        else if (reply.status == HTTP_CONFLICT && code == "already_paid")
         {
             kind = Kind::AlreadyPaid;
         }
-        else if (reply.status == 409 && code == "nothing_to_pay")
+        else if (reply.status == HTTP_CONFLICT && code == "nothing_to_pay")
         {
             kind = Kind::NothingToPay;
         }
-        else if (reply.status == 404 && code == "no_session")
+        else if (reply.status == HTTP_NOT_FOUND && code == "no_session")
         {
             kind = Kind::NoSession;
         }
-        else if (reply.status == 400 && code == "invalid_plate")
+        else if (reply.status == HTTP_BAD_REQUEST && code == "invalid_plate")
         {
             kind = Kind::InvalidPlate;
         }
-        else if (reply.status == 400 && code == "invalid_amount")
+        else if (reply.status == HTTP_BAD_REQUEST && code == "invalid_amount")
         {
             kind = Kind::InvalidAmount;
         }
-        else if (reply.status == 503 && code == "time_not_synced")
+        else if (reply.status == HTTP_UNAVAILABLE && code == "time_not_synced")
         {
             kind = Kind::TimeError;
         }
@@ -97,7 +98,7 @@ KasseSnapshot fetchSessions(KasseLink& kasse)
         return snap;
     }
     JsonDocument doc;
-    if (reply.status != 200 || deserializeJson(doc, reply.body) != DeserializationError::Ok ||
+    if (reply.status != HTTP_OK || deserializeJson(doc, reply.body) != DeserializationError::Ok ||
         !doc["now"].is<int64_t>() || !doc["synced"].is<bool>() || !sessionsFromDoc(doc, snap.sessions))
     {
         snap.error = UNEXPECTED;
@@ -156,5 +157,5 @@ FormResult payAtKasse(KasseLink& kasse, const std::string& kz, const std::string
 
 bool resetKasse(KasseLink& kasse)
 {
-    return kasse.postJson("/api/reset", "{}").status == 200;
+    return kasse.postJson("/api/reset", "{}").status == HTTP_OK;
 }

@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 
 #include "format.h"
+#include "http_status.h"
 #include "payment.h"
 
 namespace
@@ -165,7 +166,7 @@ GateResult payAtTerminal(LaneTerminal& t, const std::string& method, int64_t now
     }
     std::string paid;
     std::string code = errorCode(reply);
-    if (reply.status == 402 && code == "declined")
+    if (reply.status == HTTP_PAYMENT_REQUIRED && code == "declined")
     {
         t.declines++;
         if (t.declines == MAX_DECLINES)
@@ -176,7 +177,7 @@ GateResult payAtTerminal(LaneTerminal& t, const std::string& method, int64_t now
         }
         return message(plate, "err", t.declines >= MAX_DECLINES ? NOTIFIED : PAYMENT_DECLINED_TEXT);
     }
-    if (reply.status == 200)
+    if (reply.status == HTTP_OK)
     {
         paid = paidText(reply, plate);
         if (paid.empty())
@@ -184,7 +185,7 @@ GateResult payAtTerminal(LaneTerminal& t, const std::string& method, int64_t now
             return message(plate, "err", "Unerwartete Antwort der Kasse – bitte Ruftaste drücken");
         }
     }
-    else if (!(reply.status == 409 && (code == "already_paid" || code == "nothing_to_pay")))
+    else if (!(reply.status == HTTP_CONFLICT && (code == "already_paid" || code == "nothing_to_pay")))
     {
         return message(plate, "err", "Zahlung nicht möglich – bitte Ruftaste drücken");
     }

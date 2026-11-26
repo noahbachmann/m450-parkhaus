@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "format.h"
+#include "http_status.h"
 #include "plate.h"
 
 namespace
@@ -102,7 +103,7 @@ GateResult entryRequest(const RegistrationList& registrations, const std::string
     {
         return unreachable(plate);
     }
-    if (reply.status == 201)
+    if (reply.status == HTTP_CREATED)
     {
         JsonDocument doc;
         if (parseReply(reply, doc) && doc["kz"].is<const char*>() && doc["kz"].as<std::string>() == plate &&
@@ -113,19 +114,19 @@ GateResult entryRequest(const RegistrationList& registrations, const std::string
         return closed(plate, UNEXPECTED);
     }
     std::string code = errorCode(reply);
-    if (reply.status == 409 && code == "already_open")
+    if (reply.status == HTTP_CONFLICT && code == "already_open")
     {
         return closed(plate, "Parkvorgang bereits offen – bitte Ruftaste drücken");
     }
-    if (reply.status == 400 && code == "entry_in_future")
+    if (reply.status == HTTP_BAD_REQUEST && code == "entry_in_future")
     {
         return closed(plate, "Einfahrtszeit liegt in der Zukunft");
     }
-    if (reply.status == 503 && code == "time_not_synced")
+    if (reply.status == HTTP_UNAVAILABLE && code == "time_not_synced")
     {
         return closed(plate, TIME_NOT_SYNCED);
     }
-    if (reply.status == 503 && code == "store_full")
+    if (reply.status == HTTP_UNAVAILABLE && code == "store_full")
     {
         return closed(plate, "Kasse: Speicher voll – bitte Ruftaste drücken");
     }
@@ -158,7 +159,7 @@ GateResult exitRequest(const std::string& rawPlate, KasseLink& kasse)
     }
     JsonDocument doc;
     bool parsed = parseReply(reply, doc);
-    if (reply.status == 200)
+    if (reply.status == HTTP_OK)
     {
         std::string status = parsed && doc["status"].is<const char*>() ? doc["status"].as<std::string>() : "";
         if (parsed && doc["kz"].is<const char*>() && doc["kz"].as<std::string>() == plate &&
@@ -169,7 +170,7 @@ GateResult exitRequest(const std::string& rawPlate, KasseLink& kasse)
         return closed(plate, UNEXPECTED);
     }
     std::string code = parsed && doc["error"].is<const char*>() ? doc["error"].as<std::string>() : "";
-    if (reply.status == 402 && code == "unpaid" && doc["fee"].is<uint32_t>())
+    if (reply.status == HTTP_PAYMENT_REQUIRED && code == "unpaid" && doc["fee"].is<uint32_t>())
     {
         uint32_t fee = doc["fee"].as<uint32_t>();
         uint32_t cash = doc["cash"].is<uint32_t>() ? doc["cash"].as<uint32_t>() : 0;
@@ -185,11 +186,11 @@ GateResult exitRequest(const std::string& rawPlate, KasseLink& kasse)
         r.cashRappen = cash;
         return r;
     }
-    if (reply.status == 404 && code == "no_session")
+    if (reply.status == HTTP_NOT_FOUND && code == "no_session")
     {
         return closed(plate, "Kein Parkvorgang gefunden – bitte Ruftaste drücken");
     }
-    if (reply.status == 503 && code == "time_not_synced")
+    if (reply.status == HTTP_UNAVAILABLE && code == "time_not_synced")
     {
         return closed(plate, TIME_NOT_SYNCED);
     }

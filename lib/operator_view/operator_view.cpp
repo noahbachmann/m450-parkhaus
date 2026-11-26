@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 
 #include "format.h"
+#include "http_status.h"
 #include "plate.h"
 #include "schranken_view.h"
 #include "testdata.h"
@@ -19,11 +20,11 @@ namespace
 
     KasseOutcome entryOutcome(const HttpReply& reply)
     {
-        if (reply.status == 201)
+        if (reply.status == HTTP_CREATED)
         {
             return {true, "Parkvorgang eröffnet"};
         }
-        if (reply.status == 409)
+        if (reply.status == HTTP_CONFLICT)
         {
             return {true, "Parkvorgang bereits offen"};
         }
@@ -33,12 +34,12 @@ namespace
     // Override exit reply: which way the session was closed.
     KasseOutcome exitOutcome(const HttpReply& reply)
     {
-        if (reply.status == 404)
+        if (reply.status == HTTP_NOT_FOUND)
         {
             return {true, "kein Parkvorgang"};
         }
         JsonDocument doc;
-        if (reply.status != 200 || deserializeJson(doc, reply.body) != DeserializationError::Ok ||
+        if (reply.status != HTTP_OK || deserializeJson(doc, reply.body) != DeserializationError::Ok ||
             !doc["status"].is<const char*>())
         {
             return {false, ""};
@@ -182,12 +183,12 @@ std::string laneStatus(KasseLink& kasse, const std::string& plate)
     {
         return "Kasse nicht erreichbar";
     }
-    if (reply.status == 503 && errorCode(reply) == "time_not_synced")
+    if (reply.status == HTTP_UNAVAILABLE && errorCode(reply) == "time_not_synced")
     {
         return "Kasse: Uhrzeit nicht synchronisiert";
     }
     JsonDocument doc;
-    if (reply.status != 200 || deserializeJson(doc, reply.body) != DeserializationError::Ok ||
+    if (reply.status != HTTP_OK || deserializeJson(doc, reply.body) != DeserializationError::Ok ||
         !doc["status"].is<const char*>())
     {
         return "unbekannte Antwort der Kasse";

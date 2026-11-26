@@ -16,7 +16,7 @@ std::string WebRequest::arg(const std::string& name) const
 WebResponse redirect(const std::string& location)
 {
     WebResponse r;
-    r.status = 303;
+    r.status = HTTP_SEE_OTHER;
     r.contentType = "text/plain; charset=utf-8";
     r.location = location;
     return r;
@@ -41,7 +41,7 @@ WebResponse jsonReply(int status, const std::string& body)
 WebResponse notFound()
 {
     WebResponse r;
-    r.status = 404;
+    r.status = HTTP_NOT_FOUND;
     r.contentType = "text/plain; charset=utf-8";
     r.body = "Nicht gefunden";
     return r;
