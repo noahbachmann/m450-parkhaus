@@ -1,10 +1,16 @@
 #include <Arduino.h>
 #include <Servo.h>
 
+#include "barrier.h"
 #include "pins.h"
 
-// Wiring check for Pico 2 without the real firmware: both servos open (90°) and close (0°) every 2 s, the
+// Wiring check for Pico 2 without the real firmware: both servos open and close every TOGGLE_INTERVAL_MS, the
 // console shows the safety loops. Flash with: pio run -e hwtest -t upload
+
+namespace
+{
+constexpr uint32_t TOGGLE_INTERVAL_MS = 2000;
+}
 
 Servo entryServo;
 Servo exitServo;
@@ -22,12 +28,13 @@ void loop()
 {
     static bool open = false;
     open = !open;
-    entryServo.write(open ? 90 : 0);
-    exitServo.write(open ? 90 : 0);
+    int angle = open ? BARRIER_OPEN_ANGLE : BARRIER_CLOSED_ANGLE;
+    entryServo.write(angle);
+    exitServo.write(angle);
 
     bool entryPressed = digitalRead(PIN_ENTRY_LOOP) == LOW;
     bool exitPressed = digitalRead(PIN_EXIT_LOOP) == LOW;
     Serial.printf("Schranken: %s  Schleife Einfahrt: %s  Ausfahrt: %s\n", open ? "offen" : "zu",
                   entryPressed ? "belegt" : "frei", exitPressed ? "belegt" : "frei");
-    delay(2000);
+    delay(TOGGLE_INTERVAL_MS);
 }
