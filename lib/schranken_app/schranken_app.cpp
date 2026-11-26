@@ -288,7 +288,7 @@ WebResponse SchrankenApp::login(const WebRequest& req, const Ctx&)
         platform.log("[login] rejected");
         return redirectWithNotice("/login", {"err", "Benutzer oder Passwort falsch"}, "next=" + next + "&");
     }
-    uint32_t words[4];
+    uint32_t words[TOKEN_WORDS];
     for (uint32_t& w : words)
     {
         w = platform.random32();
@@ -457,13 +457,8 @@ Notice SchrankenApp::pendingNotice(const WebRequest& req) const
 
 WebResponse SchrankenApp::redirectWithNotice(const std::string& path, const Notice& notice, const std::string& query)
 {
-    static const char HEX_DIGITS[] = "0123456789abcdef";
-    uint32_t word = platform.random32();
     std::string id;
-    for (int shift = 28; shift >= 0; shift -= 4)
-    {
-        id += HEX_DIGITS[(word >> shift) & 0xF];
-    }
+    appendHex(id, platform.random32());
     notices[nextNoticeSlot] = {id, notice};
     nextNoticeSlot = (nextNoticeSlot + 1) % NOTICE_SLOTS;
     return redirect(path + "?" + query + "m=" + id);

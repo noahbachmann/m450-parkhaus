@@ -11,14 +11,18 @@
 extern const char* const OPERATOR_USER; // "betrieb"
 extern const char* const SESSION_COOKIE; // "parkhaus_session"
 constexpr size_t MAX_LOGINS = 4;          // more browsers: the oldest login is dropped
+constexpr size_t TOKEN_WORDS = 4;         // random words per session token (128 bit)
 
 bool credentialsOk(const std::string& user, const std::string& password, const std::string& expectedPassword);
 
 // Value of a cookie in a Cookie header ("a=1; parkhaus_session=ab12"), empty if missing.
 std::string cookieValue(const std::string& cookieHeader, const char* name);
 
-// 32 hex characters from four random words.
-std::string makeToken(const uint32_t random[4]);
+// 32 hex characters from TOKEN_WORDS random words.
+std::string makeToken(const uint32_t random[TOKEN_WORDS]);
+
+// Appends word as 8 lowercase hex characters ("0000002a").
+void appendHex(std::string& out, uint32_t word);
 
 // Set-Cookie header values.
 std::string loginCookie(const std::string& token);
