@@ -129,6 +129,8 @@ private:
     // Plate captured at the lane's camera: refused while the barrier is still open or closing (M-04).
     bool laneFree(Lane& lane, const WebRequest& req, int64_t now);
     OperatorLane operatorLane(Lane& lane);
+    // «Sicherungsschleife … länger als 5 min belegt», empty without a loop fault.
+    static std::string faultText(const Lane& lane);
     Notice pendingNotice(const WebRequest& req) const;
     // query: extra arguments, e.g. "kz=LU123456&".
     WebResponse redirectWithNotice(const std::string& path, const Notice& notice, const std::string& query = "");

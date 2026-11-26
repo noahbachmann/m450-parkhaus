@@ -8,6 +8,13 @@
 #include "plate.h"
 #include "testdata.h"
 
+namespace
+{
+    const char* const REGISTRATIONS_FILE = "registrations";
+    const char* const EVENTS_FILE = "events";
+    const char* const CAMERA_PAGE = "/kamera";
+}
+
 const SchrankenApp::Route SchrankenApp::ROUTES[] = {
     {"GET", "/", false, &SchrankenApp::home},
     {"GET", "/kamera", false, &SchrankenApp::camera},
@@ -47,20 +54,20 @@ SchrankenApp::SchrankenApp(KasseLink& kasseLink, BarrierPort& entry, BarrierPort
 void SchrankenApp::begin()
 {
     std::string json;
-    if (!platform.readFile("registrations", json) || !registrationsFromJson(json, registrationList))
+    if (!platform.readFile(REGISTRATIONS_FILE, json) || !registrationsFromJson(json, registrationList))
     {
         loadDefaultRegistrations(registrationList);
-        platform.writeFile("registrations", registrationsToJson(registrationList));
+        platform.writeFile(REGISTRATIONS_FILE, registrationsToJson(registrationList));
         platform.log("registrations: defaults written");
     }
     else
     {
         platform.log("registrations: loaded " + std::to_string(registrationList.all().size()));
     }
-    if (!platform.readFile("events", json) || !eventsFromJson(json, eventLog))
+    if (!platform.readFile(EVENTS_FILE, json) || !eventsFromJson(json, eventLog))
     {
         eventLog.clear();
-        platform.writeFile("events", eventsToJson(eventLog));
+        platform.writeFile(EVENTS_FILE, eventsToJson(eventLog));
         platform.log("events: empty log written");
     }
     else
@@ -156,7 +163,7 @@ std::string SchrankenApp::loginTarget(const std::string& next)
 
 WebResponse SchrankenApp::home(const WebRequest&, const Ctx&)
 {
-    return redirect("/kamera");
+    return redirect(CAMERA_PAGE);
 }
 
 WebResponse SchrankenApp::camera(const WebRequest&, const Ctx& ctx)
@@ -181,26 +188,26 @@ WebResponse SchrankenApp::entryGate(const WebRequest& req, const Ctx& ctx)
 {
     if (!laneFree(entryLane, req, ctx.now))
     {
-        return redirect("/kamera");
+        return redirect(CAMERA_PAGE);
     }
     // Backdating is a test function for the operator; otherwise the entry time is always the time of capture.
     std::string entryTime = ctx.role == Role::Admin ? req.arg("entry") : "";
     GateResult r = entryRequest(registrationList, req.arg("kz"), entryTime, kasse);
     recordGate(entryLane.terminal, r);
     show(entryLane, r, ctx.now);
-    return redirect("/kamera");
+    return redirect(CAMERA_PAGE);
 }
 
 WebResponse SchrankenApp::exitGate(const WebRequest& req, const Ctx& ctx)
 {
     if (!laneFree(exitLane, req, ctx.now))
     {
-        return redirect("/kamera");
+        return redirect(CAMERA_PAGE);
     }
     GateResult r = exitRequest(req.arg("kz"), kasse);
     recordGate(exitLane.terminal, r);
     show(exitLane, r, ctx.now);
-    return redirect("/kamera");
+    return redirect(CAMERA_PAGE);
 }
 
 WebResponse SchrankenApp::callButton(const WebRequest& req, const Ctx& ctx)
@@ -209,7 +216,7 @@ WebResponse SchrankenApp::callButton(const WebRequest& req, const Ctx& ctx)
     {
         show(*l, pressCallButton(l->terminal, ctx.now, eventLog), ctx.now);
     }
-    return redirect("/kamera");
+    return redirect(CAMERA_PAGE);
 }
 
 WebResponse SchrankenApp::driveThrough(const WebRequest& req, const Ctx& ctx)
@@ -218,7 +225,7 @@ WebResponse SchrankenApp::driveThrough(const WebRequest& req, const Ctx& ctx)
     {
         show(*l, ::driveThrough(l->terminal, l->barrier.requestPass()), ctx.now);
     }
-    return redirect("/kamera");
+    return redirect(CAMERA_PAGE);
 }
 
 WebResponse SchrankenApp::loop(const WebRequest& req, const Ctx& ctx)
@@ -238,19 +245,19 @@ WebResponse SchrankenApp::loop(const WebRequest& req, const Ctx& ctx)
             }
         }
     }
-    return redirect("/kamera");
+    return redirect(CAMERA_PAGE);
 }
 
 WebResponse SchrankenApp::abortExit(const WebRequest&, const Ctx& ctx)
 {
     show(exitLane, abortAtTerminal(exitLane.terminal), ctx.now);
-    return redirect("/kamera");
+    return redirect(CAMERA_PAGE);
 }
 
 WebResponse SchrankenApp::terminalPay(const WebRequest& req, const Ctx& ctx)
 {
     show(exitLane, payAtTerminal(exitLane.terminal, req.arg("method"), ctx.now, kasse, eventLog), ctx.now);
-    return redirect("/kamera");
+    return redirect(CAMERA_PAGE);
 }
 
 WebResponse SchrankenApp::automatPage(const WebRequest& req, const Ctx& ctx)
@@ -304,7 +311,7 @@ WebResponse SchrankenApp::login(const WebRequest& req, const Ctx&)
 WebResponse SchrankenApp::logout(const WebRequest& req, const Ctx&)
 {
     logins.remove(cookieValue(req.cookie, SESSION_COOKIE));
-    WebResponse res = redirect("/kamera");
+    WebResponse res = redirect(CAMERA_PAGE);
     res.setCookie = logoutCookie();
     return res;
 }
@@ -374,6 +381,11 @@ WebResponse SchrankenApp::reset(const WebRequest&, const Ctx&)
     return redirectWithNotice("/betrieb", notice);
 }
 
+std::string SchrankenApp::faultText(const Lane& l)
+{
+    return l.barrier.loopFault() ? loopFaultMessage(gateLaneLabel(l.id)) : "";
+}
+
 SchrankenApp::Lane& SchrankenApp::lane(GateLane id)
 {
     return id == GateLane::Exit ? exitLane : entryLane;
@@ -411,7 +423,7 @@ void SchrankenApp::refresh(Lane& l, int64_t now)
     l.view.canHold = state != BarrierState::Closed && !held;
     l.view.loopHeld = held;
     l.view.barrier = barrierStateLabel(state);
-    l.view.fault = l.barrier.loopFault() ? loopFaultMessage(gateLaneLabel(l.id)) : "";
+    l.view.fault = faultText(l);
     l.view.payPlate = l.terminal.payPlate;
     l.view.payFee = l.terminal.payPlate.empty() ? "" : formatChf(l.terminal.payFeeRappen);
     l.view.payRest = l.terminal.payPlate.empty() || l.terminal.payCashRappen == 0
@@ -437,7 +449,7 @@ OperatorLane SchrankenApp::operatorLane(Lane& l)
     o.barrier = barrierStateLabel(l.barrier.state());
     o.lastPlate = l.terminal.lastPlate;
     o.status = laneStatus(kasse, l.terminal.lastPlate);
-    o.fault = l.barrier.loopFault() ? loopFaultMessage(gateLaneLabel(l.id)) : "";
+    o.fault = faultText(l);
     o.call = callLabel(l.terminal);
     return o;
 }
@@ -482,10 +494,10 @@ void SchrankenApp::saveIfChanged(uint32_t registrationsBefore, uint32_t eventsBe
 {
     if (registrationList.revision() != registrationsBefore)
     {
-        platform.writeFile("registrations", registrationsToJson(registrationList));
+        platform.writeFile(REGISTRATIONS_FILE, registrationsToJson(registrationList));
     }
     if (eventLog.revision() != eventsBefore)
     {
-        platform.writeFile("events", eventsToJson(eventLog));
+        platform.writeFile(EVENTS_FILE, eventsToJson(eventLog));
     }
 }
